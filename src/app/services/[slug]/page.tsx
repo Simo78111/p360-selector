@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CtaBand } from "@/components/CtaBand";
 import { ButtonLink, Check, Container, PageHeader } from "@/components/ui";
+import { finderHref } from "@/lib/finder";
 import { getService, services } from "@/lib/services";
 import { formatPrice, pricing } from "@/lib/site";
 
@@ -74,7 +75,7 @@ export default async function ServicePage({ params }: Props) {
             Tell us what&apos;s going on, add a photo, and secure your job with a {formatPrice(pricing.depositAmount)}{" "}
             deposit.
           </p>
-          <ButtonLink href={`/get-started?service=${service.slug}`} className="mt-6 w-full">
+          <ButtonLink href={finderHref(service.slug)} className="mt-6 w-full">
             Get started
           </ButtonLink>
         </aside>

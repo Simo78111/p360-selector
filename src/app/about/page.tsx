@@ -29,7 +29,7 @@ export default function AboutPage() {
             certified where it needs to be.
           </p>
           <p>
-            We work {site.hours.toLowerCase()} across {site.area}.
+            We work across {site.area}, {site.hours}.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

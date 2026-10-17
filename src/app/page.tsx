@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CtaBand } from "@/components/CtaBand";
 import { ButtonLink, Check, Container, ServiceIcon } from "@/components/ui";
+import { finderHref } from "@/lib/finder";
 import { services } from "@/lib/services";
 import { formatPrice, pricing, site } from "@/lib/site";
 
@@ -55,13 +56,13 @@ export default function Home() {
           </div>
 
           <div className="rounded-3xl bg-white p-6 shadow-xl shadow-aqua/10 sm:p-8">
-            <p className="text-sm font-semibold text-aqua-deep">Step 1 of 4</p>
+            <p className="text-sm font-semibold text-aqua-deep">Step 1</p>
             <h2 className="mt-1 text-2xl font-bold">What do you need help with?</h2>
             <div className="mt-6 grid gap-3">
               {services.map((s) => (
                 <Link
                   key={s.slug}
-                  href={`/get-started?service=${s.slug}`}
+                  href={finderHref(s.slug)}
                   className="group flex items-center gap-4 rounded-2xl border-2 border-black/5 p-4 transition hover:border-aqua hover:bg-aqua-pale"
                 >
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-aqua-light text-ink">

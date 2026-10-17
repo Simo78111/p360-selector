@@ -23,8 +23,18 @@ Then open http://localhost:3360.
 ## Roadmap
 
 1. Foundations: brand, layout, main pages ✅
-2. Job finder: step-by-step questions with tips
+2. Job finder: step-by-step questions with tips ✅
 3. Prices, job details, photos and Stripe deposit
 4. Email notifications and Fergus enquiries
 5. Owner dashboard and analytics
 6. Launch
+
+## Job finder
+
+The questions, tips and "call a pro" warnings live in `src/lib/finder.ts`. After editing, run:
+
+```bash
+npm run check:finder
+```
+
+It walks every path through the questions and fails if any path doesn't end in a result.

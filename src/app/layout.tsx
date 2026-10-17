@@ -1,22 +1,16 @@
 import type { Metadata } from "next";
-import { Archivo, Poppins } from "next/font/google";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { site } from "@/lib/site";
-import "./globals.css";
-
-const poppins = Poppins({
-  variable: "--font-poppins",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
+import "@fontsource/poppins/400.css";
+import "@fontsource/poppins/500.css";
+import "@fontsource/poppins/600.css";
+import "@fontsource/poppins/700.css";
 // Free stand-in for Acumin Pro, the heading font on plumbing360.co.nz
-const archivo = Archivo({
-  variable: "--font-archivo",
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-});
+import "@fontsource/archivo/600.css";
+import "@fontsource/archivo/700.css";
+import "@fontsource/archivo/800.css";
+import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
@@ -31,7 +25,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en-NZ">
-      <body className={`${poppins.variable} ${archivo.variable} flex min-h-screen flex-col font-sans antialiased`}>
+      <body className="flex min-h-screen flex-col font-sans antialiased">
         <a
           href="#main"
           className="sr-only z-50 rounded bg-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-2 focus:left-2"

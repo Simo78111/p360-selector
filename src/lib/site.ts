@@ -17,6 +17,19 @@ export const pricing = {
   callOutFrom: 95,
   depositAmount: 50,
   currency: "NZD",
+  // "From" prices shown at the end of the job finder
+  from: {
+    callOut: 95,
+    blockedDrain: 195,
+    cctv: 295,
+    hotWaterRepair: 145,
+    cylinderReplace: 2400,
+    tapInstall: 180,
+    toiletInstall: 450,
+    gasCallOut: 120,
+    gasInstall: 450,
+    gasCertificate: 150,
+  },
 };
 
 export const nav = [
