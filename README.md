@@ -17,7 +17,8 @@ Then open http://localhost:3360.
 
 - `src/lib/site.ts`: business details (phone, email, hours) and prices. Values marked `PLACEHOLDER` need confirming before launch.
 - `src/lib/services.ts`: service descriptions, DIY tips and "call a pro" warnings.
-- `src/app/`: one folder per page.
+- `src/app/(site)/`: the public pages, one folder per page.
+- `src/app/dashboard/`: the owner dashboard.
 - `src/components/`: header, footer, logo and shared UI.
 
 ## Roadmap
@@ -26,7 +27,7 @@ Then open http://localhost:3360.
 2. Job finder: step-by-step questions with tips ✅
 3. Prices, job details, photos and Stripe deposit ✅ (Stripe keys still to add)
 4. Email notifications and Fergus enquiries ✅ (keys still to add)
-5. Owner dashboard and analytics
+5. Owner dashboard and analytics ✅ (keys still to add)
 6. Launch
 
 ## Job finder
@@ -74,7 +75,7 @@ Each service switches on when its keys are added (see `.env.example`). Anything 
 ### Setting up Supabase
 
 1. Create a project at supabase.com (Sydney region is closest).
-2. Open **SQL Editor**, paste in `supabase/migrations/0001_bookings.sql` and click **Run**. This creates the `bookings` table and a private `booking-photos` bucket.
+2. Open **SQL Editor** and run each file in `supabase/migrations/` in order: `0001_bookings.sql` (bookings table and a private `booking-photos` bucket), then `0002_events.sql` (anonymous click tracking).
 3. Under **Project Settings → API**, copy the Project URL and the `service_role` key into `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
 
 ### Setting up Resend
@@ -88,3 +89,14 @@ Each service switches on when its keys are added (see `.env.example`). Anything 
 Create a Personal Access Token in your Fergus account and set `FERGUS_API_TOKEN`. Bookings appear in Fergus as **Enquiries**, ready to convert into a job.
 
 > If Stripe is on but Supabase isn't, bookings are sent immediately and marked "deposit not yet paid", because there's nowhere to keep them until payment.
+
+## Owner dashboard
+
+Go to `/dashboard` and log in with `DASHBOARD_PASSWORD`. Changing the password logs everyone out.
+
+- **Overview:** visitors, job finder starts, people who fixed it themselves, bookings and deposits, each compared with the period before. Also visitors per day, the visit-to-booking funnel, the most common problems, where people stop in the job finder, and bookings by suburb.
+- **Bookings:** every booking with status filters. Open one to see the customer's description, photos, contact details and a map link, and mark it completed or cancelled.
+
+Until Supabase is connected the dashboard shows **sample data** with a banner saying so. Running locally with no password set lets you in without logging in; the live site stays locked until `DASHBOARD_PASSWORD` is set.
+
+Tracking is anonymous: a random ID per browser tab, the page, and which job finder options were picked. No names, emails or IP addresses. Visits to `/dashboard` aren't counted.

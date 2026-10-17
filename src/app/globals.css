@@ -10,6 +10,10 @@
   --color-slate: #4c5159;
   --color-ink: #0e0e0e;
   --color-mist: #f6f6f6;
+  /* Dashboard charts: brand aqua deepened to clear 3:1 against white */
+  --color-chart: #1a9fc4;
+  --color-chart-muted: #b4bac2;
+  --color-grid: #e7e7e7;
 
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Archivo", "Poppins", ui-sans-serif, sans-serif;

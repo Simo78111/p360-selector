@@ -37,7 +37,7 @@ export function JobFinder() {
   }, [key]);
 
   useEffect(() => {
-    if (outcome) track("finder_outcome", { outcome: outcome.id, urgency, path: key });
+    if (outcome) track("finder_outcome", { outcome: outcome.id, urgency, answers: key });
   }, [outcome, urgency, key]);
 
   const answered = steps.length;
