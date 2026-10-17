@@ -16,6 +16,9 @@ export const site = {
 export const pricing = {
   callOutFrom: 95,
   depositAmount: 50,
+  // PLACEHOLDER deposit terms, shown at checkout and on /terms.
+  depositTerms:
+    "Your deposit secures your booking and is deducted from your final invoice. It's fully refundable if you cancel at least 24 hours before your booking.",
   currency: "NZD",
   // "From" prices shown at the end of the job finder
   from: {

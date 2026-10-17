@@ -1,58 +1,51 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { BookingForm, type JobSummary } from "@/components/booking/BookingForm";
 import { ButtonLink, Container } from "@/components/ui";
 import { resolve } from "@/lib/finder";
-import { formatPrice, site } from "@/lib/site";
+import { stripeEnabled } from "@/lib/stripe";
 
 export const metadata: Metadata = {
   title: "Book a job",
   robots: { index: false },
 };
 
-// Placeholder until Phase 3 adds job details, photos and the Stripe deposit.
-export default async function BookPage({ searchParams }: { searchParams: Promise<{ a?: string }> }) {
-  const { a = "" } = await searchParams;
+export default async function BookPage({ searchParams }: { searchParams: Promise<{ a?: string; cancelled?: string }> }) {
+  const { a = "", cancelled } = await searchParams;
   const { steps, outcome } = resolve(a.split(".").filter(Boolean));
+
+  if (!outcome) {
+    return (
+      <section className="bg-aqua-pale">
+        <Container className="max-w-2xl py-20 text-center">
+          <h1 className="text-3xl font-bold">Let&apos;s start with what&apos;s wrong</h1>
+          <p className="mt-3 text-slate">
+            Answer a few quick questions first so we know what the job is and can give you a price.
+          </p>
+          <ButtonLink href="/get-started" className="mt-8">
+            Find my fix
+          </ButtonLink>
+        </Container>
+      </section>
+    );
+  }
+
+  const job: JobSummary = {
+    answers: steps.map((s) => s.option.id).join("."),
+    title: outcome.title,
+    priceLabel: outcome.price.label,
+    priceAmount: outcome.price.amount,
+    selections: steps.map((s) => ({ label: s.question.summaryLabel, value: s.option.label })),
+  };
 
   return (
     <section className="bg-aqua-pale">
-      <Container className="max-w-2xl py-16 sm:py-24">
-        <p className="text-sm font-semibold text-aqua-deep">Book a job</p>
-        <h1 className="mt-1 text-3xl font-bold sm:text-4xl">{outcome ? outcome.title : "Tell us about your job"}</h1>
-
-        {outcome && (
-          <div className="mt-6 rounded-3xl bg-white p-6">
-            <dl className="grid gap-3 sm:grid-cols-2">
-              {steps.map((s) => (
-                <div key={s.question.id}>
-                  <dt className="text-xs text-slate">{s.question.summaryLabel}</dt>
-                  <dd className="font-medium">{s.option.label}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="mt-5 border-t border-black/5 pt-5 text-sm">
-              {outcome.price.label} <strong>{formatPrice(outcome.price.amount)}</strong>
-            </p>
-          </div>
-        )}
-
-        <div className="mt-6 rounded-3xl bg-white p-6">
-          <p className="font-semibold">Online booking is almost ready.</p>
-          <p className="mt-2 text-slate">
-            Soon you&apos;ll be able to add photos, choose a time and pay your deposit here. For now, give us a call or
-            send an email and we&apos;ll get you sorted.
+      <Container className="py-10 sm:py-16">
+        {cancelled && (
+          <p className="mb-6 rounded-2xl bg-white p-4 text-sm" role="status">
+            Payment was cancelled and nothing was charged. Your details are still here when you&apos;re ready.
           </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <ButtonLink href={site.phoneHref}>Call {site.phone}</ButtonLink>
-            <ButtonLink href={`mailto:${site.email}`} variant="outline">
-              Email us
-            </ButtonLink>
-          </div>
-        </div>
-
-        <Link href={a ? `/get-started?a=${a}` : "/get-started"} className="mt-6 inline-block font-medium text-slate hover:text-ink">
-          ← Back to your result
-        </Link>
+        )}
+        <BookingForm job={job} paymentsEnabled={stripeEnabled()} />
       </Container>
     </section>
   );

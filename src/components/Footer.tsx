@@ -41,6 +41,11 @@ export function Footer() {
                 Privacy policy
               </Link>
             </li>
+            <li>
+              <Link href="/terms" className="hover:text-aqua">
+                Booking terms
+              </Link>
+            </li>
           </ul>
         </div>
 
