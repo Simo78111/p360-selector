@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { bookingSchema, MAX_PHOTO_BYTES, MAX_PHOTOS, newReference } from "@/lib/booking";
-import { saveBooking, type Photo } from "@/lib/bookings-store";
+import { createBooking, type Photo } from "@/lib/bookings-store";
 import { resolve } from "@/lib/finder";
 import { pricing } from "@/lib/site";
 import { getStripe } from "@/lib/stripe";
@@ -46,16 +46,19 @@ export async function POST(req: NextRequest) {
   const reference = newReference();
   const stripe = getStripe();
 
-  await saveBooking({
-    ...input,
-    reference,
-    createdAt: new Date().toISOString(),
-    outcome: { id: outcome.id, title: outcome.title, service: outcome.service },
-    urgency,
-    priceLabel: `${outcome.price.label} $${outcome.price.amount}`,
-    depositAmount: stripe ? pricing.depositAmount : 0,
+  await createBooking(
+    {
+      ...input,
+      reference,
+      createdAt: new Date().toISOString(),
+      status: stripe ? "pending_payment" : "new",
+      outcome: { id: outcome.id, title: outcome.title, service: outcome.service },
+      urgency,
+      priceLabel: `${outcome.price.label} $${outcome.price.amount}`,
+      depositAmount: stripe ? pricing.depositAmount : 0,
+    },
     photos,
-  });
+  );
 
   const origin = process.env.NEXT_PUBLIC_SITE_URL || req.nextUrl.origin;
 

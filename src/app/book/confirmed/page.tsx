@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ClearDraft } from "@/components/booking/ClearDraft";
 import { ButtonLink, Check, Container } from "@/components/ui";
 import { formatPrice, site } from "@/lib/site";
+import { markDepositPaid } from "@/lib/bookings-store";
 import { getStripe } from "@/lib/stripe";
 
 export const metadata: Metadata = {
@@ -21,8 +22,10 @@ export default async function ConfirmedPage({ searchParams }: Props) {
   if (stripe && session_id) {
     try {
       const session = await stripe.checkout.sessions.retrieve(session_id);
-      if (session.payment_status === "paid" && session.metadata?.reference === reference) {
+      if (reference && session.payment_status === "paid" && session.metadata?.reference === reference) {
         paid = (session.amount_total ?? 0) / 100;
+        // Backup for the webhook; only the first call sends emails.
+        await markDepositPaid(reference, { amount: paid, paymentId: String(session.payment_intent ?? session.id) });
       }
     } catch {
       // Unknown session: show the page without the payment line.

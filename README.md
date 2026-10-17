@@ -25,7 +25,7 @@ Then open http://localhost:3360.
 1. Foundations: brand, layout, main pages ✅
 2. Job finder: step-by-step questions with tips ✅
 3. Prices, job details, photos and Stripe deposit ✅ (Stripe keys still to add)
-4. Email notifications and Fergus enquiries
+4. Email notifications and Fergus enquiries ✅ (keys still to add)
 5. Owner dashboard and analytics
 6. Launch
 
@@ -58,4 +58,33 @@ Test card: `4242 4242 4242 4242`, any future date, any CVC.
 
 The deposit amount and its terms are in `src/lib/site.ts` (`pricing.depositAmount` and `pricing.depositTerms`).
 
-> Bookings are currently only logged on the server (`src/lib/bookings-store.ts`). Phase 4 adds storage for bookings and photos, an email to the office, and a new enquiry in Fergus.
+
+## Saving bookings, emails and Fergus
+
+Each service switches on when its keys are added (see `.env.example`). Anything without keys is skipped and noted in the server log, so the site works at every stage.
+
+| Service | What it does | Keys |
+|---|---|---|
+| Supabase | Saves every booking and its photos | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| Resend | Emails the office (photos attached) and the customer | `RESEND_API_KEY`, `EMAIL_FROM`, `OFFICE_EMAIL` |
+| Fergus | Creates an enquiry with photos attached | `FERGUS_API_TOKEN` |
+
+**When it happens:** if payments are off, as soon as the booking is sent. If payments are on, once the deposit is paid (Stripe webhook, with the confirmation page as a backup). Emails go out only once.
+
+### Setting up Supabase
+
+1. Create a project at supabase.com (Sydney region is closest).
+2. Open **SQL Editor**, paste in `supabase/migrations/0001_bookings.sql` and click **Run**. This creates the `bookings` table and a private `booking-photos` bucket.
+3. Under **Project Settings → API**, copy the Project URL and the `service_role` key into `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+
+### Setting up Resend
+
+1. Create an account at resend.com and add your domain (e.g. plumbing360.co.nz). Add the DNS records it gives you.
+2. Create an API key and set `RESEND_API_KEY`.
+3. Set `EMAIL_FROM` to an address on that domain, and `OFFICE_EMAIL` to where booking emails should go.
+
+### Setting up Fergus
+
+Create a Personal Access Token in your Fergus account and set `FERGUS_API_TOKEN`. Bookings appear in Fergus as **Enquiries**, ready to convert into a job.
+
+> If Stripe is on but Supabase isn't, bookings are sent immediately and marked "deposit not yet paid", because there's nowhere to keep them until payment.
