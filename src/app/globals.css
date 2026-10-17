@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Brand palette taken from plumbing360.co.nz */
+@theme {
+  --color-aqua: #49c7eb;
+  --color-aqua-light: #c7edf8;
+  --color-aqua-pale: #eef9fd;
+  /* Darker aqua for text and links on white; the brand aqua is too light to read */
+  --color-aqua-deep: #0b6f8c;
+  --color-slate: #4c5159;
+  --color-ink: #0e0e0e;
+  --color-mist: #f6f6f6;
+
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo), var(--font-poppins), ui-sans-serif, sans-serif;
+}
+
+body {
+  background: #ffffff;
+  color: var(--color-ink);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-aqua-deep);
+  outline-offset: 2px;
+}
