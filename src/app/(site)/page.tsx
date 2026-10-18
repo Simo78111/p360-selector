@@ -1,9 +1,13 @@
+import Image from "next/image";
 import Link from "next/link";
 import { CtaBand } from "@/components/CtaBand";
+import { TrustBand } from "@/components/TrustBand";
+import { WorkGallery } from "@/components/WorkGallery";
 import { ButtonLink, Check, Container, ServiceIcon } from "@/components/ui";
 import { finderHref } from "@/lib/finder";
 import { services } from "@/lib/services";
 import { formatPrice, pricing, site } from "@/lib/site";
+import { homePhotos } from "@/lib/work";
 
 const steps = [
   {
@@ -99,6 +103,26 @@ export default function Home() {
         </Container>
       </section>
 
+      <section>
+        <Container className="pb-20">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="mb-2 text-sm font-semibold tracking-wide text-aqua-deep uppercase">Our work</p>
+              <h2 className="text-3xl font-bold sm:text-4xl">Plumbing from every angle</h2>
+              <p className="mt-3 max-w-2xl text-slate">
+                From family homes to some of Auckland&apos;s best-known venues, the same team and the same standards.
+              </p>
+            </div>
+            <Link href="/about" className="font-semibold text-aqua-deep hover:underline">
+              About us →
+            </Link>
+          </div>
+          <div className="mt-10">
+            <WorkGallery />
+          </div>
+        </Container>
+      </section>
+
       <section className="bg-mist">
         <Container className="py-20">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -130,33 +154,47 @@ export default function Home() {
       </section>
 
       <section>
-        <Container className="grid gap-10 py-20 lg:grid-cols-2">
+        <Container className="grid items-center gap-10 py-20 lg:grid-cols-2 lg:gap-16">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-3xl lg:order-2">
+            <Image
+              src={homePhotos.pool}
+              alt="Modern Auckland home with a pool at dusk"
+              fill
+              placeholder="blur"
+              sizes="(min-width: 1024px) 50vw, 100vw"
+              className="object-cover"
+            />
+          </div>
           <div>
             <h2 className="text-3xl font-bold sm:text-4xl">We turn up knowing the job</h2>
             <p className="mt-4 text-lg text-slate">
               Because you&apos;ve already told us what&apos;s wrong and sent a photo, we bring the right parts the first
               time. Fewer return visits, less time on the clock, and a smaller bill.
             </p>
+            <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+              {[
+                ["Licensed", "Certifying plumbers, gasfitters and drainlayers"],
+                ["Upfront", `Call-outs from ${formatPrice(pricing.callOutFrom)}, no surprises`],
+                ["Local", `Based in ${site.area}, working across the region`],
+                ["Tidy", "We leave your home the way we found it"],
+              ].map(([title, body]) => (
+                <li key={title} className="flex gap-3">
+                  <Check className="mt-0.5 text-aqua-deep" />
+                  <span>
+                    <span className="block font-bold">{title}</span>
+                    <span className="block text-sm text-slate">{body}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
             <ButtonLink href="/why-choose-us" variant="outline" className="mt-8">
               Why choose us
             </ButtonLink>
           </div>
-          <ul className="grid gap-4 sm:grid-cols-2">
-            {[
-              ["Licensed", "Certifying plumbers, gasfitters and drainlayers"],
-              ["Upfront", `Call-outs from ${formatPrice(pricing.callOutFrom)}, no surprises`],
-              ["Local", `Based in ${site.area}, working across the region`],
-              ["Tidy", "We leave your home the way we found it"],
-            ].map(([title, body]) => (
-              <li key={title} className="rounded-2xl border border-black/10 p-5">
-                <p className="font-bold">{title}</p>
-                <p className="mt-1 text-sm text-slate">{body}</p>
-              </li>
-            ))}
-          </ul>
         </Container>
       </section>
 
+      <TrustBand />
       <CtaBand />
     </>
   );
