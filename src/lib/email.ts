@@ -19,11 +19,12 @@ type Email = {
   attachments?: { filename: string; content: string }[];
 };
 
-async function send(email: Email) {
+/** Returns false when skipped because email isn't set up; throws if Resend rejects it. */
+async function send(email: Email): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     console.info("[email] skipped (no RESEND_API_KEY):", email.subject, "→", email.to);
-    return;
+    return false;
   }
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -39,6 +40,7 @@ async function send(email: Email) {
     }),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+  return true;
 }
 
 const esc = (s: string) =>
@@ -89,7 +91,7 @@ export async function sendOfficeEmail(booking: Booking, photos: Photo[]) {
   const urgent = booking.urgency === "urgent" || booking.urgency === "emergency";
   const subject = `${urgent ? "URGENT: " : ""}New booking ${booking.reference}: ${booking.outcome.title}, ${booking.suburb}`;
   const r = rows(booking);
-  await send({
+  return send({
     to: officeTo(),
     replyTo: booking.email,
     subject,
@@ -106,7 +108,7 @@ export async function sendCustomerEmail(booking: Booking) {
   const first = booking.name.split(" ")[0];
   const paidLine =
     booking.status === "paid" ? `<p>We've received your deposit of ${formatPrice(booking.depositAmount)}.</p>` : "";
-  await send({
+  return send({
     to: booking.email,
     replyTo: officeTo(),
     subject: `We've got your booking (${booking.reference})`,

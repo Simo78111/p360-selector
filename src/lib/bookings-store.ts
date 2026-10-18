@@ -143,7 +143,8 @@ async function notify(booking: Booking, photos: Photo[]) {
     await db
       .from("bookings")
       .update({
-        notified_at: office.status === "fulfilled" ? new Date().toISOString() : null,
+        // Only stamped when the office email was actually sent, not skipped.
+        notified_at: office.status === "fulfilled" && office.value ? new Date().toISOString() : null,
         fergus_enquiry_id: fergus.status === "fulfilled" ? fergus.value : null,
       })
       .eq("reference", booking.reference);
