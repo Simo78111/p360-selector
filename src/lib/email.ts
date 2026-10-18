@@ -5,7 +5,7 @@ import { formatPrice, site } from "./site";
 
 // Email through Resend (resend.com). Switched on by RESEND_API_KEY.
 // EMAIL_FROM must use a domain you've verified in Resend.
-const from = () => process.env.EMAIL_FROM || `${site.name} <bookings@plumbing360.co.nz>`;
+const from = () => process.env.EMAIL_FROM || `${site.name} <bookings@plumbing360.nz>`;
 const officeTo = () => process.env.OFFICE_EMAIL || site.email;
 
 export const emailEnabled = () => Boolean(process.env.RESEND_API_KEY);

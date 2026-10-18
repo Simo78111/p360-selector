@@ -3,10 +3,10 @@
 export const site = {
   name: "Plumbing360",
   tagline: "Plumbing, drainage and gas fitting across Auckland",
-  url: "https://plumbing360.co.nz",
+  url: "https://plumbing360.nz",
   phone: "0800 000 000", // PLACEHOLDER
   phoneHref: "tel:0800000000", // PLACEHOLDER
-  email: "jobs@plumbing360.co.nz", // PLACEHOLDER
+  email: "jobs@plumbing360.nz", // PLACEHOLDER
   area: "Auckland",
   hours: "Monday to Friday, 7:30am – 5:00pm",
   afterHours: false,

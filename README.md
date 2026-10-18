@@ -80,7 +80,7 @@ Each service switches on when its keys are added (see `.env.example`). Anything 
 
 ### Setting up Resend
 
-1. Create an account at resend.com and add your domain (e.g. plumbing360.co.nz). Add the DNS records it gives you.
+1. Create an account at resend.com and add your domain (e.g. plumbing360.nz). Add the DNS records it gives you.
 2. Create an API key and set `RESEND_API_KEY`.
 3. Set `EMAIL_FROM` to an address on that domain, and `OFFICE_EMAIL` to where booking emails should go.
 
