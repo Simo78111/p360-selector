@@ -5,13 +5,30 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, type CSSProperties } from "react";
 import { resolve, stepsRemaining, type Step } from "@/lib/finder";
 import { track } from "@/lib/track";
-import { ServiceIcon } from "../ui";
 import { FinderResult } from "./FinderResult";
+import { iconFor } from "./optionIcons";
 
 export const encodeAnswers = (ids: string[]) => ids.join(".");
 
-// Icons for the first question's options.
-const serviceIcons: Record<string, string> = { plumbing: "plumbing", drainage: "drainage", gas: "gas-fitting" };
+// Card colours by how urgent the answer is.
+const tones: Record<string, { card: string; tile: string; badge?: string; badgeClass?: string }> = {
+  standard: {
+    card: "border-transparent hover:border-aqua",
+    tile: "bg-aqua-pale text-aqua-deep group-hover:bg-aqua-light",
+  },
+  urgent: {
+    card: "border-transparent hover:border-amber-400",
+    tile: "bg-amber-50 text-amber-700 group-hover:bg-amber-100",
+    badge: "Urgent",
+    badgeClass: "bg-amber-100 text-amber-900",
+  },
+  emergency: {
+    card: "border-red-200 hover:border-red-500",
+    tile: "bg-red-50 text-red-600 group-hover:bg-red-100",
+    badge: "Emergency",
+    badgeClass: "bg-red-600 text-white",
+  },
+};
 
 const columnsFor = (count: number) => (count <= 5 ? count : Math.ceil(count / 2));
 
@@ -94,33 +111,48 @@ export function JobFinder() {
                 className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
                 style={{ "--cols": columnsFor(current.options.length) } as CSSProperties}
               >
-                {current.options.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => {
-                      track("finder_answer", { question: current.id, answer: option.id });
-                      go([...validIds, option.id]);
-                    }}
-                    className={`group flex min-h-44 flex-col rounded-2xl border-2 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-aqua hover:shadow-md sm:min-h-72 ${
-                      option.urgency === "emergency" ? "border-ink/20" : "border-transparent"
-                    }`}
-                  >
-                    {serviceIcons[option.id] && (
-                      <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-aqua-light">
-                        <ServiceIcon slug={serviceIcons[option.id]} className="h-6 w-6" />
-                      </span>
-                    )}
-                    <span className="block font-semibold">{option.label}</span>
-                    {option.hint && <span className="mt-1 block text-sm text-slate">{option.hint}</span>}
-                    <span
-                      aria-hidden
-                      className="mt-auto flex h-9 w-9 items-center justify-center self-end rounded-full bg-aqua-pale text-slate transition group-hover:bg-aqua group-hover:text-ink"
+                {current.options.map((option) => {
+                  const Icon = iconFor(current.id, option.id);
+                  const tone = tones[option.urgency ?? "standard"] ?? tones.standard;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        track("finder_answer", { question: current.id, answer: option.id });
+                        go([...validIds, option.id]);
+                      }}
+                      className={`group flex flex-col rounded-2xl border-2 bg-white p-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${tone.card}`}
                     >
-                      →
-                    </span>
-                  </button>
-                ))}
+                      <span
+                        className={`relative flex h-20 items-center justify-center rounded-xl transition-colors sm:h-24 ${tone.tile}`}
+                      >
+                        <Icon
+                          aria-hidden
+                          strokeWidth={1.6}
+                          className="h-9 w-9 transition-transform duration-300 group-hover:scale-110 sm:h-10 sm:w-10"
+                        />
+                        {tone.badge && (
+                          <span
+                            className={`absolute top-2 left-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone.badgeClass}`}
+                          >
+                            {tone.badge}
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex flex-1 flex-col px-2 pt-3 pb-1">
+                        <span className="block font-semibold">{option.label}</span>
+                        {option.hint && <span className="mt-1 block text-sm text-slate">{option.hint}</span>}
+                        <span
+                          aria-hidden
+                          className="mt-auto flex h-8 w-8 items-center justify-center self-end rounded-full bg-aqua-pale text-slate transition group-hover:bg-aqua group-hover:text-ink"
+                        >
+                          →
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </>
           ) : outcome && urgency ? (
