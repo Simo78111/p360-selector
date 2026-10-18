@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { resolve, stepsRemaining, type Step } from "@/lib/finder";
 import { track } from "@/lib/track";
+import { ServiceIcon } from "../ui";
 import { FinderResult } from "./FinderResult";
 
 export const encodeAnswers = (ids: string[]) => ids.join(".");
+
+// Icons for the first question's options.
+const serviceIcons: Record<string, string> = { plumbing: "plumbing", drainage: "drainage", gas: "gas-fitting" };
+
+const columnsFor = (count: number) => (count <= 5 ? count : Math.ceil(count / 2));
 
 export function JobFinder() {
   const router = useRouter();
@@ -83,7 +89,11 @@ export function JobFinder() {
                 {current.title}
               </h1>
               {current.subtitle && <p className="mt-2 text-slate">{current.subtitle}</p>}
-              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              {/* Tall cards side by side: up to 5 in one row, more split evenly over two rows. */}
+              <div
+                className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
+                style={{ "--cols": columnsFor(current.options.length) } as CSSProperties}
+              >
                 {current.options.map((option) => (
                   <button
                     key={option.id}
@@ -92,15 +102,21 @@ export function JobFinder() {
                       track("finder_answer", { question: current.id, answer: option.id });
                       go([...validIds, option.id]);
                     }}
-                    className={`group flex min-h-20 items-center gap-4 rounded-2xl border-2 bg-white p-5 text-left transition hover:border-aqua hover:shadow-md ${
+                    className={`group flex min-h-44 flex-col rounded-2xl border-2 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-aqua hover:shadow-md sm:min-h-72 ${
                       option.urgency === "emergency" ? "border-ink/20" : "border-transparent"
                     }`}
                   >
-                    <span className="flex-1">
-                      <span className="block font-semibold">{option.label}</span>
-                      {option.hint && <span className="mt-1 block text-sm text-slate">{option.hint}</span>}
-                    </span>
-                    <span aria-hidden className="text-slate transition group-hover:translate-x-1 group-hover:text-ink">
+                    {serviceIcons[option.id] && (
+                      <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-aqua-light">
+                        <ServiceIcon slug={serviceIcons[option.id]} className="h-6 w-6" />
+                      </span>
+                    )}
+                    <span className="block font-semibold">{option.label}</span>
+                    {option.hint && <span className="mt-1 block text-sm text-slate">{option.hint}</span>}
+                    <span
+                      aria-hidden
+                      className="mt-auto flex h-9 w-9 items-center justify-center self-end rounded-full bg-aqua-pale text-slate transition group-hover:bg-aqua group-hover:text-ink"
+                    >
                       →
                     </span>
                   </button>
