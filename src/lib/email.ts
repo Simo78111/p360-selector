@@ -123,3 +123,22 @@ ${paidLine}
     text: `Thanks, ${first}. We've received your booking (${booking.reference}) for ${booking.outcome.title.toLowerCase()} at ${booking.street}, ${booking.suburb}. We'll call or text you to confirm a time, usually within one working day. Questions? Call ${site.phone}.`,
   });
 }
+
+/** The address booking emails go to, for showing on the dashboard. */
+export const officeAddress = () => officeTo();
+export const fromAddress = () => from();
+
+/** A plain test email from the dashboard's Status page. No booking, no Fergus. */
+export async function sendTestEmail(to: string) {
+  const when = new Date().toLocaleString("en-NZ", { timeZone: "Pacific/Auckland" });
+  return send({
+    to,
+    subject: `Test email from ${site.name} (${when})`,
+    html: layout(
+      "Email is working",
+      `<p>This is a test sent from the Status page of your ${esc(site.name)} dashboard at ${esc(when)}.</p>
+<p>If you're reading this, booking emails from the website will reach this inbox too. Check it didn't land in spam.</p>`,
+    ),
+    text: `Email is working. This is a test sent from the Status page of your ${site.name} dashboard at ${when}.`,
+  });
+}
