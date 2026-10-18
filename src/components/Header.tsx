@@ -14,6 +14,8 @@ export function Header() {
   useEffect(() => setOpen(false), [pathname]);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  // No need for the button while someone is already in the finder or booking.
+  const showFinderButton = !isActive("/get-started") && !isActive("/book");
 
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-white/95 backdrop-blur">
@@ -36,9 +38,6 @@ export function Header() {
           <a href={site.phoneHref} className="text-sm font-semibold text-ink hover:text-aqua-deep">
             {site.phone}
           </a>
-          <ButtonLink href="/get-started" className="px-5 py-2 text-sm">
-            Get started
-          </ButtonLink>
         </div>
 
         <button
@@ -54,6 +53,14 @@ export function Header() {
           </svg>
         </button>
       </Container>
+
+      {showFinderButton && (
+        <Container className="flex justify-center pb-3">
+          <ButtonLink href="/get-started" className="w-2/3 py-2.5">
+            Find my fix
+          </ButtonLink>
+        </Container>
+      )}
 
       {open && (
         <nav id="mobile-menu" className="border-t border-black/5 bg-white md:hidden" aria-label="Mobile">
@@ -71,7 +78,7 @@ export function Header() {
               Call {site.phone}
             </a>
             <ButtonLink href="/get-started" className="mt-2">
-              Get started
+              Find my fix
             </ButtonLink>
           </Container>
         </nav>
