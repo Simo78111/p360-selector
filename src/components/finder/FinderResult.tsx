@@ -88,7 +88,9 @@ export function FinderResult({ outcome, urgency, answers, headingRef, onRestart 
           <p className="text-sm font-medium text-ink/70">{outcome.price.label}</p>
           <p className="font-display text-4xl font-extrabold">{formatPrice(outcome.price.amount)}</p>
           <p className="mt-1 text-sm text-ink/80">
-            Secure your job with a {formatPrice(pricing.depositAmount)} deposit. Add photos and details on the next step.
+            {pricing.depositsEnabled
+              ? `Secure your job with a ${formatPrice(pricing.depositAmount)} deposit. Add photos and details on the next step.`
+              : "No payment needed to book. Add photos and details on the next step."}
           </p>
         </div>
         <ButtonLink

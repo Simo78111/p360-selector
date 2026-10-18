@@ -15,6 +15,10 @@ export const site = {
 // PLACEHOLDER prices — swap for real numbers before launch.
 export const pricing = {
   callOutFrom: 95,
+  // Online deposits through Stripe. Off: no payment is taken and deposits
+  // aren't mentioned anywhere, even if Stripe keys are added. Turn on to
+  // start taking deposits (Stripe keys needed too, see README).
+  depositsEnabled: false,
   depositAmount: 50,
   // PLACEHOLDER deposit terms, shown at checkout and on /terms.
   depositTerms:

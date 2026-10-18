@@ -3,7 +3,7 @@ import { bookingSchema, MAX_PHOTO_BYTES, MAX_PHOTOS, newReference } from "@/lib/
 import { createBooking, type Photo } from "@/lib/bookings-store";
 import { resolve } from "@/lib/finder";
 import { pricing } from "@/lib/site";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, paymentMode } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   let form: FormData;
@@ -63,8 +63,10 @@ export async function POST(req: NextRequest) {
   const origin = process.env.NEXT_PUBLIC_SITE_URL || req.nextUrl.origin;
 
   if (!stripe) {
-    // Payments not set up yet: skip straight to the confirmation page.
-    return NextResponse.json({ reference, url: `${origin}/book/confirmed?ref=${reference}&test=1` });
+    // No payment: straight to the confirmation page. "test" flags deposits
+    // that are switched on but missing their Stripe keys.
+    const test = paymentMode() === "test" ? "&test=1" : "";
+    return NextResponse.json({ reference, url: `${origin}/book/confirmed?ref=${reference}${test}` });
   }
 
   try {

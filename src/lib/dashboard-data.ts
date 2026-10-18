@@ -1,5 +1,6 @@
 import "server-only";
 import { outcomes, questions, ROOT, type Option, type Urgency } from "./finder";
+import { pricing } from "./site";
 import { getSupabase, PHOTO_BUCKET } from "./supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -198,7 +199,7 @@ export async function loadStats(days: number): Promise<Stats> {
     { id: "fixed", label: "Fixed it themselves", value: cur.fixed, previous: prev.fixed, upIsGood: true, spark: [] },
     { id: "bookings", label: "Bookings", value: cur.bookings, previous: prev.bookings, upIsGood: true, spark: spark((d) => d.bookings) },
     { id: "deposits", label: "Deposits taken", value: cur.deposits, previous: prev.deposits, upIsGood: true, spark: [] },
-  ];
+  ].filter((k) => k.id !== "deposits" || pricing.depositsEnabled);
 
   const funnel: FunnelStep[] = [
     { label: "Visited the site", value: cur.visitors },

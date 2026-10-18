@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { CtaBand } from "@/components/CtaBand";
 import { Container, PageHeader } from "@/components/ui";
-import { site } from "@/lib/site";
+import { pricing, site } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "About us",
@@ -37,7 +37,7 @@ export default function AboutPage() {
             ["Honest first", "Free advice, even if it means you don't book us."],
             ["Licensed", "Certifying plumbers, gasfitters and drainlayers."],
             ["Prepared", "We read your photos and notes before we arrive."],
-            ["Upfront", "Clear prices and a small deposit to lock in your job."],
+            ["Upfront", pricing.depositsEnabled ? "Clear prices and a small deposit to lock in your job." : "Clear prices, agreed before we start."],
           ].map(([title, body]) => (
             <div key={title} className="rounded-2xl bg-aqua-pale p-6">
               <p className="text-lg font-bold">{title}</p>

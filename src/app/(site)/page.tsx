@@ -16,7 +16,9 @@ const steps = [
   },
   {
     title: "Book us if you need us",
-    body: "Add a photo and a few details, pay a small deposit, and we arrive knowing exactly what the job is.",
+    body: pricing.depositsEnabled
+      ? "Add a photo and a few details, pay a small deposit, and we arrive knowing exactly what the job is."
+      : "Add a photo and a few details, and we arrive knowing exactly what the job is.",
   },
 ];
 

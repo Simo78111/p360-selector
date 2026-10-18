@@ -72,8 +72,10 @@ export default async function ServicePage({ params }: Props) {
           <p className="text-sm text-white/70">Call-outs from</p>
           <p className="font-display text-5xl font-extrabold text-aqua">{formatPrice(pricing.callOutFrom)}</p>
           <p className="mt-4 text-white/80">
-            Tell us what&apos;s going on, add a photo, and secure your job with a {formatPrice(pricing.depositAmount)}{" "}
-            deposit.
+            Tell us what&apos;s going on and add a photo.{" "}
+            {pricing.depositsEnabled
+              ? `Secure your job with a ${formatPrice(pricing.depositAmount)} deposit.`
+              : "No payment needed to book."}
           </p>
           <ButtonLink href={finderHref(service.slug)} className="mt-6 w-full">
             Get started

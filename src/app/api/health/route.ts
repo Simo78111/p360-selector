@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { pricing } from "@/lib/site";
 
 // Reports which services are switched on, as yes/no only. Never returns key
 // values. Handy for checking Vercel settings took effect after a redeploy.
@@ -17,7 +18,7 @@ export function GET() {
       fromDomain: from.match(/@([^>\s]+)/)?.[1] ?? null,
     },
     fergus: has("FERGUS_API_TOKEN"),
-    stripe: { secretKey: has("STRIPE_SECRET_KEY"), webhookSecret: has("STRIPE_WEBHOOK_SECRET") },
+    stripe: { depositsEnabled: pricing.depositsEnabled, secretKey: has("STRIPE_SECRET_KEY"), webhookSecret: has("STRIPE_WEBHOOK_SECRET") },
     dashboardPassword: has("DASHBOARD_PASSWORD"),
     environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV,
   });

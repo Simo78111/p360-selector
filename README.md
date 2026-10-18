@@ -25,7 +25,7 @@ Then open http://localhost:3360.
 
 1. Foundations: brand, layout, main pages ✅
 2. Job finder: step-by-step questions with tips ✅
-3. Prices, job details, photos and Stripe deposit ✅ (Stripe keys still to add)
+3. Prices, job details, photos and Stripe deposit ✅ (deposits switched off for now)
 4. Email notifications and Fergus enquiries ✅ (keys still to add)
 5. Owner dashboard and analytics ✅ (keys still to add)
 6. Launch
@@ -44,16 +44,17 @@ It walks every path through the questions and fails if any path doesn't end in a
 
 The booking form is at `/book` and is reached from a job finder result. Bookings are posted to `src/app/api/bookings/route.ts`.
 
-**Payments are off until Stripe keys are added.** Without them, bookings go straight through as test bookings and no deposit is taken. To switch payments on:
+**Deposits are switched off** (`pricing.depositsEnabled: false` in `src/lib/site.ts`). Bookings go straight through, no payment is taken, and deposits aren't mentioned anywhere on the site, even if Stripe keys are added. The Stripe code stays in place for later. To start taking deposits:
 
-1. In Stripe, go to **Developers → API keys** and copy the secret key (`sk_test_...` for testing, `sk_live_...` when going live).
-2. Copy `.env.example` to `.env.local` and paste it in as `STRIPE_SECRET_KEY`. On Vercel, add it under **Settings → Environment Variables**.
-3. In Stripe, go to **Developers → Webhooks → Add endpoint**:
+1. Set `depositsEnabled: true` in `src/lib/site.ts`.
+2. In Stripe, go to **Developers → API keys** and copy the secret key (`sk_test_...` for testing, `sk_live_...` when going live).
+3. Copy `.env.example` to `.env.local` and paste it in as `STRIPE_SECRET_KEY`. On Vercel, add it under **Settings → Environment Variables**.
+4. In Stripe, go to **Developers → Webhooks → Add endpoint**:
    - URL: `https://<your-domain>/api/stripe/webhook`
    - Event: `checkout.session.completed`
    Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
-4. Set `NEXT_PUBLIC_SITE_URL` to the site's address.
-5. Redeploy. The final button changes from "Send booking" to "Pay $50 deposit".
+5. Set `NEXT_PUBLIC_SITE_URL` to the site's address.
+6. Redeploy. The final button changes from "Send booking" to "Pay $50 deposit".
 
 Test card: `4242 4242 4242 4242`, any future date, any CVC.
 

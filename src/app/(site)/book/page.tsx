@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { BookingForm, type JobSummary } from "@/components/booking/BookingForm";
 import { ButtonLink, Container } from "@/components/ui";
 import { resolve } from "@/lib/finder";
-import { stripeEnabled } from "@/lib/stripe";
+import { paymentMode } from "@/lib/stripe";
 
 export const metadata: Metadata = {
   title: "Book a job",
@@ -45,7 +45,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
             Payment was cancelled and nothing was charged. Your details are still here when you&apos;re ready.
           </p>
         )}
-        <BookingForm job={job} paymentsEnabled={stripeEnabled()} />
+        <BookingForm job={job} payments={paymentMode()} />
       </Container>
     </section>
   );

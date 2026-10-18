@@ -49,7 +49,8 @@ const steps: { title: string; fields: (keyof Fields)[] }[] = [
 
 const DRAFT_KEY = "p360-booking-draft";
 
-export function BookingForm({ job, paymentsEnabled }: { job: JobSummary; paymentsEnabled: boolean }) {
+export function BookingForm({ job, payments }: { job: JobSummary; payments: "on" | "test" | "off" }) {
+  const deposits = payments !== "off";
   const [step, setStep] = useState(0);
   const [fields, setFields] = useState<Fields>(blank);
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
@@ -349,13 +350,19 @@ export function BookingForm({ job, paymentsEnabled }: { job: JobSummary; payment
                   </Row>
                 </dl>
 
-                <div className="rounded-2xl bg-aqua-pale p-5">
-                  <div className="flex items-baseline justify-between gap-4">
-                    <span className="font-semibold">Deposit due now</span>
-                    <span className="font-display text-3xl font-extrabold">{formatPrice(pricing.depositAmount)}</span>
+                {deposits ? (
+                  <div className="rounded-2xl bg-aqua-pale p-5">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <span className="font-semibold">Deposit due now</span>
+                      <span className="font-display text-3xl font-extrabold">{formatPrice(pricing.depositAmount)}</span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate">{pricing.depositTerms}</p>
                   </div>
-                  <p className="mt-2 text-sm text-slate">{pricing.depositTerms}</p>
-                </div>
+                ) : (
+                  <p className="rounded-2xl bg-aqua-pale p-5 text-sm">
+                    <strong>No payment needed now.</strong> We&apos;ll confirm the price with you before any work starts.
+                  </p>
+                )}
 
                 <div>
                   <label className="flex items-start gap-3">
@@ -376,7 +383,7 @@ export function BookingForm({ job, paymentsEnabled }: { job: JobSummary; payment
                   {errors.terms && <ErrorText>{errors.terms}</ErrorText>}
                 </div>
 
-                {!paymentsEnabled && (
+                {payments === "test" && (
                   <p className="rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 p-4 text-sm text-amber-900">
                     <strong>Test mode:</strong> online payments aren&apos;t switched on yet, so no deposit will be taken.
                     The booking will still be sent.
@@ -419,7 +426,7 @@ export function BookingForm({ job, paymentsEnabled }: { job: JobSummary; payment
               >
                 {submitting
                   ? "Sending…"
-                  : paymentsEnabled
+                  : payments === "on"
                     ? `Pay ${formatPrice(pricing.depositAmount)} deposit`
                     : "Send booking"}
               </button>
@@ -444,10 +451,12 @@ export function BookingForm({ job, paymentsEnabled }: { job: JobSummary; payment
             <span className="text-slate">{job.priceLabel}</span>
             <span className="font-semibold">{formatPrice(job.priceAmount)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-slate">Deposit today</span>
-            <span className="font-semibold">{formatPrice(pricing.depositAmount)}</span>
-          </div>
+          {deposits && (
+            <div className="flex justify-between">
+              <span className="text-slate">Deposit today</span>
+              <span className="font-semibold">{formatPrice(pricing.depositAmount)}</span>
+            </div>
+          )}
         </div>
       </aside>
     </div>

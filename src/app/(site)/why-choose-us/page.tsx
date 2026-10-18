@@ -19,7 +19,11 @@ const reasons = [
   },
   {
     title: "Clear, upfront pricing",
-    body: `Call-outs start from ${formatPrice(pricing.callOutFrom)}. A ${formatPrice(pricing.depositAmount)} deposit secures your job.`,
+    body: `Call-outs start from ${formatPrice(pricing.callOutFrom)}. ${
+      pricing.depositsEnabled
+        ? `A ${formatPrice(pricing.depositAmount)} deposit secures your job.`
+        : "We confirm the price with you before any work starts."
+    }`,
   },
   {
     title: "Licensed and certified",

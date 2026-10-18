@@ -32,7 +32,7 @@ export async function createFergusEnquiry(booking: Booking, photos: Photo[]): Pr
       ? `Deposit PAID: $${booking.depositAmount}`
       : booking.status === "pending_payment"
         ? "Deposit NOT yet paid"
-        : "No deposit (online payments off)";
+        : "No deposit";
 
   const description = [
     `${booking.outcome.title} [${booking.urgency.toUpperCase()}]`,

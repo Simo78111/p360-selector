@@ -56,7 +56,7 @@ function rows(booking: Booking): [string, string][] {
     ["Urgency", booking.urgency],
     ["Finder answers", booking.answers.replaceAll(".", " → ")],
     ["Price shown", booking.priceLabel],
-    ["Deposit", booking.status === "paid" ? `${formatPrice(booking.depositAmount)} paid` : booking.status === "pending_payment" ? "Not yet paid" : "None (payments off)"],
+    ["Deposit", booking.status === "paid" ? `${formatPrice(booking.depositAmount)} paid` : booking.status === "pending_payment" ? "Not yet paid" : "None"],
     ["Name", booking.name],
     ["Phone", booking.phone],
     ["Email", booking.email],

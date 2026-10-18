@@ -4,18 +4,20 @@ import { formatPrice, pricing, site } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Booking terms",
-  description: `Booking and deposit terms for ${site.name}.`,
+  description: `Booking terms for ${site.name}.`,
 };
 
 // PLACEHOLDER terms: confirm with the business and have them reviewed before launch.
+const depositSection = {
+  title: "Deposits",
+  body: [
+    `A deposit of ${formatPrice(pricing.depositAmount)} is taken when you book online. ${pricing.depositTerms}`,
+    "Payments are processed securely by Stripe. We never see or store your card details.",
+  ],
+};
+
 const sections = [
-  {
-    title: "Deposits",
-    body: [
-      `A deposit of ${formatPrice(pricing.depositAmount)} is taken when you book online. ${pricing.depositTerms}`,
-      "Payments are processed securely by Stripe. We never see or store your card details.",
-    ],
-  },
+  ...(pricing.depositsEnabled ? [depositSection] : []),
   {
     title: "Prices",
     body: [
