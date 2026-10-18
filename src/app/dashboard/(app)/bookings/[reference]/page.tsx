@@ -70,6 +70,13 @@ export default async function BookingPage({ params }: { params: Promise<{ refere
         </div>
       </div>
 
+      {booking.notifyError && (
+        <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-900" role="alert">
+          <p className="font-semibold">Something didn&apos;t go through for this booking</p>
+          <p className="mt-1 whitespace-pre-wrap break-words font-mono text-xs">{booking.notifyError}</p>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
           <section className="rounded-2xl bg-white p-6">

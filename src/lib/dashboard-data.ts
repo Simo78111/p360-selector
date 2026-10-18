@@ -39,6 +39,7 @@ export type DashboardBooking = {
   photoPaths: string[];
   notifiedAt: string | null;
   fergusEnquiryId: string | null;
+  notifyError: string | null;
 };
 
 const fromRow = (r: Record<string, unknown>): DashboardBooking => ({
@@ -66,6 +67,7 @@ const fromRow = (r: Record<string, unknown>): DashboardBooking => ({
   photoPaths: (r.photo_paths as string[]) ?? [],
   notifiedAt: (r.notified_at as string) ?? null,
   fergusEnquiryId: (r.fergus_enquiry_id as string) ?? null,
+  notifyError: (r.notify_error as string) ?? null,
 });
 
 // ── Loading ───────────────────────────────────────────────────────────────
@@ -387,6 +389,7 @@ function sample() {
         photoPaths: [],
         notifiedAt: createdAt,
         fergusEnquiryId: null,
+        notifyError: null,
       });
       ev("booking_submitted", "/book", {});
     }

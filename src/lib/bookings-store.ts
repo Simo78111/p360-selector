@@ -134,8 +134,12 @@ async function notify(booking: Booking, photos: Photo[]) {
     sendCustomerEmail(booking),
     createFergusEnquiry(booking, photos),
   ]);
-  for (const [name, r] of [["office email", office], ["customer email", customer], ["fergus", fergus]] as const) {
-    if (r.status === "rejected") console.error(`[booking] ${name} failed`, booking.reference, r.reason);
+  const errors: string[] = [];
+  for (const [name, r] of [["Office email", office], ["Customer email", customer], ["Fergus", fergus]] as const) {
+    if (r.status === "rejected") {
+      console.error(`[booking] ${name} failed`, booking.reference, r.reason);
+      errors.push(`${name}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`.slice(0, 500));
+    }
   }
 
   const db = getSupabase();
@@ -146,6 +150,7 @@ async function notify(booking: Booking, photos: Photo[]) {
         // Only stamped when the office email was actually sent, not skipped.
         notified_at: office.status === "fulfilled" && office.value ? new Date().toISOString() : null,
         fergus_enquiry_id: fergus.status === "fulfilled" ? fergus.value : null,
+        notify_error: errors.length ? errors.join("\n") : null,
       })
       .eq("reference", booking.reference);
   }
