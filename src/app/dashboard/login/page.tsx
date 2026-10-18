@@ -14,7 +14,7 @@ export default async function LoginPage() {
   return (
     <main id="main" className="flex flex-1 items-center justify-center bg-aqua-pale px-4 py-16">
       <div className="w-full max-w-sm rounded-3xl bg-white p-8">
-        <Logo />
+        <Logo className="h-14" />
         <h1 className="mt-6 text-2xl font-bold">Owner dashboard</h1>
         {passwordConfigured() ? (
           <LoginForm />
