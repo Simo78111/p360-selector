@@ -10,6 +10,14 @@ import { ButtonLink, Container } from "./ui";
 export function Header() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  // Big logo at the top of the page; it shrinks once you scroll so the header doesn't eat the screen.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => setOpen(false), [pathname]);
 
@@ -19,8 +27,10 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-white/95 backdrop-blur">
-      <Container className="flex h-16 items-center justify-between gap-4">
-        <Logo />
+      <Container className="flex items-center justify-between gap-4 py-3 transition-all duration-300">
+        <Logo
+          className={`transition-all duration-300 ${scrolled ? "h-11 sm:h-12" : "h-14 sm:h-20 lg:h-24"}`}
+        />
 
         <nav className="hidden items-center gap-7 md:flex" aria-label="Main">
           {nav.map((item) => (
