@@ -1,7 +1,7 @@
 // Xero sends the owner back here after they've signed in and picked an organisation.
 import { NextResponse, type NextRequest } from "next/server";
 import { isOwner } from "@/lib/auth";
-import { completeConnection } from "@/lib/xero";
+import { callbackUrl, completeConnection } from "@/lib/xero";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   }
   const origin = process.env.NEXT_PUBLIC_SITE_URL || req.nextUrl.origin;
   try {
-    const { tenant, others } = await completeConnection(code, `${origin}/api/xero/callback`, origin);
+    const { tenant, others } = await completeConnection(code, callbackUrl(req.nextUrl.origin), origin);
     return back(
       "ok",
       `Connected to ${tenant.tenantName}.${others.length ? " You can switch organisation below." : ""} Choose the sales account, then switch sending on.`,

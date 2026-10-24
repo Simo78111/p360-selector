@@ -8,7 +8,8 @@ import {
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { loadXeroStatus, officeEnabled, type XeroStatus } from "@/lib/office";
 import { formatPrice } from "@/lib/site";
-import { listTenants, salesAccounts, trackingCategories, xeroConfigured, type XeroTenant } from "@/lib/xero";
+import { headers } from "next/headers";
+import { callbackUrl, listTenants, salesAccounts, trackingCategories, xeroConfigured, type XeroTenant } from "@/lib/xero";
 
 export const metadata = { title: "Xero" };
 
@@ -44,6 +45,9 @@ export default async function XeroPage({ searchParams }: Props) {
       xeroProblem = e instanceof Error ? e.message : String(e);
     }
   }
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  const redirectUri = callbackUrl(origin);
   const currentTracking = status.tracking_name && status.tracking_option ? `${status.tracking_name}|${status.tracking_option}` : "";
 
   return (
@@ -71,6 +75,11 @@ export default async function XeroPage({ searchParams }: Props) {
           <p className="mt-2 text-sm text-slate">
             You&apos;ll sign in to Xero and choose which organisation to connect (for testing, the Demo Company).
           </p>
+          <p className="mt-3 text-sm">
+            In your Xero app (developer.xero.com → My Apps → Configuration), the <strong>Redirect URI</strong> must be
+            exactly:
+          </p>
+          <code className="mt-1 block w-fit rounded-lg bg-mist px-3 py-2 text-sm break-all select-all">{redirectUri}</code>
           <a
             href="/api/xero/connect"
             className="mt-4 inline-block rounded-full bg-[#13B5EA] px-5 py-2.5 font-semibold text-white hover:bg-[#0e9fce]"

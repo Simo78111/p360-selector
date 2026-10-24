@@ -45,6 +45,11 @@ async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T
 
 // ── Connecting ────────────────────────────────────────────────────────────
 
+/** The address Xero sends people back to. Must match the Redirect URI in the Xero app exactly. */
+export function callbackUrl(origin: string) {
+  return `${(process.env.NEXT_PUBLIC_SITE_URL || origin).replace(/\/+$/, "")}/api/xero/callback`;
+}
+
 export function authorizeUrl(redirectUri: string, state: string) {
   const q = new URLSearchParams({
     response_type: "code",
