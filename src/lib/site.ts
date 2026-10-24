@@ -24,6 +24,14 @@ export const pricing = {
   depositTerms:
     "Your deposit secures your booking and is deducted from your final invoice. It's fully refundable if you cancel at least 24 hours before your booking.",
   currency: "NZD",
+  // Booking tiers (see src/lib/tiers.ts). Standard is the job finder's price below;
+  // Priority and Flexi are worked out from it and rounded to the nearest $5.
+  // PLACEHOLDER percentages — confirm before launch.
+  tiers: {
+    priorityUplift: 0.4, // Priority costs 40% more: the soonest slot, usually today or the next working day
+    flexiDiscount: 0.2, // Flexi costs 20% less: any time in the next few days, when a plumber is nearby
+    flexiWindowDays: 3, // must match flexi_window_days in the booking engine
+  },
   // "From" prices shown at the end of the job finder
   from: {
     callOut: 95,

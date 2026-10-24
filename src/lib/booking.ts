@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tierIds } from "./tiers";
 
 export const MAX_PHOTOS = 5;
 /** Per photo, after the browser has resized it. */
@@ -33,10 +34,28 @@ export const bookingSchema = z.object({
     .transform((v) => v.replace(/[\s()-]/g, ""))
     .refine((v) => nzPhone.test(v), "Enter a valid NZ phone number"),
   email: z.email("Enter a valid email address").max(200),
-  days: z.array(z.enum(weekdays)).min(1, "Pick at least one day"),
+  tier: z.enum(tierIds),
+  // Standard bookings pick their days; Priority and Flexi don't need to.
+  days: z.array(z.enum(weekdays)).default([]),
   time: z.enum(timesOfDay.map((t) => t.id) as [string, ...string[]]),
+  // Flexi: OK to text offers when a plumber is nearby (required for Flexi).
+  poolConsent: z.boolean().default(false),
   terms: z.literal(true, { error: "Please accept the booking terms" }),
+}).superRefine((b, ctx) => {
+  for (const [path, message] of Object.entries(tierRuleErrors(b))) ctx.addIssue({ code: "custom", path: [path], message });
 });
+
+/**
+ * Rules that depend on the chosen tier. Kept separate so the form can check them
+ * on the "When" step even while later fields are still empty (Zod only runs
+ * superRefine once every other field is valid).
+ */
+export function tierRuleErrors(b: { tier?: string; days?: readonly string[]; poolConsent?: boolean }) {
+  const errors: Partial<Record<"days" | "poolConsent", string>> = {};
+  if (b.tier === "standard" && !(b.days?.length)) errors.days = "Pick at least one day";
+  if (b.tier === "flexi" && !b.poolConsent) errors.poolConsent = "Tick this so we can text you when a plumber's nearby";
+  return errors;
+}
 
 export type BookingInput = z.infer<typeof bookingSchema>;
 

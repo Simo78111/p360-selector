@@ -17,6 +17,8 @@ export type Booking = BookingInput & {
   urgency: Urgency;
   priceLabel: string;
   depositAmount: number;
+  /** What the booking engine did with it (see src/lib/engine.ts). */
+  engine?: { status: string; jobNumber?: number | null; when?: string | null };
 };
 
 type Row = Record<string, unknown>;
@@ -42,6 +44,11 @@ const toRow = (b: Booking, photoPaths: string[]): Row => ({
   email: b.email,
   days: b.days,
   time_of_day: b.time,
+  tier: b.tier,
+  pool_consent: b.poolConsent,
+  engine_status: b.engine?.status ?? null,
+  engine_job_number: b.engine?.jobNumber ?? null,
+  scheduled_for: b.engine?.when ?? null,
   photo_paths: photoPaths,
   deposit_amount: b.depositAmount,
 });
@@ -65,6 +72,11 @@ const fromRow = (r: Row): Booking => ({
   email: r.email as string,
   days: r.days as Booking["days"],
   time: r.time_of_day as string,
+  tier: (r.tier as Booking["tier"]) ?? "standard",
+  poolConsent: Boolean(r.pool_consent),
+  engine: r.engine_status
+    ? { status: r.engine_status as string, jobNumber: r.engine_job_number as number | null, when: r.scheduled_for as string | null }
+    : undefined,
   terms: true,
   depositAmount: Number(r.deposit_amount),
 });

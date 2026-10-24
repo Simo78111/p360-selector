@@ -26,9 +26,18 @@ const sections = [
     ],
   },
   {
+    title: "Priority, Standard and Flexi",
+    body: [
+      "Priority: we book the soonest slot we have, usually today or the next working day. Priority costs more than Standard because we move other work to fit you in.",
+      "Standard: you choose the days and time of day that suit you, and we book you into the first slot that matches.",
+      `Flexi: you get a lower price in return for flexibility. We may come any time in the ${pricing.tiers.flexiWindowDays} days after you book. When a plumber is working near you, we text you a time; reply YES to take it. The first customer to reply gets the slot. If no slot comes up, we book you in before the ${pricing.tiers.flexiWindowDays} days are up and text you the time.`,
+      "By choosing Flexi you agree to receive these texts. Reply STOP at any time to stop them.",
+      "Arrival times are our best estimate. We text you when your plumber is on the way, and again if they're running late.",
+    ],
+  },
+  {
     title: "Your booking",
     body: [
-      "Choosing days and times tells us what suits you. We'll call or text to confirm an exact time.",
       `We work ${site.hours} and don't offer after-hours call-outs.`,
       "Please make sure we can safely access the work area, and let us know about pets, gate codes or parking.",
     ],

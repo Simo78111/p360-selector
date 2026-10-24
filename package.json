@@ -7,7 +7,9 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "check:finder": "tsx scripts/check-finder.ts"
+    "check:finder": "tsx scripts/check-finder.ts",
+    "export:menu": "tsx scripts/export-menu.ts",
+    "test:engine": "tsx --conditions=react-server scripts/test-engine.ts"
   },
   "dependencies": {
     "@fontsource/archivo": "^5.2.8",

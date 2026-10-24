@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { BookingForm, type JobSummary } from "@/components/booking/BookingForm";
 import { ButtonLink, Container } from "@/components/ui";
 import { resolve } from "@/lib/finder";
+import { tierPrices, tiersFor } from "@/lib/tiers";
 import { paymentMode } from "@/lib/stripe";
 
 export const metadata: Metadata = {
@@ -11,9 +12,9 @@ export const metadata: Metadata = {
 
 export default async function BookPage({ searchParams }: { searchParams: Promise<{ a?: string; cancelled?: string }> }) {
   const { a = "", cancelled } = await searchParams;
-  const { steps, outcome } = resolve(a.split(".").filter(Boolean));
+  const { steps, outcome, urgency } = resolve(a.split(".").filter(Boolean));
 
-  if (!outcome) {
+  if (!outcome || !urgency) {
     return (
       <section className="bg-aqua-pale">
         <Container className="max-w-2xl py-20 text-center">
@@ -35,6 +36,8 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
     priceLabel: outcome.price.label,
     priceAmount: outcome.price.amount,
     selections: steps.map((s) => ({ label: s.question.summaryLabel, value: s.option.label })),
+    tiers: tiersFor(outcome, urgency).map((id) => ({ id, price: tierPrices(outcome.price.amount)[id] })),
+    recommended: urgency === "urgent" || urgency === "emergency" ? "priority" : undefined,
   };
 
   return (

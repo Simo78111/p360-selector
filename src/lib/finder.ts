@@ -215,7 +215,7 @@ export const questions: Record<string, Question> = {
   },
 };
 
-const outcomeList: Outcome[] = [
+export const outcomeList: Outcome[] = [
   // ── Plumbing: leaks ─────────────────────────────────────────────────────
   {
     id: "leak-toilet",

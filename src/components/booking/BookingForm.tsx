@@ -6,11 +6,13 @@ import {
   bookingSchema,
   isAucklandPostcode,
   relationships,
+  tierRuleErrors,
   timesOfDay,
   weekdays,
   type BookingInput,
 } from "@/lib/booking";
 import { formatPrice, pricing, site } from "@/lib/site";
+import { tierInfo, type Tier } from "@/lib/tiers";
 import { track } from "@/lib/track";
 import { PhotoPicker, type PickedPhoto } from "./PhotoPicker";
 
@@ -20,9 +22,13 @@ export type JobSummary = {
   priceLabel: string;
   priceAmount: number;
   selections: { label: string; value: string }[];
+  /** Tiers offered for this job, with GST-inclusive prices. */
+  tiers: { id: Tier; price: number }[];
+  /** Highlighted option, e.g. Priority for urgent jobs. */
+  recommended?: Tier;
 };
 
-type Fields = Omit<BookingInput, "answers" | "terms" | "days"> & { days: string[]; terms: boolean };
+type Fields = Omit<BookingInput, "answers" | "terms" | "days" | "tier"> & { days: string[]; terms: boolean; tier: Tier };
 type Errors = Partial<Record<keyof Fields | "form", string>>;
 
 const blank: Fields = {
@@ -35,15 +41,18 @@ const blank: Fields = {
   name: "",
   phone: "",
   email: "",
+  tier: "standard",
   days: [],
   time: "any",
+  poolConsent: false,
   terms: false,
 };
 
 const steps: { title: string; fields: (keyof Fields)[] }[] = [
   { title: "The job", fields: ["description"] },
   { title: "Where", fields: ["street", "suburb", "postcode", "relationship", "access"] },
-  { title: "Your details", fields: ["name", "phone", "email", "days", "time"] },
+  { title: "When", fields: ["tier", "days", "time", "poolConsent"] },
+  { title: "Your details", fields: ["name", "phone", "email"] },
   { title: "Review and pay", fields: ["terms"] },
 ];
 
@@ -52,7 +61,9 @@ const DRAFT_KEY = "p360-booking-draft";
 export function BookingForm({ job, payments }: { job: JobSummary; payments: "on" | "test" | "off" }) {
   const deposits = payments !== "off";
   const [step, setStep] = useState(0);
-  const [fields, setFields] = useState<Fields>(blank);
+  const offered = job.tiers.map((t) => t.id);
+  const startTier: Tier = offered.includes("standard") ? "standard" : offered[0];
+  const [fields, setFields] = useState<Fields>({ ...blank, tier: startTier });
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -63,9 +74,15 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem(DRAFT_KEY);
-      if (saved) setFields({ ...blank, ...JSON.parse(saved), terms: false });
+      if (saved) {
+        const draft = { ...blank, ...JSON.parse(saved), terms: false } as Fields;
+        if (!offered.includes(draft.tier)) draft.tier = startTier; // a different job may offer different tiers
+        setFields(draft);
+      }
     } catch {}
     loaded.current = true;
+    // Runs once on load only; the job (and so its tiers) can't change on this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     if (!loaded.current) return;
@@ -87,6 +104,9 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
         const key = issue.path[0] as keyof Fields;
         if (names.includes(key) && !found[key]) found[key] = issue.message;
       }
+    }
+    for (const [key, message] of Object.entries(tierRuleErrors(fields)) as [keyof Fields, string][]) {
+      if (names.includes(key) && !found[key]) found[key] = message;
     }
     setErrors(found);
     return found;
@@ -128,6 +148,9 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
       if (!res.ok) {
         setErrors({ ...(data.errors ?? {}), form: data.error ?? "Something went wrong. Please try again." });
         setSubmitting(false);
+        // e.g. the address couldn't be found: take them back to that step
+        const bad = steps.findIndex((s) => s.fields.some((f) => data.errors?.[f]));
+        if (bad >= 0 && bad !== step) goTo(bad);
         return;
       }
       track("booking_submitted", { reference: data.reference });
@@ -139,6 +162,7 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
   }
 
   const outsideAuckland = /^\d{4}$/.test(fields.postcode) && !isAucklandPostcode(fields.postcode);
+  const chosen = job.tiers.find((t) => t.id === fields.tier) ?? job.tiers[0];
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
@@ -166,6 +190,7 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
               [
                 "Tell us about the job",
                 "Where's the job?",
+                "When would you like us?",
                 "How can we reach you?",
                 "Check your booking",
               ][step]
@@ -261,6 +286,117 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
 
             {step === 2 && (
               <>
+                <fieldset>
+                  <legend className="sr-only">How soon</legend>
+                  <div className="grid gap-3">
+                    {job.tiers.map((t) => {
+                      const info = tierInfo[t.id];
+                      const checked = fields.tier === t.id;
+                      const saving = t.id === "flexi" ? job.priceAmount - t.price : 0;
+                      return (
+                        <label
+                          key={t.id}
+                          className={`relative flex cursor-pointer gap-4 rounded-2xl border-2 p-4 transition has-focus-visible:outline-3 has-focus-visible:outline-aqua-deep sm:p-5 ${
+                            checked ? "border-aqua bg-aqua-pale" : "border-black/10 hover:border-aqua"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="tier"
+                            value={t.id}
+                            checked={checked}
+                            onChange={() => set("tier", t.id)}
+                            className="mt-1 h-5 w-5 shrink-0 accent-aqua-deep"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+                              <span className="font-bold">
+                                {info.label}
+                                {job.recommended === t.id && (
+                                  <span className="ml-2 rounded-full bg-ink px-2 py-0.5 align-middle text-xs font-semibold text-white">
+                                    Recommended
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-display text-xl font-extrabold">
+                                <span className="text-sm font-medium text-slate">from </span>
+                                {formatPrice(t.price)}
+                              </span>
+                            </span>
+                            <span className="mt-0.5 block font-medium">{info.when}</span>
+                            <span className="mt-1 block text-sm text-slate">{info.detail}</span>
+                            {saving > 0 && (
+                              <span className="mt-2 inline-block rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-aqua-deep">
+                                Save {formatPrice(saving)}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
+                {fields.tier === "standard" && (
+                  <>
+                    <fieldset>
+                      <legend className="mb-2 font-medium">Which days suit you?</legend>
+                      <div className="flex flex-wrap gap-2">
+                        {weekdays.map((d) => (
+                          <Choice
+                            key={d}
+                            type="checkbox"
+                            name="days"
+                            checked={fields.days.includes(d)}
+                            onChange={(on) => set("days", on ? [...fields.days, d] : fields.days.filter((x) => x !== d))}
+                            compact
+                          >
+                            {d}
+                          </Choice>
+                        ))}
+                      </div>
+                      {errors.days && <ErrorText>{errors.days}</ErrorText>}
+                    </fieldset>
+                    <fieldset>
+                      <legend className="mb-2 font-medium">Preferred time</legend>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {timesOfDay.map((t) => (
+                          <Choice key={t.id} type="radio" name="time" checked={fields.time === t.id} onChange={() => set("time", t.id)}>
+                            {t.label}
+                          </Choice>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </>
+                )}
+
+                {fields.tier === "flexi" && (
+                  <div>
+                    <label className="flex items-start gap-3 rounded-2xl bg-mist p-4">
+                      <input
+                        type="checkbox"
+                        checked={fields.poolConsent}
+                        onChange={(e) => set("poolConsent", e.target.checked)}
+                        className="mt-1 h-5 w-5 accent-aqua-deep"
+                      />
+                      <span className="text-sm">
+                        <strong>Text me when a plumber&apos;s nearby.</strong> We&apos;ll send you a time; reply YES to take
+                        it. Reply STOP any time to stop these texts.
+                      </span>
+                    </label>
+                    {errors.poolConsent && <ErrorText>{errors.poolConsent}</ErrorText>}
+                  </div>
+                )}
+
+                <p className="text-sm text-slate">
+                  Prices are starting prices and include GST. If your plumber finds more work, we text you the price
+                  and only go ahead once you reply YES.
+                </p>
+              </>
+            )}
+
+            {step === 3 && (
+              <>
                 <Field label="Your name" error={errors.name} htmlFor="name">
                   <input
                     id="name"
@@ -292,39 +428,11 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
                     />
                   </Field>
                 </div>
-                <fieldset>
-                  <legend className="mb-2 font-medium">Which days suit you?</legend>
-                  <div className="flex flex-wrap gap-2">
-                    {weekdays.map((d) => (
-                      <Choice
-                        key={d}
-                        type="checkbox"
-                        name="days"
-                        checked={fields.days.includes(d)}
-                        onChange={(on) => set("days", on ? [...fields.days, d] : fields.days.filter((x) => x !== d))}
-                        compact
-                      >
-                        {d}
-                      </Choice>
-                    ))}
-                  </div>
-                  {errors.days && <ErrorText>{errors.days}</ErrorText>}
-                </fieldset>
-                <fieldset>
-                  <legend className="mb-2 font-medium">Preferred time</legend>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {timesOfDay.map((t) => (
-                      <Choice key={t.id} type="radio" name="time" checked={fields.time === t.id} onChange={() => set("time", t.id)}>
-                        {t.label}
-                      </Choice>
-                    ))}
-                  </div>
-                </fieldset>
-                <p className="text-sm text-slate">We&apos;ll call or text to confirm an exact time.</p>
+                <p className="text-sm text-slate">We text you about your booking at this number.</p>
               </>
             )}
 
-            {step === 3 && (
+            {step === 4 && (
               <>
                 <dl className="divide-y divide-black/5 rounded-2xl bg-mist px-5">
                   <Row label="Job" onEdit={() => goTo(0)}>
@@ -339,14 +447,19 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
                   <Row label="Address" onEdit={() => goTo(1)}>
                     {fields.street}, {fields.suburb} {fields.postcode}
                   </Row>
-                  <Row label="Contact" onEdit={() => goTo(2)}>
+                  <Row label="Contact" onEdit={() => goTo(3)}>
                     {fields.name}
                     <span className="block text-sm text-slate">
                       {fields.phone} · {fields.email}
                     </span>
                   </Row>
                   <Row label="When" onEdit={() => goTo(2)}>
-                    {fields.days.join(", ")} · {timesOfDay.find((t) => t.id === fields.time)?.label}
+                    {tierInfo[fields.tier].label} · from {formatPrice(chosen.price)}
+                    <span className="block text-sm text-slate">
+                      {fields.tier === "standard"
+                        ? `${fields.days.join(", ")} · ${timesOfDay.find((t) => t.id === fields.time)?.label}`
+                        : tierInfo[fields.tier].when}
+                    </span>
                   </Row>
                 </dl>
 
@@ -448,8 +561,10 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
         </dl>
         <div className="mt-5 space-y-1 border-t border-black/5 pt-5 text-sm">
           <div className="flex justify-between">
-            <span className="text-slate">{job.priceLabel}</span>
-            <span className="font-semibold">{formatPrice(job.priceAmount)}</span>
+            <span className="text-slate">
+              {job.priceLabel} <span className="whitespace-nowrap">({tierInfo[fields.tier].label})</span>
+            </span>
+            <span className="font-semibold">{formatPrice(chosen.price)}</span>
           </div>
           {deposits && (
             <div className="flex justify-between">

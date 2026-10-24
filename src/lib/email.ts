@@ -63,8 +63,9 @@ function rows(booking: Booking): [string, string][] {
     ["Address", `${booking.street}, ${booking.suburb} ${booking.postcode}`],
     ["Property", label(relationships, booking.relationship)],
     ["Access notes", booking.access || "None"],
-    ["Preferred days", booking.days.join(", ")],
+    ["Preferred days", booking.days.join(", ") || "Not needed for this booking type"],
     ["Preferred time", label(timesOfDay, booking.time)],
+    ["Scheduling", engineLine(booking)],
     ["Description", booking.description],
   ];
 }
@@ -141,4 +142,15 @@ export async function sendTestEmail(to: string) {
     ),
     text: `Email is working. This is a test sent from the Status page of your ${site.name} dashboard at ${when}.`,
   });
+}
+
+/** What the booking engine did, in words for the office. */
+function engineLine(b: Booking) {
+  const e = b.engine;
+  if (!e || e.status === "skipped") return "Not sent to the booking engine: please book a time by hand";
+  if (e.status === "outside_area") return "Outside the service area: please call the customer";
+  if (e.status === "failed") return "The booking engine had an error: please book a time by hand";
+  const job = e.jobNumber ? `Job #${e.jobNumber}` : "Job";
+  if (b.tier === "flexi") return `${job} is in the Flexi standby pool`;
+  return e.when ? `${job} booked for ${e.when}; customer texted` : `${job} saved; the scheduler will find a time`;
 }

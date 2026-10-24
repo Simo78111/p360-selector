@@ -70,6 +70,25 @@ Each service switches on when its keys are added (see `.env.example`). Anything 
 | Supabase | Saves every booking and its photos | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
 | Resend | Emails the office (photos attached) and the customer | `RESEND_API_KEY`, `EMAIL_FROM`, `OFFICE_EMAIL` |
 | Fergus | Creates an enquiry with photos attached | `FERGUS_API_TOKEN` |
+| Booking engine | Books the time automatically (Priority/Standard), or adds Flexi jobs to the standby pool, and texts the customer | `ENGINE_SUPABASE_URL`, `ENGINE_SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_MAPS_SERVER_KEY` |
+
+### Priority, Standard and Flexi
+
+Step 3 of the booking form ("When would you like us?") offers the tiers from `src/lib/tiers.ts`:
+Priority (soonest slot, +40%), Standard (the finder price, customer picks days) and Flexi (-20%,
+any time in the next 3 days, texted when a plumber is nearby). The percentages are PLACEHOLDERS in
+`src/lib/site.ts`. Emergencies only get Priority; urgent jobs and long installs (cylinder, toilet,
+gas install) don't get Flexi.
+
+With the engine keys set, `src/lib/engine.ts` finds the address on the map, calls the engine's
+`create_booking` and `auto_schedule_job`, and the confirmation page shows the booked time. An
+address Google can't find sends the customer back to fix it. Outside Auckland, emergencies and
+engine errors are still saved and emailed, and the office books those by hand.
+
+The engine's service menu is generated from the job finder: `npm run export:menu` prints the SQL
+(prices excluding GST). Re-run it and apply it as a new engine migration when prices change.
+Tests: `npm run test:engine` (adapter) and `python3 tests/booking_tiers_test.py` (the form, with
+`npm run start` running on port 3360).
 
 **When it happens:** if payments are off, as soon as the booking is sent. If payments are on, once the deposit is paid (Stripe webhook, with the confirmation page as a backup). Emails go out only once.
 

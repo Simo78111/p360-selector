@@ -1,20 +1,27 @@
 import type { Metadata } from "next";
 import { ClearDraft } from "@/components/booking/ClearDraft";
 import { ButtonLink, Check, Container } from "@/components/ui";
-import { formatPrice, site } from "@/lib/site";
+import { formatPrice, pricing, site } from "@/lib/site";
 import { markDepositPaid } from "@/lib/bookings-store";
 import { getStripe } from "@/lib/stripe";
+import { tierIds, tierInfo, type Tier } from "@/lib/tiers";
 
 export const metadata: Metadata = {
   title: "Booking received",
   robots: { index: false },
 };
 
-type Props = { searchParams: Promise<{ ref?: string; session_id?: string; test?: string }> };
+type Props = {
+  searchParams: Promise<{ ref?: string; session_id?: string; test?: string; tier?: string; when?: string; area?: string }>;
+};
 
 export default async function ConfirmedPage({ searchParams }: Props) {
-  const { ref, session_id, test } = await searchParams;
+  const { ref, session_id, test, tier: tierParam, when: whenParam, area } = await searchParams;
   const reference = ref && /^P360-[A-Z0-9]{6}$/.test(ref) ? ref : null;
+  const tier = (tierIds as readonly string[]).includes(tierParam ?? "") ? (tierParam as Tier) : null;
+  // e.g. "Wed 28 Oct 7:30 am", from the scheduler. Only letters, digits, spaces and colons.
+  const when = whenParam && /^[A-Za-z0-9 :]{5,30}$/.test(whenParam) ? whenParam : null;
+  const steps = nextSteps(tier, when, area === "out");
 
   // Check with Stripe that the deposit really went through.
   let paid: number | null = null;
@@ -47,6 +54,13 @@ export default async function ConfirmedPage({ searchParams }: Props) {
             </p>
           )}
           {paid !== null && <p className="mt-1 text-slate">Deposit of {formatPrice(paid)} received.</p>}
+          {when && (
+            <p className="mx-auto mt-6 max-w-md rounded-2xl bg-aqua-pale p-4">
+              <span className="block text-sm text-slate">Your plumber is booked for</span>
+              <strong className="font-display text-2xl">{when}</strong>
+            </p>
+          )}
+          {!when && tier && <p className="mt-2 font-medium">{tierInfo[tier].label} booking</p>}
           {test && (
             <p className="mx-auto mt-4 max-w-md rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
               Test booking: online payments aren&apos;t switched on yet, so no deposit was taken.
@@ -56,9 +70,11 @@ export default async function ConfirmedPage({ searchParams }: Props) {
           <div className="mt-8 rounded-2xl bg-mist p-6 text-left">
             <h2 className="font-bold">What happens next</h2>
             <ol className="mt-3 space-y-2 text-slate">
-              <li>1. We&apos;ll review your details and photos.</li>
-              <li>2. We&apos;ll call or text you to confirm a time, usually within one working day.</li>
-              <li>3. We&apos;ll arrive with the right parts for the job.</li>
+              {steps.map((s, i) => (
+                <li key={i}>
+                  {i + 1}. {s}
+                </li>
+              ))}
             </ol>
           </div>
 
@@ -73,4 +89,28 @@ export default async function ConfirmedPage({ searchParams }: Props) {
       </Container>
     </section>
   );
+}
+
+function nextSteps(tier: Tier | null, when: string | null, outsideArea: boolean): string[] {
+  if (outsideArea || !tier) {
+    return [
+      "We'll review your details and photos.",
+      "We'll call or text you to confirm a time, usually within one working day.",
+      "We'll arrive with the right parts for the job.",
+    ];
+  }
+  if (tier === "flexi") {
+    return [
+      "We've added you to our Flexi list. Keep your phone handy.",
+      "When a plumber's working near you, we text you a time. Reply YES to take it.",
+      `If nothing comes up, we still get to you within ${pricing.tiers.flexiWindowDays} days and text you the time.`,
+    ];
+  }
+  return [
+    when
+      ? "We've texted you the booking. Reply to that text if the time doesn't work."
+      : "We'll text you your booking time shortly.",
+    "On the day, we text you when your plumber is on the way, with an arrival time.",
+    "If your plumber finds more work, we text you the price first and only go ahead once you reply YES.",
+  ];
 }
