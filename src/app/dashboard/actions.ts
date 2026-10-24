@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { checkPasswordAndSignIn, requireOwner, signOut } from "@/lib/auth";
 import { sendTestEmail } from "@/lib/email";
+import { officeEnabled } from "@/lib/office";
 import { getSupabase } from "@/lib/supabase";
 
 export async function login(_prev: string | null, form: FormData): Promise<string | null> {
   const ok = await checkPasswordAndSignIn(String(form.get("password") ?? ""));
   if (!ok) return "That password isn't right.";
-  redirect("/dashboard");
+  // Straight to the day board once the booking engine is connected
+  redirect(officeEnabled() ? "/dashboard/office" : "/dashboard");
 }
 
 export async function logout() {

@@ -17,7 +17,7 @@ export type EngineResult =
   | { status: "failed"; error: string };
 
 let client: SupabaseClient | null | undefined;
-function engine() {
+export function engine() {
   if (client === undefined) {
     const url = process.env.ENGINE_SUPABASE_URL;
     const key = process.env.ENGINE_SUPABASE_SERVICE_ROLE_KEY;

@@ -110,6 +110,21 @@ Create a Personal Access Token in your Fergus account and set `FERGUS_API_TOKEN`
 
 > If Stripe is on but Supabase isn't, bookings are sent immediately and marked "deposit not yet paid", because there's nowhere to keep them until payment.
 
+## Office console (/dashboard/office)
+
+The human side of the booking engine, behind the same owner login. Needs the three `ENGINE_` keys
+(see above); without them the pages say so.
+
+- **Today**: each plumber's day in order with live status, ETAs and a Google Maps route link, plus
+  jobs waiting for a time (book the first free slot, or add to a plumber's day).
+- **Needs attention**: the engine's queue of things it couldn't handle. Mark each one done.
+- **Jobs**: search by name, phone, address, suburb or job number. Each job shows what the customer
+  said, every text and plumber update, the invoice, and lets you move or cancel it (the customer is
+  texted).
+
+Logging in goes straight to Today once the engine is connected.
+`tests/office_console_test.py` checks it against a local engine.
+
 ## Owner dashboard
 
 Go to `/dashboard` and log in with `DASHBOARD_PASSWORD`. Changing the password logs everyone out.
