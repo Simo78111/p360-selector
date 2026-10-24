@@ -192,3 +192,48 @@ export function shiftDate(date: string, days: number) {
 }
 
 export const validDate = (s: string | undefined) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined);
+
+// ── Xero ─────────────────────────────────────────────────────────────────
+
+export type XeroStatus = {
+  connected: boolean;
+  tenant_id: string | null;
+  tenant_name: string | null;
+  connected_at: string | null;
+  enabled: boolean;
+  active: boolean;
+  account_code: string;
+  tracking_name: string | null;
+  tracking_option: string | null;
+  site_url: string | null;
+  last_push: string | null;
+  last_poll: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+  pending: number;
+  failed: number;
+  synced: number;
+  invoices: {
+    invoice_id: string;
+    number: string;
+    job_number: number;
+    customer: string;
+    total: number;
+    paid: number;
+    status: string;
+    xero_status: "not_configured" | "pending" | "synced" | "failed";
+    xero_error: string | null;
+    url: string | null;
+    issued: string;
+  }[];
+};
+export const loadXeroStatus = () => rpc<XeroStatus>("xero_status", {});
+export const saveXeroSettings = (enabled: boolean, account: string, trackingName: string | null, trackingOption: string | null) =>
+  rpc<null>("xero_settings", {
+    p_enabled: enabled,
+    p_account_code: account,
+    p_tracking_name: trackingName,
+    p_tracking_option: trackingOption,
+  });
+export const disconnectXero = () => rpc<null>("xero_disconnect", {});
+export const queueXeroInvoice = (invoiceId: string) => rpc<null>("xero_queue_invoice", { p_invoice_id: invoiceId });

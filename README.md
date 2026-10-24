@@ -131,6 +131,17 @@ in Auckland, before the 3pm planning; see `vercel.json`) and needs `CRON_SECRET`
 route now" on Today does the same for one day without texting anyone. `npm run test:drive-times`
 checks the lookup against a local engine.
 
+- **Xero**: connect an organisation, choose the sales account and tracking category, switch sending
+  on, see what's been sent, and send older invoices by hand.
+
+**Xero.** Needs `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` from a Xero web app (developer.xero.com, free
+Starter plan) with the redirect URI `https://<site>/api/xero/callback`. Once connected, each issued
+invoice is created in Xero within about 5 minutes (the engine nudges `/api/xero/sync`), the customer
+is texted Xero's view-and-pay link, and payments made in Xero come back every 30 minutes. Vercel also
+runs the sync once a day as a backup. `src/lib/xero.ts` does the talking; `tests/xero_test.py` runs the
+whole flow against a fake Xero (`node tests/mocks/fake-xero.cjs`, with `XERO_LOGIN_BASE`,
+`XERO_IDENTITY_BASE` and `XERO_API_BASE` pointed at it).
+
 Logging in goes straight to Today once the engine is connected.
 `tests/office_console_test.py` checks it against a local engine.
 

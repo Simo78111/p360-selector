@@ -6,7 +6,20 @@ import { redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth";
 import { fetchDriveTimes } from "@/lib/drive-times";
 import { geocodeAddress } from "@/lib/engine";
-import { bookNow, cancelJob, moveJob, planDay, resolveItem, setPlumberHome, setRouteFromHome, validDate } from "@/lib/office";
+import {
+  bookNow,
+  cancelJob,
+  disconnectXero,
+  moveJob,
+  planDay,
+  queueXeroInvoice,
+  resolveItem,
+  saveXeroSettings,
+  setPlumberHome,
+  setRouteFromHome,
+  validDate,
+} from "@/lib/office";
+import { chooseTenant, runXeroSync } from "@/lib/xero";
 
 const back = (path: string, key: "ok" | "err", message: string) =>
   `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(message)}`;
@@ -117,5 +130,59 @@ export async function homeRoutingAction(form: FormData) {
     return on
       ? "Routes now include the drive from and back to each plumber's home."
       : "Routes no longer include the drive from home.";
+  });
+}
+
+// ── Xero ─────────────────────────────────────────────────────────────────
+
+const XERO_PAGE = "/dashboard/office/xero";
+
+export async function xeroSettingsAction(form: FormData) {
+  const enabled = form.get("enabled") === "on";
+  const account = String(form.get("account") ?? "").trim();
+  const [trackingName, trackingOption] = String(form.get("tracking") ?? "").split("|");
+  await run(XERO_PAGE, async () => {
+    await saveXeroSettings(enabled, account, trackingName || null, trackingOption || null);
+    return enabled
+      ? "Saved. New invoices now go to Xero, and customers get a link to view and pay."
+      : "Saved. Invoices aren't being sent to Xero.";
+  });
+}
+
+export async function xeroSyncNowAction() {
+  await run(XERO_PAGE, async () => {
+    const r = await runXeroSync({ push: true, poll: true });
+    const parts = [
+      r.sent.length ? `Sent ${r.sent.join(", ")}.` : r.failed.length ? "" : "Nothing waiting to send.",
+      r.failed.length ? `Couldn't send ${r.failed.map((f) => `${f.invoice} (${f.error})`).join("; ")}.` : "",
+      `Checked ${r.checked} unpaid invoice${r.checked === 1 ? "" : "s"} for payments${r.paid ? `; ${r.paid} newly paid` : ""}.`,
+    ];
+    if (r.failed.length && !r.sent.length) throw new Error(parts.filter(Boolean).join(" "));
+    return parts.filter(Boolean).join(" ");
+  });
+}
+
+export async function xeroSendInvoiceAction(form: FormData) {
+  const id = String(form.get("invoiceId") ?? "");
+  await run(XERO_PAGE, async () => {
+    await queueXeroInvoice(id);
+    const r = await runXeroSync({ push: true, poll: false });
+    if (r.failed.length) throw new Error(`Couldn't send: ${r.failed.map((f) => f.error).join("; ")}`);
+    return `Sent ${r.sent.join(", ")} to Xero.`;
+  });
+}
+
+export async function xeroChooseTenantAction(form: FormData) {
+  const tenantId = String(form.get("tenantId") ?? "");
+  await run(XERO_PAGE, async () => {
+    const t = await chooseTenant(tenantId);
+    return `Now using ${t.tenantName}.`;
+  });
+}
+
+export async function xeroDisconnectAction() {
+  await run(XERO_PAGE, async () => {
+    await disconnectXero();
+    return "Disconnected. Invoices aren't sent to Xero until you connect again.";
   });
 }
