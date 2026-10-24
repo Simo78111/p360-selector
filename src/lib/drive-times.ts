@@ -12,15 +12,27 @@ type Saved = Pair & { minutes: number; meters: number | null };
 
 const ROUTES_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
 const MAX_ELEMENTS = 600; // Google allows 625 per request with traffic
+/** Most drive times we'll ask Google for in one Auckland day, whatever happens (cost cap). */
+export const dailyLimit = () => Number(process.env.DRIVE_TIMES_DAILY_LIMIT ?? 500);
+
+/** Auckland's UTC offset on a day, e.g. "+13:00" in summer, "+12:00" in winter. */
+function aucklandOffset(date: string) {
+  return (
+    new Intl.DateTimeFormat("en-NZ", { timeZone: "Pacific/Auckland", timeZoneName: "longOffset" })
+      .formatToParts(new Date(`${date}T12:00:00Z`))
+      .find((p) => p.type === "timeZoneName")?.value.replace("GMT", "") || "+13:00"
+  );
+}
+
+/** Midnight at the start of today in Auckland. */
+export function aucklandMidnight(now = new Date()) {
+  const today = now.toLocaleDateString("en-CA", { timeZone: "Pacific/Auckland" });
+  return new Date(`${today}T00:00:00${aucklandOffset(today)}`);
+}
 
 /** 9am on that day in Auckland (or a minute from now, if that has passed), as an ISO time. */
 export function departureFor(date: string, now = new Date()) {
-  const noonUtc = new Date(`${date}T12:00:00Z`);
-  const offset =
-    new Intl.DateTimeFormat("en-NZ", { timeZone: "Pacific/Auckland", timeZoneName: "longOffset" })
-      .formatToParts(noonUtc)
-      .find((p) => p.type === "timeZoneName")?.value.replace("GMT", "") || "+13:00";
-  const nineAm = new Date(`${date}T09:00:00${offset}`);
+  const nineAm = new Date(`${date}T09:00:00${aucklandOffset(date)}`);
   const soon = new Date(now.getTime() + 60_000);
   return (nineAm > soon ? nineAm : soon).toISOString();
 }
@@ -57,13 +69,25 @@ async function matrix(origin: { lat: number; lng: number }, dests: { lat: number
 }
 
 /** Looks up and saves every journey the engine needs for a day. */
-export async function fetchDriveTimes(date: string): Promise<{ date: string; needed: number; saved: number }> {
+export async function fetchDriveTimes(
+  date: string,
+): Promise<{ date: string; needed: number; saved: number; capped?: number }> {
   const db = engine();
   if (!db) throw new Error("The booking engine isn't connected.");
   const { data, error } = await db.rpc("travel_pairs_needed", { p_date: date });
   if (error) throw new Error(error.message);
-  const pairs = (data ?? []) as Pair[];
-  if (pairs.length === 0) return { date, needed: 0, saved: 0 };
+  const needed = (data ?? []) as Pair[];
+  if (needed.length === 0) return { date, needed: 0, saved: 0 };
+
+  // Daily cost cap: count what we've already looked up since midnight in Auckland
+  const since = aucklandMidnight();
+  const { count } = await db.from("travel_times").select("*", { count: "exact", head: true }).gte("fetched_at", since.toISOString());
+  const limit = dailyLimit();
+  const left = Math.max(0, limit - (count ?? 0));
+  const pairs = needed.slice(0, left);
+  const capped = needed.length - pairs.length;
+  if (capped > 0) console.warn(`[drive-times] daily limit ${limit} reached: ${capped} trips left as estimates`);
+  if (pairs.length === 0) return { date, needed: needed.length, saved: 0, capped };
 
   // One request per starting point, with all the places we need from there
   const byOrigin = new Map<string, { lat: number; lng: number; dests: { lat: number; lng: number }[] }>();
@@ -94,5 +118,5 @@ export async function fetchDriveTimes(date: string): Promise<{ date: string; nee
   }
   const { data: saved, error: saveError } = await db.rpc("save_travel_times", { p_rows: rows });
   if (saveError) throw new Error(saveError.message);
-  return { date, needed: pairs.length, saved: Number(saved ?? 0) };
+  return { date, needed: needed.length, saved: Number(saved ?? 0), ...(capped ? { capped } : {}) };
 }

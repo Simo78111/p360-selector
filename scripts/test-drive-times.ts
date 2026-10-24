@@ -5,13 +5,15 @@ import assert from "node:assert/strict";
 process.env.GOOGLE_MAPS_SERVER_KEY = "test";
 
 async function main() {
-  const { departureFor, fetchDriveTimes } = await import("../src/lib/drive-times");
+  const { aucklandMidnight, departureFor, fetchDriveTimes } = await import("../src/lib/drive-times");
   const { engine } = await import("../src/lib/engine");
   const { aucklandToday, shiftDate } = await import("../src/lib/office");
 
   // 9am Auckland: +13 in summer, +12 in winter
   assert.equal(departureFor("2026-10-27", new Date("2026-10-24T00:00:00Z")), "2026-10-26T20:00:00.000Z");
   assert.equal(departureFor("2026-07-15", new Date("2026-07-01T00:00:00Z")), "2026-07-14T21:00:00.000Z");
+  assert.equal(aucklandMidnight(new Date("2026-10-24T08:00:00Z")).toISOString(), "2026-10-23T11:00:00.000Z"); // 9pm 24 Oct NZDT → 24 Oct 00:00
+  assert.equal(aucklandMidnight(new Date("2026-07-01T00:00:00Z")).toISOString(), "2026-06-30T12:00:00.000Z"); // 1 Jul 00:00 NZST
   // already past → a minute from now
   assert.equal(departureFor("2026-10-01", new Date("2026-10-24T00:00:00Z")), "2026-10-24T00:01:00.000Z");
 
@@ -45,6 +47,17 @@ async function main() {
 
   const { data } = await engine()!.rpc("travel_min", { p_from_lat: -36.787, p_from_lng: 174.773, p_to_lat: -36.861, p_to_lng: 174.735 });
   assert.equal(data, 17, "engine now uses Google's 17 min");
+  // Daily cap: forget 4 trips (8 left from today), allow 10 a day → only 2 more are looked up
+  const db = engine()!;
+  const { data: rows } = await db.from("travel_times").select("from_key, to_key").limit(4);
+  for (const r of rows ?? []) await db.from("travel_times").delete().match(r);
+  process.env.DRIVE_TIMES_DAILY_LIMIT = "10";
+  const capped = await fetchDriveTimes(day);
+  console.log("with a daily limit of 10:", capped);
+  assert.equal(capped.needed, 4);
+  assert.equal(capped.saved, 2);
+  assert.equal(capped.capped, 2, "the rest stay as estimates");
+  delete process.env.DRIVE_TIMES_DAILY_LIMIT;
   console.log("drive times: ALL CHECKS PASSED");
 }
 main().catch((e) => { console.error(e); process.exit(1); });
