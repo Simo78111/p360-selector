@@ -21,7 +21,9 @@ export default async function ConfirmedPage({ searchParams }: Props) {
   const tier = (tierIds as readonly string[]).includes(tierParam ?? "") ? (tierParam as Tier) : null;
   // e.g. "Wed 28 Oct 7:30 am", from the scheduler. Only letters, digits, spaces and colons.
   const when = whenParam && /^[A-Za-z0-9 :]{5,30}$/.test(whenParam) ? whenParam : null;
-  const steps = nextSteps(tier, when, area === "out");
+  // "Wed 28 Oct morning": a day and window; the exact time is texted the afternoon before
+  const windowed = when ? /(morning|afternoon)$/.test(when) : false;
+  const steps = nextSteps(tier, when, area === "out", windowed);
 
   // Check with Stripe that the deposit really went through.
   let paid: number | null = null;
@@ -57,7 +59,8 @@ export default async function ConfirmedPage({ searchParams }: Props) {
           {when && (
             <p className="mx-auto mt-6 max-w-md rounded-2xl bg-aqua-pale p-4">
               <span className="block text-sm text-slate">Your plumber is booked for</span>
-              <strong className="font-display text-2xl">{when}</strong>
+              <strong className="font-display text-2xl">{windowed ? when.replace(/ (morning|afternoon)$/, ", $1") : when}</strong>
+              {windowed && <span className="mt-1 block text-sm text-slate">We&apos;ll text you the exact time the afternoon before.</span>}
             </p>
           )}
           {!when && tier && <p className="mt-2 font-medium">{tierInfo[tier].label} booking</p>}
@@ -91,7 +94,7 @@ export default async function ConfirmedPage({ searchParams }: Props) {
   );
 }
 
-function nextSteps(tier: Tier | null, when: string | null, outsideArea: boolean): string[] {
+function nextSteps(tier: Tier | null, when: string | null, outsideArea: boolean, windowed = false): string[] {
   if (outsideArea || !tier) {
     return [
       "We'll review your details and photos.",
@@ -107,9 +110,11 @@ function nextSteps(tier: Tier | null, when: string | null, outsideArea: boolean)
     ];
   }
   return [
-    when
-      ? "We've texted you the booking. Reply to that text if the time doesn't work."
-      : "We'll text you your booking time shortly.",
+    windowed
+      ? "We've texted you the day. The afternoon before, we text your exact arrival time."
+      : when
+        ? "We've texted you the booking. Reply to that text if the time doesn't work."
+        : "We'll text you your booking time shortly.",
     "On the day, we text you when your plumber is on the way, with an arrival time.",
     "If your plumber finds more work, we text you the price first and only go ahead once you reply YES.",
   ];

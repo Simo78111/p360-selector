@@ -26,6 +26,11 @@ export type JobCard = {
   plumber: string | null;
   work_date: string | null;
   sequence_no: number | null;
+  time_window: "morning" | "afternoon" | null;
+  /** The day's route is worked out and customers have exact times */
+  day_planned: boolean | null;
+  /** Drive + park from the previous job, in minutes */
+  drive_min: number | null;
   planned_start: string | null;
   eta: string | null;
   arrived: string | null;
@@ -46,12 +51,17 @@ export type PlumberDay = {
   shift: string;
   jobs: JobCard[];
   booked_min: number;
+  drive_min: number;
+  home: { address: string | null; to_first: number; from_last: number } | null;
   last_seen: { lat: number; lng: number; at: string; today: boolean } | null;
 };
 
 export type OfficeDay = {
   date: string;
   date_local: string;
+  planned: boolean;
+  plan_time: string;
+  route_from_home: boolean;
   plumbers: PlumberDay[];
   waiting: JobCard[];
   attention: number;
@@ -123,7 +133,7 @@ export async function loadAttention(): Promise<AttentionItem[]> {
 }
 
 export const moveJob = (jobId: string, plumberId: string, date: string) =>
-  rpc<{ moved: boolean; reason?: string; start_local?: string; plumber?: string }>("office_move_job", {
+  rpc<{ moved: boolean; reason?: string; start_local?: string; plumber?: string; exact?: boolean }>("office_move_job", {
     p_job_id: jobId,
     p_plumber_id: plumberId,
     p_work_date: date,
@@ -133,7 +143,26 @@ export const cancelJob = (jobId: string, reason: string, notify: boolean) =>
   rpc<{ cancelled: boolean }>("office_cancel_job", { p_job_id: jobId, p_reason: reason, p_notify: notify });
 
 export const bookNow = (jobId: string) =>
-  rpc<{ scheduled: boolean; start_local?: string; reason?: string }>("office_book_now", { p_job_id: jobId });
+  rpc<{ scheduled: boolean; start_local?: string; reason?: string; exact?: boolean }>("office_book_now", { p_job_id: jobId });
+
+export type PlanResult = {
+  date: string;
+  status: "planned" | "planned_and_texted" | "already_planned";
+  plumbers?: { plumber: string; stops?: number; travel_before?: number; travel?: number; ok?: boolean; skipped?: string }[];
+};
+export const planDay = (date: string) => rpc<PlanResult>("office_plan_day", { p_date: date });
+
+export type PlumbersInfo = {
+  route_from_home: boolean;
+  park_buffer_min: number;
+  plan_lock_time: string;
+  cached_drive_times: number;
+  plumbers: { id: string; name: string; phone: string; active: boolean; shift: string; home_address: string | null; home_set: boolean }[];
+};
+export const loadPlumbers = () => rpc<PlumbersInfo>("office_plumbers", {});
+export const setPlumberHome = (id: string, address: string | null, lat: number | null, lng: number | null) =>
+  rpc<null>("office_set_plumber_home", { p_plumber_id: id, p_address: address, p_lat: lat, p_lng: lng });
+export const setRouteFromHome = (on: boolean) => rpc<null>("office_set_route_from_home", { p_on: on });
 
 export const resolveItem = (id: string, note: string, approve: boolean) =>
   rpc<string>("resolve_item", { p_id: id, p_note: note || null, p_approve: approve });

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { bookNowAction, moveJobAction } from "@/app/dashboard/office-actions";
+import { bookNowAction, moveJobAction, planRouteAction } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, shortDate, TierLabel } from "@/components/office/bits";
 import { aucklandToday, loadDay, officeEnabled, shiftDate, validDate, type OfficeDay, type PlumberDay } from "@/lib/office";
 
@@ -68,12 +68,37 @@ export default async function TodayPage({ searchParams }: Props) {
         </Link>
       )}
 
+      {date >= today && jobCount > 0 && (
+        day.planned ? (
+          <p className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
+            <strong>Planned.</strong> Routes are set and every customer has been texted their arrival time. Changes from
+            here text the customer.
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-4">
+            <p className="max-w-2xl text-sm">
+              <strong>Not planned yet.</strong> Customers know the day and morning or afternoon. At {day.plan_time} the
+              day before, each plumber&apos;s jobs are put in the shortest driving order and customers are texted exact
+              times. Times below are estimates.
+            </p>
+            <form action={planRouteAction}>
+              <input type="hidden" name="date" value={date} />
+              <input type="hidden" name="back" value={here} />
+              <button type="submit" className="rounded-full bg-ink px-4 py-2 text-sm font-semibold whitespace-nowrap text-white">
+                Work out best route now
+              </button>
+              <span className="mt-1 block text-center text-xs text-slate">No texts are sent</span>
+            </form>
+          </div>
+        )
+      )}
+
       {day.plumbers.length === 0 ? (
         <p className="rounded-2xl bg-white p-6 text-sm text-slate">No active plumbers. Add one in the engine first.</p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {day.plumbers.map((p) => (
-            <PlumberColumn key={p.id} plumber={p} />
+            <PlumberColumn key={p.id} plumber={p} planned={day.planned} />
           ))}
         </div>
       )}
@@ -150,7 +175,7 @@ function DayLink({ date, label }: { date: string; label: string }) {
   );
 }
 
-function PlumberColumn({ plumber: p }: { plumber: PlumberDay }) {
+function PlumberColumn({ plumber: p, planned }: { plumber: PlumberDay; planned: boolean }) {
   const stops = p.jobs.filter((j) => j.lat && j.lng);
   const route =
     stops.length > 0
@@ -164,6 +189,7 @@ function PlumberColumn({ plumber: p }: { plumber: PlumberDay }) {
           <h2 className="text-lg font-bold">{p.name}</h2>
           <p className="text-xs text-slate">
             {p.shift} · {p.booked_min ? `${hours(p.booked_min)} booked` : "free"}
+            {p.drive_min > 0 && <> · {hours(p.drive_min)} driving</>}
             {p.last_seen?.today && <> · last seen {p.last_seen.at}</>}
           </p>
         </div>
@@ -173,15 +199,30 @@ function PlumberColumn({ plumber: p }: { plumber: PlumberDay }) {
           </a>
         )}
       </div>
+      {p.home && (
+        <p className="mt-2 text-xs text-slate">
+          Home: {p.home.to_first} min to the first job · {p.home.from_last} min back from the last
+        </p>
+      )}
       {p.jobs.length === 0 ? (
         <p className="mt-4 rounded-xl bg-mist p-4 text-sm text-slate">Nothing booked. The standby pool will offer this time to Flexi customers.</p>
       ) : (
         <ol className="mt-4 space-y-2">
-          {p.jobs.map((j) => (
-            <li key={j.job_id} className="flex gap-3 rounded-xl border border-black/5 p-3">
-              <div className="w-16 shrink-0 text-right">
-                <div className="font-display font-bold">{j.arrived ?? j.eta ?? j.planned_start}</div>
-                <div className="text-xs text-slate">{j.duration_min ? hours(j.duration_min) : ""}</div>
+          {p.jobs.map((j, i) => (
+            <li key={j.job_id}>
+              {i > 0 && j.drive_min ? (
+                <p className="py-1 pl-[6.25rem] text-xs text-slate">↓ {j.drive_min} min drive and park</p>
+              ) : null}
+              <div className="flex gap-3 rounded-xl border border-black/5 p-3">
+              <div className="w-[5.25rem] shrink-0 text-right whitespace-nowrap">
+                <div className="font-display font-bold">
+                  {!planned && !j.arrived && <span className="font-normal text-slate">≈</span>}
+                  {j.arrived ?? j.eta ?? j.planned_start}
+                </div>
+                <div className="text-xs text-slate">
+                  {j.duration_min ? hours(j.duration_min) : ""}
+                  {j.time_window && <span className="block uppercase">{j.time_window === "morning" ? "am" : "pm"}</span>}
+                </div>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -198,6 +239,7 @@ function PlumberColumn({ plumber: p }: { plumber: PlumberDay }) {
                     <span className="ml-2 text-amber-800">booked {j.planned_start}</span>
                   )}
                 </p>
+              </div>
               </div>
             </li>
           ))}

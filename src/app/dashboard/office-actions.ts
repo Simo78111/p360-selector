@@ -4,7 +4,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth";
-import { bookNow, cancelJob, moveJob, resolveItem, validDate } from "@/lib/office";
+import { fetchDriveTimes } from "@/lib/drive-times";
+import { geocodeAddress } from "@/lib/engine";
+import { bookNow, cancelJob, moveJob, planDay, resolveItem, setPlumberHome, setRouteFromHome, validDate } from "@/lib/office";
 
 const back = (path: string, key: "ok" | "err", message: string) =>
   `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(message)}`;
@@ -34,7 +36,9 @@ export async function moveJobAction(form: FormData) {
     if (!jobId || !plumberId || !date) throw new Error("Pick a plumber and a day.");
     const r = await moveJob(jobId, plumberId, date);
     if (!r.moved) return "It's already booked there.";
-    return r.start_local ? `Moved to ${r.plumber}, ${r.start_local}. The customer has been texted.` : "Booked.";
+    return r.exact
+      ? `Moved to ${r.plumber}, ${r.start_local}. The customer has been texted the time.`
+      : `Moved to ${r.plumber}, ${r.start_local}. The customer has been texted the day and window; they get the exact time the afternoon before.`;
   });
 }
 
@@ -52,7 +56,10 @@ export async function bookNowAction(form: FormData) {
   const jobId = String(form.get("jobId") ?? "");
   await run(safePath(form.get("back")), async () => {
     const r = await bookNow(jobId);
-    if (r.scheduled) return `Booked for ${r.start_local}. The customer has been texted.`;
+    if (r.scheduled)
+      return r.exact
+        ? `Booked for ${r.start_local}. The customer has been texted the time.`
+        : `Booked for ${r.start_local}. The customer has been texted the day and window.`;
     if (r.reason === "no_room") throw new Error("No room in the next two weeks. Move it to a plumber by hand, or call the customer.");
     throw new Error("That job isn't waiting for a time any more.");
   });
@@ -65,5 +72,50 @@ export async function resolveAction(form: FormData) {
   await run(safePath(form.get("back")), async () => {
     await resolveItem(id, note, approve);
     return "Done. It's off the list.";
+  });
+}
+
+export async function planRouteAction(form: FormData) {
+  const date = validDate(String(form.get("date") ?? ""));
+  await run(safePath(form.get("back")), async () => {
+    if (!date) throw new Error("Pick a day.");
+    let lookup = "";
+    try {
+      const d = await fetchDriveTimes(date);
+      lookup = d.saved ? ` Looked up ${d.saved} drive time${d.saved === 1 ? "" : "s"} from Google.` : "";
+    } catch (err) {
+      lookup = ` Couldn't get Google drive times (${err instanceof Error ? err.message : String(err)}), so estimates were used.`;
+    }
+    const r = await planDay(date);
+    if (r.status === "already_planned") throw new Error("That day is already planned and customers have their times.");
+    const parts = (r.plumbers ?? [])
+      .filter((p) => p.stops)
+      .map((p) => `${p.plumber}: ${p.travel_before} → ${p.travel} min driving`);
+    return `Route worked out (no texts sent).${lookup} ${parts.join("; ")}.`;
+  });
+}
+
+export async function setHomeAction(form: FormData) {
+  const id = String(form.get("plumberId") ?? "");
+  const address = String(form.get("address") ?? "").trim().slice(0, 200);
+  await run("/dashboard/office/plumbers", async () => {
+    if (!address) {
+      await setPlumberHome(id, null, null, null);
+      return "Home address removed.";
+    }
+    const where = await geocodeAddress(`${address}, New Zealand`);
+    if (!where) throw new Error(`Couldn't find "${address}" on the map. Include the street number and suburb.`);
+    await setPlumberHome(id, address, where.lat, where.lng);
+    return `Home saved: ${address}.`;
+  });
+}
+
+export async function homeRoutingAction(form: FormData) {
+  const on = form.get("on") === "true";
+  await run("/dashboard/office/plumbers", async () => {
+    await setRouteFromHome(on);
+    return on
+      ? "Routes now include the drive from and back to each plumber's home."
+      : "Routes no longer include the drive from home.";
   });
 }

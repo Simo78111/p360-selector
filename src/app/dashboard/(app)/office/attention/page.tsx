@@ -14,6 +14,7 @@ const kindLabel: Record<string, string> = {
   reply_from_unknown_number: "Text from unknown number",
   review_incomplete_job: "Job not finished",
   invoice_held: "Invoice held",
+  route_problem: "Route doesn't fit",
 };
 
 const waited = (min: number) =>

@@ -69,6 +69,9 @@ export default async function JobPage({ params, searchParams }: Props) {
             <>
               <p className="text-xs text-slate">{job.plumber}</p>
               <p className="font-display text-xl font-bold">{job.when_local}</p>
+              {job.day_planned === false && (
+                <p className="text-xs text-slate">Exact time texted the afternoon before</p>
+              )}
               {job.eta && job.eta !== job.planned_start && !job.arrived && (
                 <p className="text-sm text-amber-800">now expected {job.eta}</p>
               )}
@@ -170,7 +173,9 @@ export default async function JobPage({ params, searchParams }: Props) {
             <form action={moveJobAction} className="rounded-2xl bg-white p-5">
               <h2 className="font-bold">{job.status === "scheduled" ? "Move to another day or plumber" : "Book with a plumber"}</h2>
               <p className="mt-1 text-sm text-slate">
-                Goes after their last job that day. The customer is texted the new time.
+                Planned days (today, or tomorrow after the afternoon planning): after their last job, and the customer
+                is texted the time. Other days: wherever it adds the least driving, and the customer is texted the day
+                and window.
               </p>
               <input type="hidden" name="jobId" value={job.job_id} />
               <input type="hidden" name="back" value={here} />

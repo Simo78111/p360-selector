@@ -122,6 +122,15 @@ The human side of the booking engine, behind the same owner login. Needs the thr
   said, every text and plumber update, the invoice, and lets you move or cancel it (the customer is
   texted).
 
+- **Plumbers**: home addresses, and the switch that plans routes from home (off by default).
+
+**Route planning.** Customers booking for a later day get the day and morning or afternoon. At 3pm the
+day before, the engine puts each plumber's jobs in the shortest driving order and texts exact times.
+Real drive times come from Google: `/api/cron/drive-times` runs daily at 01:00 UTC (early afternoon
+in Auckland, before the 3pm planning; see `vercel.json`) and needs `CRON_SECRET`. "Work out best
+route now" on Today does the same for one day without texting anyone. `npm run test:drive-times`
+checks the lookup against a local engine.
+
 Logging in goes straight to Today once the engine is connected.
 `tests/office_console_test.py` checks it against a local engine.
 

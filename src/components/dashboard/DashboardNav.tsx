@@ -7,6 +7,7 @@ const items = [
   { href: "/dashboard/office", label: "Today", exact: true },
   { href: "/dashboard/office/attention", label: "Needs attention" },
   { href: "/dashboard/office/jobs", label: "Jobs" },
+  { href: "/dashboard/office/plumbers", label: "Plumbers" },
   { href: "/dashboard", label: "Website", exact: true },
   { href: "/dashboard/bookings", label: "Web bookings" },
   { href: "/dashboard/status", label: "Status" },

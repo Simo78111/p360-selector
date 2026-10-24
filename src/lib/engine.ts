@@ -40,9 +40,14 @@ export function toE164(phone: string) {
 }
 
 /** Finds the address on the map. Null when Google can't place it to a street. */
-export async function geocode(street: string, suburb: string, postcode: string) {
+export function geocode(street: string, suburb: string, postcode: string) {
+  return geocodeAddress(`${street}, ${suburb} ${postcode}`);
+}
+
+/** Same, for a whole address written on one line (e.g. a plumber's home). */
+export async function geocodeAddress(address: string) {
   const params = new URLSearchParams({
-    address: `${street}, ${suburb} ${postcode}`,
+    address,
     components: "country:NZ",
     region: "nz",
     key: process.env.GOOGLE_MAPS_SERVER_KEY ?? "",
