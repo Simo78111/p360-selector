@@ -10,7 +10,16 @@ import {
 } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, TierLabel } from "@/components/office/bits";
 import { formatPrice } from "@/lib/site";
-import { aucklandToday, loadJob, officeEnabled, type JobDetail, type TimelineEntry } from "@/lib/office";
+import { ExtraWorkBuilder } from "@/components/office/ExtraWorkBuilder";
+import {
+  aucklandToday,
+  loadJob,
+  loadJobMaterials,
+  officeEnabled,
+  type JobDetail,
+  type JobMaterialLine,
+  type TimelineEntry,
+} from "@/lib/office";
 
 export const metadata = { title: "Job" };
 
@@ -31,8 +40,10 @@ export default async function JobPage({ params, searchParams }: Props) {
   if (!Number.isInteger(n) || n <= 0) notFound();
 
   let job: JobDetail | null;
+  let materials: JobMaterialLine[] = [];
   try {
     job = await loadJob(n);
+    if (job) materials = await loadJobMaterials(job.job_id);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -46,6 +57,11 @@ export default async function JobPage({ params, searchParams }: Props) {
   // started but never finished (or marked "couldn't finish"): back in the diary
   const needsReturn = job.couldnt_finish || (job.overdue && ["en_route", "on_site"].includes(job.status));
   const input = "mt-1 w-full rounded-xl border border-black/10 px-3 py-2";
+  const canAddWork = ["scheduled", "en_route", "on_site"].includes(job.status);
+  const extraPending = materials.some((m) => m.quote_status === "sent");
+  const quoteLabel: Record<string, string> = {
+    sent: "Waiting for YES", accepted: "Approved", declined: "Declined", no_reply: "No reply", expired: "No reply",
+  };
 
   const details: [string, React.ReactNode][] = [
     ["Customer", <>{job.customer}{job.other_jobs > 0 && <span className="text-slate"> · {job.other_jobs} other job{job.other_jobs === 1 ? "" : "s"}</span>}</>],
@@ -203,6 +219,53 @@ export default async function JobPage({ params, searchParams }: Props) {
               </ul>
             </section>
           )}
+
+          <section className="rounded-2xl bg-white p-5 sm:p-6" id="materials">
+            <h2 className="text-lg font-bold">Materials and extra work</h2>
+            {materials.length > 0 && (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead className="text-slate">
+                    <tr>
+                      <th className="py-1 font-medium">Item</th>
+                      <th className="py-1 font-medium">Qty</th>
+                      <th className="py-1 text-right font-medium">Charged excl GST</th>
+                      <th className="py-1 text-right font-medium">Cost</th>
+                      <th className="py-1 pl-3 font-medium">Customer</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {materials.map((m, i) => (
+                      <tr key={i} className="border-t border-black/5">
+                        <td className="py-2">
+                          {m.description}
+                          {m.code && <span className="block font-mono text-xs text-slate">{m.code} · {m.supplier}</span>}
+                        </td>
+                        <td className="py-2">{Number(m.quantity)}</td>
+                        <td className="py-2 text-right">${Number(m.line_total).toFixed(2)}</td>
+                        <td className="py-2 text-right text-slate">{m.cost_total !== null ? `$${Number(m.cost_total).toFixed(2)}` : "–"}</td>
+                        <td className="py-2 pl-3 text-xs">
+                          {quoteLabel[m.quote_status] ?? m.quote_status}
+                          <span className="block text-slate">{m.sent}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {canAddWork ? (
+              <div className="mt-4">
+                <p className="mb-3 text-sm text-slate">
+                  Add materials from the price books, labour or anything else. {job.customer.split(" ")[0]} is texted the price
+                  and replies YES; approved work goes on the invoice.
+                </p>
+                <ExtraWorkBuilder jobId={job.job_id} firstName={job.customer.split(" ")[0]} pending={extraPending} />
+              </div>
+            ) : (
+              materials.length === 0 && <p className="mt-3 text-sm text-slate">No extra work or materials on this job.</p>
+            )}
+          </section>
 
           <section className="rounded-2xl bg-white p-5 sm:p-6">
             <h2 className="text-lg font-bold">History</h2>

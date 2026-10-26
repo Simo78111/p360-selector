@@ -1,0 +1,10 @@
+Mico Plumbing - Trade Price File
+Account: 123456 PROJECT THREE SIXTY,Effective 1 October 2026
+
+Item Code,Description,Brand,UOM,RRP,Nett Price,Disc Group
+IV15C,"Isolating valve 15mm, chrome",Methven,EA,$24.90,$10.00,A
+FLX300,Flexible hose 300mm 1/2 x 1/2,Caroma,EA,19.50,8.50,A
+WSH12,"Tap washer 12mm ""Jumbo"" (pack 10)",Generic,PK,9.00,4.20,B
+CART35,Mixer cartridge 35mm,Methven,EA,129.00,60.00,C
+PTFE12,Thread tape PTFE 12mm,Generic,EA,3.50,1.20,B
+,Section heading with no code,,,,,

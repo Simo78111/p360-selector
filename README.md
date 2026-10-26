@@ -141,6 +141,13 @@ in Auckland, before the 3pm planning; see `vercel.json`) and needs `CRON_SECRET`
 route now" on Today does the same for one day without texting anyone. `npm run test:drive-times`
 checks the lookup against a local engine.
 
+- **Price books**: upload each supplier's monthly price book (CSV). It's read in the browser; the
+  columns are guessed (code, description, your price, unit, brand, discount %, price-per) and can be
+  corrected, then it's sent to the engine in chunks of 1,500 rows. The summary shows new items, price
+  changes and items no longer listed (switched off). Set a default markup and per-supplier markups,
+  and search everything. On a job page, **Materials and extra work** searches the price books, adds
+  labour or anything else, and texts the customer for approval; it lists what's on the job with cost.
+  `tests/price_books_test.py` (fixtures in `tests/fixtures/`) checks it against a local engine.
 - **Xero**: connect an organisation, choose the sales account and tracking category, switch sending
   on, see what's been sent, and send older invoices by hand.
 

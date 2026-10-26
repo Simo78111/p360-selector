@@ -339,3 +339,77 @@ export const bookCallback = (jobId: string, reason: string, plumberId: string | 
     "office_book_callback",
     { p_job_id: jobId, p_reason: reason, p_plumber_id: plumberId, p_work_date: date },
   );
+
+// ── Price books and materials ────────────────────────────────────────────
+
+export type Material = {
+  id: string;
+  code: string;
+  description: string;
+  unit: string | null;
+  brand: string | null;
+  supplier: string;
+  cost: number;
+  sell: number;
+  sell_incl_gst: number;
+  previous_cost: number | null;
+};
+
+export type UploadSummary = {
+  file: string | null;
+  rows: number;
+  added: number;
+  changed: number;
+  went_up: number;
+  removed: number;
+};
+
+export type PriceBooks = {
+  default_markup_pct: number;
+  suppliers: {
+    id: string;
+    name: string;
+    markup_pct: number | null;
+    active: boolean;
+    items: number;
+    last_upload: (UploadSummary & { at: string; days_ago: number }) | null;
+  }[];
+  uploads: (UploadSummary & { supplier: string; at: string })[];
+};
+
+export type PriceBookRow = { code: string; description: string; unit?: string; brand?: string; cost: number };
+
+export type JobMaterialLine = {
+  quote_status: "sent" | "accepted" | "declined" | "no_reply" | string;
+  sent: string;
+  description: string;
+  quantity: number;
+  kind: string;
+  unit_price: number;
+  line_total: number;
+  code: string | null;
+  supplier: string | null;
+  cost_total: number | null;
+};
+
+export type ExtraLine =
+  | { price_book_item_id: string; quantity: number; unit_price?: number }
+  | { description: string; quantity: number; unit_price: number; kind: "labour" | "materials" | "other" };
+
+export const loadPriceBooks = () => rpc<PriceBooks>("office_price_books", {});
+export const searchMaterials = (q: string, limit = 30) =>
+  rpc<Material[]>("materials_search", { p_query: q, p_limit: limit, p_supplier_id: null });
+export const priceBookBegin = (supplier: string, file: string) =>
+  rpc<{ upload_id: string; supplier_id: string; supplier: string }>("office_price_book_begin", {
+    p_supplier: supplier,
+    p_file_name: file,
+  });
+export const priceBookRows = (uploadId: string, rows: PriceBookRow[]) =>
+  rpc<{ rows: number; skipped: number }>("office_price_book_rows", { p_upload_id: uploadId, p_rows: rows });
+export const priceBookFinish = (uploadId: string) =>
+  rpc<UploadSummary & { rows_in: number; supplier: string }>("office_price_book_finish", { p_upload_id: uploadId });
+export const setMarkup = (supplierId: string | null, pct: number | null) =>
+  rpc<null>("office_set_markup", { p_supplier_id: supplierId, p_markup_pct: pct });
+export const proposeExtra = (jobId: string, lines: ExtraLine[], note: string | null) =>
+  rpc<{ total_incl_gst: number; items: string }>("office_propose_extra", { p_job_id: jobId, p_lines: lines, p_note: note });
+export const loadJobMaterials = (jobId: string) => rpc<JobMaterialLine[]>("office_job_materials", { p_job_id: jobId });
