@@ -18,6 +18,7 @@ const kindLabel: Record<string, string> = {
   xero_failed: "Xero",
   xero_total_differs: "Xero total differs",
   invoice_overpaid: "Overpaid",
+  follow_up_recommended: "Follow-up recommended",
 };
 
 const waited = (min: number) =>
