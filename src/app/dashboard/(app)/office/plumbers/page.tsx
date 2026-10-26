@@ -1,4 +1,4 @@
-import { homeRoutingAction, setHomeAction } from "@/app/dashboard/office-actions";
+import { homeRoutingAction, plumberActiveAction, savePlumberAction } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { loadPlumbers, officeEnabled, type PlumbersInfo } from "@/lib/office";
 
@@ -57,43 +57,151 @@ export default async function PlumbersPage({ searchParams }: Props) {
       </section>
 
       <section className="rounded-2xl bg-white p-5 sm:p-6">
-        <h2 className="text-lg font-bold">Home addresses</h2>
-        <p className="mt-1 text-sm text-slate">Only used for planning routes. Leave blank to remove.</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-bold">Plumbers</h2>
+          <p className="text-sm text-slate">
+            {active} active{info.plumbers.length > active ? `, ${info.plumbers.length - active} inactive` : ""}
+          </p>
+        </div>
+
+        <details className="group mt-4 rounded-2xl border-2 border-dashed border-aqua/60 open:border-solid open:bg-aqua-pale/30">
+          <summary className="cursor-pointer list-none px-4 py-3 font-semibold text-aqua-deep">
+            <span className="group-open:hidden">+ Add a plumber</span>
+            <span className="hidden group-open:inline">New plumber</span>
+          </summary>
+          <div className="px-4 pb-4">
+            <PlumberForm />
+          </div>
+        </details>
+
         <ul className="mt-4 divide-y divide-black/5">
           {info.plumbers.map((p) => (
-            <li key={p.id} className="py-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-semibold">
-                  {p.name}
-                  {!p.active && <span className="ml-2 text-xs font-normal text-slate">inactive</span>}
-                </p>
+            <li key={p.id} className={`py-4 ${p.active ? "" : "opacity-60"}`}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">
+                    {p.name}
+                    {!p.active && <span className="ml-2 rounded-full bg-mist px-2 py-0.5 text-xs font-normal">inactive</span>}
+                  </p>
+                  <p className="text-sm text-slate">
+                    {p.phone}
+                    {p.email && ` · ${p.email}`}
+                    {p.pgdb_licence_no && ` · PGDB ${p.pgdb_licence_no}`}
+                  </p>
+                  <p className="text-xs text-slate">
+                    {p.shift} · {p.home_address ? `home: ${p.home_address}` : "no home address"} ·{" "}
+                    {p.app_linked ? (
+                      <span className="text-emerald-800">signed in to the app</span>
+                    ) : p.email ? (
+                      "not signed in to the app yet"
+                    ) : (
+                      "no app login (add an email)"
+                    )}
+                  </p>
+                </div>
                 <p className="text-xs text-slate">
-                  {p.shift} · last 90 days: {p.jobs_90d} job{p.jobs_90d === 1 ? "" : "s"},{" "}
+                  {p.booked_ahead} booked ahead · last 90 days: {p.jobs_90d} job{p.jobs_90d === 1 ? "" : "s"},{" "}
                   <span className={p.callbacks_90d ? "font-semibold text-orange-800" : ""}>
                     {p.callbacks_90d} callback{p.callbacks_90d === 1 ? "" : "s"}
                   </span>
                   {p.jobs_90d > 0 && ` (${Math.round((p.callbacks_90d / p.jobs_90d) * 100)}%)`}
                 </p>
               </div>
-              <form action={setHomeAction} className="mt-2 flex flex-wrap gap-2">
-                <input type="hidden" name="plumberId" value={p.id} />
-                <label className="sr-only" htmlFor={`home-${p.id}`}>Home address for {p.name}</label>
-                <input
-                  id={`home-${p.id}`}
-                  name="address"
-                  defaultValue={p.home_address ?? ""}
-                  placeholder="e.g. 12 Smith Street, Takapuna"
-                  className="min-w-0 flex-1 rounded-full border border-black/10 px-4 py-2 text-sm"
-                />
-                <button type="submit" className="rounded-full border border-black/15 px-4 py-2 text-sm font-medium hover:border-ink">
-                  Save
-                </button>
-              </form>
-              {p.home_set && <p className="mt-1 text-xs text-emerald-800">Found on the map</p>}
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm font-medium text-aqua-deep hover:underline">Edit {p.name}</summary>
+                <div className="mt-3 rounded-2xl bg-mist/60 p-4">
+                  <PlumberForm plumber={p} />
+                  <form action={plumberActiveAction} className="mt-4 border-t border-black/10 pt-4">
+                    <input type="hidden" name="plumberId" value={p.id} />
+                    <input type="hidden" name="name" value={p.name} />
+                    <input type="hidden" name="active" value={p.active ? "false" : "true"} />
+                    <button type="submit" className="rounded-full border border-black/15 px-4 py-2 text-sm font-medium hover:border-ink">
+                      {p.active ? "Make inactive" : "Make active again"}
+                    </button>
+                    <span className="ml-3 text-xs text-slate">
+                      {p.active
+                        ? p.booked_ahead > 0
+                          ? `Move their ${p.booked_ahead} booked job${p.booked_ahead === 1 ? "" : "s"} first.`
+                          : "Inactive plumbers aren't given jobs. Their history stays."
+                        : "They'll be given jobs again."}
+                    </span>
+                  </form>
+                </div>
+              </details>
             </li>
           ))}
         </ul>
       </section>
     </div>
+  );
+}
+
+type Plumber = PlumbersInfo["plumbers"][number];
+
+const field = "w-full rounded-full border border-black/10 bg-white px-4 py-2 text-sm";
+
+function PlumberForm({ plumber: p }: { plumber?: Plumber }) {
+  const k = p?.id ?? "new";
+  return (
+    <form action={savePlumberAction} className="grid gap-3 sm:grid-cols-2">
+      {p && <input type="hidden" name="plumberId" value={p.id} />}
+      <label className="text-sm">
+        <span className="mb-1 block font-medium">Name</span>
+        <input id={`name-${k}`} name="name" required defaultValue={p?.name} className={field} />
+      </label>
+      <label className="text-sm">
+        <span className="mb-1 block font-medium">Mobile</span>
+        <input id={`phone-${k}`} name="phone" type="tel" required defaultValue={p?.phone} placeholder="021 123 4567" className={field} />
+      </label>
+      <label className="text-sm">
+        <span className="mb-1 block font-medium">Email</span>
+        <input id={`email-${k}`} name="email" type="email" defaultValue={p?.email ?? ""} placeholder="for the plumber app login" className={field} />
+      </label>
+      <label className="text-sm">
+        <span className="mb-1 block font-medium">PGDB licence number</span>
+        <input id={`licence-${k}`} name="licence" defaultValue={p?.pgdb_licence_no ?? ""} className={field} />
+      </label>
+      <div className="flex gap-3 text-sm">
+        <label className="flex-1">
+          <span className="mb-1 block font-medium">Starts</span>
+          <input id={`start-${k}`} name="shiftStart" type="time" required defaultValue={p?.shift_start ?? "07:30"} className={field} />
+        </label>
+        <label className="flex-1">
+          <span className="mb-1 block font-medium">Finishes</span>
+          <input id={`end-${k}`} name="shiftEnd" type="time" required defaultValue={p?.shift_end ?? "16:30"} className={field} />
+        </label>
+      </div>
+      <label className="text-sm">
+        <span className="mb-1 block font-medium">Home address</span>
+        <input
+          id={`home-${k}`}
+          name="home"
+          defaultValue={p?.home_address ?? ""}
+          placeholder="e.g. 12 Smith Street, Takapuna"
+          className={field}
+        />
+        <span className="mt-1 block text-xs text-slate">Only used for planning routes. {p ? "Leave blank to remove." : "Optional."}</span>
+      </label>
+      <label className="text-sm sm:col-span-2">
+        <span className="mb-1 block font-medium">{p?.app_linked ? "New app password" : "App password"}</span>
+        <input
+          id={`password-${k}`}
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          placeholder={p ? "Leave blank to keep it as it is" : "Optional: at least 8 characters"}
+          className={`${field} sm:max-w-sm`}
+        />
+        <span className="mt-1 block text-xs text-slate">
+          Makes their login for the plumber app (email + this password). Give it to them in person, not by text.
+        </span>
+      </label>
+      <div className="sm:col-span-2">
+        <button type="submit" className="rounded-full bg-ink px-5 py-2 text-sm font-semibold text-white">
+          {p ? "Save changes" : "Add plumber"}
+        </button>
+      </div>
+    </form>
   );
 }

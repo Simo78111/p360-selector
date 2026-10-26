@@ -178,6 +178,12 @@ export type PlumbersInfo = {
     phone: string;
     active: boolean;
     shift: string;
+    shift_start: string;
+    shift_end: string;
+    email: string | null;
+    pgdb_licence_no: string | null;
+    app_linked: boolean;
+    booked_ahead: number;
     home_address: string | null;
     home_set: boolean;
     jobs_90d: number;
@@ -187,6 +193,36 @@ export type PlumbersInfo = {
 export const loadPlumbers = () => rpc<PlumbersInfo>("office_plumbers", {});
 export const setPlumberHome = (id: string, address: string | null, lat: number | null, lng: number | null) =>
   rpc<null>("office_set_plumber_home", { p_plumber_id: id, p_address: address, p_lat: lat, p_lng: lng });
+export type PlumberChanges = Partial<{
+  full_name: string;
+  phone: string;
+  email: string | null;
+  pgdb_licence_no: string | null;
+  shift_start: string;
+  shift_end: string;
+  active: boolean;
+}>;
+export const savePlumber = (id: string | null, changes: PlumberChanges) =>
+  rpc<{ plumber_id: string; created: boolean }>("office_save_plumber", { p_plumber_id: id, p_changes: changes });
+/** Makes (or resets the password of) the plumber's login for the plumber app. */
+export async function setAppLogin(email: string, password: string) {
+  const auth = db().auth.admin;
+  const made = await auth.createUser({ email, password, email_confirm: true });
+  if (!made.error) return "created" as const;
+  if (!/already|registered|exists/i.test(made.error.message)) throw new Error(`App login: ${made.error.message}`);
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await auth.listUsers({ page, perPage: 200 });
+    if (error) throw new Error(`App login: ${error.message}`);
+    const user = data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    if (user) {
+      const upd = await auth.updateUserById(user.id, { password, email_confirm: true });
+      if (upd.error) throw new Error(`App login: ${upd.error.message}`);
+      return "reset" as const;
+    }
+    if (data.users.length < 200) break;
+  }
+  throw new Error("App login: couldn't create it or find it");
+}
 export const setRouteFromHome = (on: boolean) => rpc<null>("office_set_route_from_home", { p_on: on });
 
 export const resolveItem = (id: string, note: string, approve: boolean) =>

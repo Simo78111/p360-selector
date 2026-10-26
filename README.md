@@ -128,7 +128,11 @@ The human side of the booking engine, behind the same owner login. Needs the thr
   rework at no charge, linked to the original and counted against the plumber who did it (shown
   on Plumbers). `tests/jobs_editing_test.py` checks all of this against a local engine.
 
-- **Plumbers**: home addresses, and the switch that plans routes from home (off by default).
+- **Plumbers**: add plumbers (name, mobile, email, PGDB number, shift, home address) and, with a
+  password, make their plumber-app login (Supabase Auth admin on the engine). Edit them, reset the app
+  password, or make them inactive (only once their booked jobs are moved). Also the switch that plans
+  routes from home (off by default), and callbacks per plumber. `tests/plumbers_test.py` checks it;
+  locally the gateway fakes the Auth admin API.
 
 **Route planning.** Customers booking for a later day get the day and morning or afternoon. At 3pm the
 day before, the engine puts each plumber's jobs in the shortest driving order and texts exact times.

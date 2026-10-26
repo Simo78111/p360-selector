@@ -22,8 +22,11 @@ import {
   updateJob,
   type BulkResult,
   type JobChanges,
+  savePlumber,
+  setAppLogin,
   setPlumberHome,
   setRouteFromHome,
+  type PlumberChanges,
   validDate,
 } from "@/lib/office";
 import { chooseTenant, runXeroSync } from "@/lib/xero";
@@ -127,6 +130,62 @@ export async function setHomeAction(form: FormData) {
     if (!where) throw new Error(`Couldn't find "${address}" on the map. Include the street number and suburb.`);
     await setPlumberHome(id, address, where.lat, where.lng);
     return `Home saved: ${address}.`;
+  });
+}
+
+const time = (v: FormDataEntryValue | null) => {
+  const s = String(v ?? "").trim();
+  return /^\d{2}:\d{2}$/.test(s) ? s : undefined;
+};
+
+/** Add a plumber (no id) or save changes to one. */
+export async function savePlumberAction(form: FormData) {
+  const id = String(form.get("plumberId") ?? "") || null;
+  const text = (k: string, max = 120) => String(form.get(k) ?? "").trim().slice(0, max);
+  const name = text("name");
+  const phone = text("phone", 30);
+  const email = text("email", 200).toLowerCase();
+  const password = String(form.get("password") ?? "");
+  const home = text("home", 200);
+  await run("/dashboard/office/plumbers", async () => {
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error(`"${email}" doesn't look like an email address.`);
+    if (password && password.length < 8) throw new Error("The app password needs at least 8 characters.");
+    if (password && !email) throw new Error("Add an email address to make an app login.");
+    // find the home first, so a typo doesn't leave a half-made plumber
+    const where = home ? await geocodeAddress(`${home}, New Zealand`) : null;
+    if (home && !where) throw new Error(`Couldn't find "${home}" on the map. Include the street number and suburb.`);
+
+    const changes: PlumberChanges = {
+      full_name: name,
+      phone: phone ? toE164(phone) : "",
+      email: email || null,
+      pgdb_licence_no: text("licence", 40) || null,
+      shift_start: time(form.get("shiftStart")),
+      shift_end: time(form.get("shiftEnd")),
+    };
+    const saved = await savePlumber(id, changes);
+    const done = [saved.created ? `${name} added.` : `${name} saved.`];
+    if (where) await setPlumberHome(saved.plumber_id, home, where.lat, where.lng);
+    else if (id && form.has("home")) await setPlumberHome(saved.plumber_id, null, null, null);
+    if (password) {
+      const login = await setAppLogin(email, password);
+      done.push(
+        login === "created"
+          ? `App login made: they sign in to the plumber app with ${email} and the password you set.`
+          : `App password changed for ${email}.`,
+      );
+    }
+    return done.join(" ");
+  });
+}
+
+export async function plumberActiveAction(form: FormData) {
+  const id = String(form.get("plumberId") ?? "");
+  const on = form.get("active") === "true";
+  const name = String(form.get("name") ?? "Plumber");
+  await run("/dashboard/office/plumbers", async () => {
+    await savePlumber(id, { active: on });
+    return on ? `${name} is active again and can be given jobs.` : `${name} is now inactive and won't be given jobs.`;
   });
 }
 
