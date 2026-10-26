@@ -21,6 +21,16 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
             <DashboardNav />
           </div>
           <div className="flex items-center gap-4 text-sm">
+            <form action="/dashboard/office/jobs" role="search" className="flex">
+              <input type="hidden" name="f" value="all" />
+              <label htmlFor="global-search" className="sr-only">Find a job</label>
+              <input
+                id="global-search"
+                name="q"
+                placeholder="Find a job…"
+                className="w-36 rounded-full border border-black/10 bg-mist px-3 py-1.5 text-sm focus:w-56 focus:bg-white sm:w-44"
+              />
+            </form>
             <Link href="/" className="hidden text-slate hover:text-ink sm:inline">
               View site
             </Link>

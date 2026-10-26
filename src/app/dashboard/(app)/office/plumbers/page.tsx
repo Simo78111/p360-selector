@@ -67,7 +67,13 @@ export default async function PlumbersPage({ searchParams }: Props) {
                   {p.name}
                   {!p.active && <span className="ml-2 text-xs font-normal text-slate">inactive</span>}
                 </p>
-                <p className="text-xs text-slate">{p.shift}</p>
+                <p className="text-xs text-slate">
+                  {p.shift} · last 90 days: {p.jobs_90d} job{p.jobs_90d === 1 ? "" : "s"},{" "}
+                  <span className={p.callbacks_90d ? "font-semibold text-orange-800" : ""}>
+                    {p.callbacks_90d} callback{p.callbacks_90d === 1 ? "" : "s"}
+                  </span>
+                  {p.jobs_90d > 0 && ` (${Math.round((p.callbacks_90d / p.jobs_90d) * 100)}%)`}
+                </p>
               </div>
               <form action={setHomeAction} className="mt-2 flex flex-wrap gap-2">
                 <input type="hidden" name="plumberId" value={p.id} />

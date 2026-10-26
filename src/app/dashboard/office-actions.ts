@@ -5,16 +5,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth";
 import { fetchDriveTimes } from "@/lib/drive-times";
-import { geocodeAddress } from "@/lib/engine";
+import { geocode, geocodeAddress, toE164 } from "@/lib/engine";
 import {
+  bookCallback,
   bookNow,
+  bulkCancel,
+  bulkMove,
   cancelJob,
   disconnectXero,
   moveJob,
   planDay,
   queueXeroInvoice,
   resolveItem,
+  returnVisit,
   saveXeroSettings,
+  updateJob,
+  type BulkResult,
+  type JobChanges,
   setPlumberHome,
   setRouteFromHome,
   validDate,
@@ -184,5 +191,99 @@ export async function xeroDisconnectAction() {
   await run(XERO_PAGE, async () => {
     await disconnectXero();
     return "Disconnected. Invoices aren't sent to Xero until you connect again.";
+  });
+}
+
+// ── Jobs: bulk actions, editing, return visits, callbacks ────────────────
+
+const summarise = (r: BulkResult, verb: string) => {
+  const ok = r.filter((x) => x.ok);
+  const bad = r.filter((x) => !x.ok);
+  const parts = [];
+  if (ok.length) {
+    parts.push(
+      `${verb} ${ok.length} job${ok.length === 1 ? "" : "s"}` +
+        (ok.some((x) => x.start_local) ? `: ${ok.map((x) => `#${x.job_number} ${x.start_local ?? ""}`.trim()).join(", ")}.` : "."),
+    );
+  }
+  if (bad.length) parts.push(`Couldn't do ${bad.map((x) => `#${x.job_number} (${x.error})`).join("; ")}.`);
+  if (!ok.length) throw new Error(parts.join(" ") || "No jobs were selected.");
+  return parts.join(" ");
+};
+
+const jobsBack = (form: FormData) => {
+  const b = String(form.get("back") ?? "");
+  return b.startsWith("/dashboard/office/jobs") ? b : "/dashboard/office/jobs";
+};
+
+export async function bulkMoveAction(form: FormData) {
+  const ids = form.getAll("jobIds").map(String).filter(Boolean);
+  const date = validDate(String(form.get("date") ?? ""));
+  const plumber = String(form.get("plumberId") ?? "");
+  await run(jobsBack(form), async () => {
+    if (!ids.length) throw new Error("Tick the jobs to move first.");
+    if (!date) throw new Error("Pick a day to move them to.");
+    return summarise(await bulkMove(ids, plumber || null, date), "Moved") + " Customers have been texted.";
+  });
+}
+
+export async function bulkCancelAction(form: FormData) {
+  const ids = form.getAll("jobIds").map(String).filter(Boolean);
+  const notify = form.get("notify") === "on";
+  const reason = String(form.get("reason") ?? "").slice(0, 300);
+  await run(jobsBack(form), async () => {
+    if (!ids.length) throw new Error("Tick the jobs to cancel first.");
+    return summarise(await bulkCancel(ids, reason, notify), "Cancelled") + (notify ? " Customers have been texted." : "");
+  });
+}
+
+export async function updateJobAction(form: FormData) {
+  const jobId = String(form.get("jobId") ?? "");
+  const back = safePath(form.get("back"));
+  const text = (k: string) => String(form.get(k) ?? "").trim();
+  await run(back, async () => {
+    const changes: JobChanges = {
+      full_name: text("full_name"),
+      email: text("email"),
+      description: text("description"),
+      access_notes: text("access_notes"),
+      office_notes: text("office_notes"),
+    };
+    if (text("phone")) changes.phone = toE164(text("phone"));
+    const minutes = Number(text("duration_min"));
+    if (minutes) changes.duration_min = minutes;
+    if (text("service_code")) changes.service_code = text("service_code");
+    // A new address has to be found on the map first
+    const street = text("address_line");
+    if (street && form.get("address_changed") === "1") {
+      const where = await geocode(street, text("suburb"), text("postcode"));
+      if (!where) throw new Error("Couldn't find that address on the map. Check the street number, suburb and postcode.");
+      Object.assign(changes, { address_line: street, suburb: text("suburb"), postcode: text("postcode"), lat: where.lat, lng: where.lng });
+    }
+    const r = await updateJob(jobId, changes);
+    return r.changed.length ? `Saved: ${r.changed.join(", ")}.` : "Nothing had changed.";
+  });
+}
+
+export async function returnVisitAction(form: FormData) {
+  const jobId = String(form.get("jobId") ?? "");
+  const plumberId = String(form.get("plumberId") ?? "");
+  const date = validDate(String(form.get("date") ?? ""));
+  await run(safePath(form.get("back")), async () => {
+    if (!plumberId || !date) throw new Error("Pick a plumber and a day.");
+    const r = await returnVisit(jobId, plumberId, date);
+    return `Return visit booked: ${r.plumber ?? ""}, ${r.start_local ?? "same day"}. The customer has been texted.`;
+  });
+}
+
+export async function bookCallbackAction(form: FormData) {
+  const jobId = String(form.get("jobId") ?? "");
+  const reason = String(form.get("reason") ?? "").slice(0, 500);
+  const plumberId = String(form.get("plumberId") ?? "");
+  const date = validDate(String(form.get("date") ?? ""));
+  await run(safePath(form.get("back")), async () => {
+    const r = await bookCallback(jobId, reason, plumberId && date ? plumberId : null, plumberId && date ? date : null);
+    const when = r.start_local ? ` for ${r.start_local}` : r.reason === "no_room" ? ", but there's no room yet: book it by hand" : "";
+    return `Callback job #${r.job_number} booked${when}, no charge. The customer has been texted.`;
   });
 }

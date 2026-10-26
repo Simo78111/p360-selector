@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { bookNowAction, cancelJobAction, moveJobAction } from "@/app/dashboard/office-actions";
-import { EngineError, Flash, hours, JobStatusBadge, NotConnected, TierLabel } from "@/components/office/bits";
+import {
+  bookCallbackAction,
+  bookNowAction,
+  cancelJobAction,
+  moveJobAction,
+  returnVisitAction,
+  updateJobAction,
+} from "@/app/dashboard/office-actions";
+import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, TierLabel } from "@/components/office/bits";
 import { formatPrice } from "@/lib/site";
 import { aucklandToday, loadJob, officeEnabled, type JobDetail, type TimelineEntry } from "@/lib/office";
 
@@ -35,6 +42,10 @@ export default async function JobPage({ params, searchParams }: Props) {
   const waiting = ["requested", "pooled", "offered"].includes(job.status);
   const movable = job.status === "scheduled" || (waiting && job.status !== "offered");
   const cancellable = !["on_site", "completed", "invoiced", "paid", "cancelled"].includes(job.status);
+  const done = ["completed", "invoiced", "paid"].includes(job.status);
+  // started but never finished (or marked "couldn't finish"): back in the diary
+  const needsReturn = job.couldnt_finish || (job.overdue && ["en_route", "on_site"].includes(job.status));
+  const input = "mt-1 w-full rounded-xl border border-black/10 px-3 py-2";
 
   const details: [string, React.ReactNode][] = [
     ["Customer", <>{job.customer}{job.other_jobs > 0 && <span className="text-slate"> · {job.other_jobs} other job{job.other_jobs === 1 ? "" : "s"}</span>}</>],
@@ -42,7 +53,7 @@ export default async function JobPage({ params, searchParams }: Props) {
     ["Email", job.email ?? "None"],
     ["Address", <a key="a" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${job.address}, ${job.suburb ?? ""} ${job.postcode ?? ""}`)}`} target="_blank" rel="noreferrer" className="text-aqua-deep hover:underline">{job.address}, {job.suburb} {job.postcode}</a>],
     ["Access", job.access_notes || "None"],
-    ["Price", `from ${formatPrice(Number(job.price_incl_gst))} incl. GST`],
+    ["Price", job.callback_of ? "No charge (callback)" : `from ${formatPrice(Number(job.price_incl_gst))} incl. GST`],
     ["Length", job.duration_min ? hours(job.duration_min) : "Not set"],
     ["Wants", job.preferred ?? (job.tier === "flexi" ? `any time before ${job.flexi_latest}` : "Soonest")],
     ["Texts", job.sms_opt_out ? "Opted out (replied STOP)" : job.pool_consent ? "OK, including standby offers" : "Booking texts only"],
@@ -90,6 +101,28 @@ export default async function JobPage({ params, searchParams }: Props) {
 
       <Flash ok={ok} err={err} />
 
+      {job.callback_of && (
+        <p className="rounded-2xl border-2 border-orange-200 bg-orange-50 p-4 text-sm">
+          <strong>Callback for <JobLink job={{ job_number: job.callback_of, service: "" }} className="font-bold" /></strong>, no
+          charge. {job.callback_reason}
+          {job.callback_plumber && <span className="text-slate"> · original work by {job.callback_plumber}</span>}
+        </p>
+      )}
+      {(job.overdue || job.couldnt_finish) && (
+        <p className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          {job.couldnt_finish
+            ? "The plumber marked this job as couldn't be finished. Book a return visit below."
+            : needsReturn
+              ? "This job was started on an earlier day but never marked done. Book a return visit, or check with the plumber."
+              : "This job was booked for an earlier day and hasn't been done. Move it to a new day below."}
+        </p>
+      )}
+      {job.office_notes && (
+        <p className="rounded-2xl bg-amber-50 p-4 text-sm whitespace-pre-line">
+          <strong>Office notes:</strong> {job.office_notes}
+        </p>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-6">
           <section className="rounded-2xl bg-white p-5 sm:p-6">
@@ -103,7 +136,73 @@ export default async function JobPage({ params, searchParams }: Props) {
                 </div>
               ))}
             </dl>
+
+            <details className="mt-6 rounded-xl border border-black/10 p-4">
+              <summary className="cursor-pointer font-semibold">Edit details</summary>
+              <form action={updateJobAction} className="mt-4 grid gap-4 sm:grid-cols-2">
+                <input type="hidden" name="jobId" value={job.job_id} />
+                <input type="hidden" name="back" value={here} />
+                <label className="text-sm font-medium">Customer name<input name="full_name" defaultValue={job.customer} className={input} /></label>
+                <label className="text-sm font-medium">Mobile<input name="phone" defaultValue={job.phone.replace(/^\+64/, "0")} className={input} /></label>
+                <label className="text-sm font-medium sm:col-span-2">Email<input name="email" type="email" defaultValue={job.email ?? ""} className={input} /></label>
+                <fieldset className="grid gap-3 sm:col-span-2 sm:grid-cols-[1fr_12rem_7rem]">
+                  <legend className="mb-1 text-sm font-medium">
+                    Address <span className="font-normal text-slate">(changes are checked on the map)</span>
+                  </legend>
+                  <input aria-label="Street" name="address_line" defaultValue={job.address} className={input} />
+                  <input aria-label="Suburb" name="suburb" defaultValue={job.suburb ?? ""} className={input} />
+                  <input aria-label="Postcode" name="postcode" defaultValue={job.postcode ?? ""} className={input} />
+                  <label className="flex items-center gap-2 text-sm text-slate sm:col-span-3">
+                    <input type="checkbox" name="address_changed" value="1" className="h-4 w-4 accent-aqua-deep" />
+                    Tick if you changed the address
+                  </label>
+                </fieldset>
+                <label className="text-sm font-medium sm:col-span-2">What&apos;s the job
+                  <textarea name="description" defaultValue={job.description ?? ""} rows={3} className={input} />
+                </label>
+                <label className="text-sm font-medium sm:col-span-2">Access notes (gate codes, dogs, parking)
+                  <input name="access_notes" defaultValue={job.access_notes ?? ""} className={input} />
+                </label>
+                <label className="text-sm font-medium">Service
+                  <select name="service_code" defaultValue={job.service_code ?? ""} disabled={job.invoiced} className={input}>
+                    {job.services.map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.name} ({formatPrice(Number(s.price_incl_gst))})
+                      </option>
+                    ))}
+                  </select>
+                  {job.invoiced && <span className="text-xs font-normal text-slate">Invoiced: change it in Xero</span>}
+                </label>
+                <label className="text-sm font-medium">Job length (minutes)
+                  <input name="duration_min" type="number" min={15} max={600} step={15} defaultValue={job.duration_min ?? 60} className={input} />
+                </label>
+                <label className="text-sm font-medium sm:col-span-2">Office notes <span className="font-normal text-slate">(never sent to the customer)</span>
+                  <textarea name="office_notes" defaultValue={job.office_notes ?? ""} rows={2} className={input} />
+                </label>
+                <button type="submit" className="w-fit rounded-full bg-ink px-5 py-2 font-semibold text-white">
+                  Save changes
+                </button>
+              </form>
+            </details>
           </section>
+
+          {job.callback_jobs.length > 0 && (
+            <section className="rounded-2xl bg-white p-5 sm:p-6">
+              <h2 className="text-lg font-bold">Callbacks for this job</h2>
+              <ul className="mt-3 divide-y divide-black/5">
+                {job.callback_jobs.map((c) => (
+                  <li key={c.job_number} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span>
+                      <JobLink job={{ job_number: c.job_number, service: "" }} /> {c.reason}
+                    </span>
+                    <span className="flex items-center gap-2 text-slate">
+                      {c.when_local ?? "not booked yet"} <JobStatusBadge status={c.status} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className="rounded-2xl bg-white p-5 sm:p-6">
             <h2 className="text-lg font-bold">History</h2>
@@ -191,6 +290,68 @@ export default async function JobPage({ params, searchParams }: Props) {
                 {job.status === "scheduled" ? "Move job" : "Book it"}
               </button>
             </form>
+          )}
+
+          {needsReturn && (
+            <form action={returnVisitAction} className="rounded-2xl border-2 border-red-200 bg-white p-5">
+              <h2 className="font-bold">Book a return visit</h2>
+              <p className="mt-1 text-sm text-slate">Same job, back in the diary. The customer is texted the new day.</p>
+              <input type="hidden" name="jobId" value={job.job_id} />
+              <input type="hidden" name="back" value={here} />
+              <label className="mt-3 block text-sm font-medium" htmlFor="rv-plumber">Plumber</label>
+              <select id="rv-plumber" name="plumberId" defaultValue={job.plumber_id ?? undefined} className={input}>
+                {job.plumbers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <label className="mt-3 block text-sm font-medium" htmlFor="rv-date">Day</label>
+              <input id="rv-date" name="date" type="date" min={aucklandToday()} defaultValue={aucklandToday()} required className={input} />
+              <button type="submit" className="mt-4 w-full rounded-full bg-ink px-4 py-2 font-semibold text-white">
+                Book return visit
+              </button>
+            </form>
+          )}
+
+          {done && (
+            <form action={bookCallbackAction} className="rounded-2xl border-2 border-orange-200 bg-white p-5">
+              <h2 className="font-bold">Book a callback</h2>
+              <p className="mt-1 text-sm text-slate">
+                Rework on this job, at no charge. It becomes a new job linked to this one, and is tracked against the
+                plumber who did the work.
+              </p>
+              <input type="hidden" name="jobId" value={job.job_id} />
+              <input type="hidden" name="back" value={here} />
+              <label className="mt-3 block text-sm font-medium" htmlFor="cb-reason">What needs fixing</label>
+              <textarea id="cb-reason" name="reason" required rows={2} className={input} placeholder="e.g. Mixer still dripping" />
+              <label className="mt-3 block text-sm font-medium" htmlFor="cb-plumber">Plumber</label>
+              <select id="cb-plumber" name="plumberId" defaultValue="" className={input}>
+                <option value="">First free slot (any plumber)</option>
+                {job.plumbers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <label className="mt-3 block text-sm font-medium" htmlFor="cb-date">Day <span className="font-normal text-slate">(with a plumber)</span></label>
+              <input id="cb-date" name="date" type="date" min={aucklandToday()} className={input} />
+              <button type="submit" className="mt-4 w-full rounded-full bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-700">
+                Book callback
+              </button>
+            </form>
+          )}
+
+          {job.customer_jobs.length > 0 && (
+            <section className="rounded-2xl bg-white p-5">
+              <h2 className="font-bold">{job.customer}&apos;s other jobs</h2>
+              <ul className="mt-2 space-y-1.5 text-sm">
+                {job.customer_jobs.slice(0, 10).map((o) => (
+                  <li key={o.job_number} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate">
+                      <JobLink job={{ job_number: o.job_number, service: o.service }} className="font-medium" />
+                    </span>
+                    <span className="shrink-0 text-xs text-slate">{o.created}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
           {cancellable && (

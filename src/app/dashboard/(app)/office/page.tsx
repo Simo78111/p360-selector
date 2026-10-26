@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { bookNowAction, moveJobAction, planRouteAction } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, shortDate, TierLabel } from "@/components/office/bits";
-import { aucklandToday, loadDay, officeEnabled, shiftDate, validDate, type OfficeDay, type PlumberDay } from "@/lib/office";
+import { aucklandToday, loadDay, loadJobs, officeEnabled, shiftDate, validDate, type OfficeDay, type PlumberDay } from "@/lib/office";
 
 export const metadata = { title: "Today" };
 
@@ -15,8 +15,11 @@ export default async function TodayPage({ searchParams }: Props) {
   const here = `/dashboard/office?date=${date}`;
 
   let day: OfficeDay;
+  let overdue = 0;
   try {
-    day = await loadDay(date);
+    const [d, o] = await Promise.all([loadDay(date), loadJobs("", "overdue")]);
+    day = d;
+    overdue = o.length;
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -54,6 +57,21 @@ export default async function TodayPage({ searchParams }: Props) {
       </div>
 
       <Flash ok={ok} err={err} />
+
+      {overdue > 0 && (
+        <Link
+          href="/dashboard/office/jobs?f=overdue"
+          className="flex items-center justify-between gap-4 rounded-2xl border-2 border-red-200 bg-red-50 p-4 hover:bg-red-100"
+        >
+          <span>
+            <strong>
+              {overdue} job{overdue === 1 ? " was" : "s were"} booked for an earlier day and {overdue === 1 ? "isn't" : "aren't"} done.
+            </strong>{" "}
+            <span className="text-sm text-red-900">Move them in one go from the Jobs list.</span>
+          </span>
+          <span className="text-sm font-semibold whitespace-nowrap">Review →</span>
+        </Link>
+      )}
 
       {day.attention > 0 && (
         <Link

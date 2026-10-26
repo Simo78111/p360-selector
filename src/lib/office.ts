@@ -38,6 +38,13 @@ export type JobCard = {
   when_local: string | null;
   from_pool: boolean;
   created_local: string;
+  /** Booked for a past day and not done */
+  overdue: boolean;
+  /** This job is a callback (rework) for that job number */
+  callback_of: number | null;
+  /** How many callbacks this job has had */
+  callbacks: number;
+  couldnt_finish: boolean;
 };
 
 export type JobStatus =
@@ -87,6 +94,14 @@ export type JobDetail = JobCard & {
     lines: { description: string; quantity: number; unit_price_incl_gst: number }[];
   }[];
   plumbers: { id: string; name: string }[];
+  office_notes: string | null;
+  callback_reason: string | null;
+  callback_plumber: string | null;
+  service_code: string | null;
+  invoiced: boolean;
+  callback_jobs: { job_number: number; status: JobStatus; reason: string; when_local: string | null }[];
+  customer_jobs: { job_number: number; service: string; status: JobStatus; created: string }[];
+  services: { code: string; name: string; minutes: number; price_incl_gst: number }[];
 };
 
 export type AttentionItem = {
@@ -157,7 +172,17 @@ export type PlumbersInfo = {
   park_buffer_min: number;
   plan_lock_time: string;
   cached_drive_times: number;
-  plumbers: { id: string; name: string; phone: string; active: boolean; shift: string; home_address: string | null; home_set: boolean }[];
+  plumbers: {
+    id: string;
+    name: string;
+    phone: string;
+    active: boolean;
+    shift: string;
+    home_address: string | null;
+    home_set: boolean;
+    jobs_90d: number;
+    callbacks_90d: number;
+  }[];
 };
 export const loadPlumbers = () => rpc<PlumbersInfo>("office_plumbers", {});
 export const setPlumberHome = (id: string, address: string | null, lat: number | null, lng: number | null) =>
@@ -237,3 +262,44 @@ export const saveXeroSettings = (enabled: boolean, account: string, trackingName
   });
 export const disconnectXero = () => rpc<null>("xero_disconnect", {});
 export const queueXeroInvoice = (invoiceId: string) => rpc<null>("xero_queue_invoice", { p_invoice_id: invoiceId });
+
+// ── Editing, bulk actions, return visits, callbacks ──────────────────────
+
+export type BulkResult = { job_id: string; job_number: number; ok: boolean; error?: string; start_local?: string; plumber?: string }[];
+
+export const bulkMove = (jobIds: string[], plumberId: string | null, date: string) =>
+  rpc<BulkResult>("office_bulk_move", { p_job_ids: jobIds, p_plumber_id: plumberId, p_work_date: date });
+
+export const bulkCancel = (jobIds: string[], reason: string, notify: boolean) =>
+  rpc<BulkResult>("office_bulk_cancel", { p_job_ids: jobIds, p_reason: reason, p_notify: notify });
+
+export type JobChanges = Partial<{
+  full_name: string;
+  phone: string;
+  email: string;
+  address_line: string;
+  suburb: string;
+  postcode: string;
+  lat: number;
+  lng: number;
+  description: string;
+  access_notes: string;
+  duration_min: number;
+  service_code: string;
+  office_notes: string;
+}>;
+export const updateJob = (jobId: string, changes: JobChanges) =>
+  rpc<{ changed: string[] }>("office_update_job", { p_job_id: jobId, p_changes: changes });
+
+export const returnVisit = (jobId: string, plumberId: string, date: string) =>
+  rpc<{ moved: boolean; start_local?: string; plumber?: string; exact?: boolean }>("office_return_visit", {
+    p_job_id: jobId,
+    p_plumber_id: plumberId,
+    p_work_date: date,
+  });
+
+export const bookCallback = (jobId: string, reason: string, plumberId: string | null, date: string | null) =>
+  rpc<{ job_number: number; scheduled?: boolean; moved?: boolean; start_local?: string; reason?: string }>(
+    "office_book_callback",
+    { p_job_id: jobId, p_reason: reason, p_plumber_id: plumberId, p_work_date: date },
+  );

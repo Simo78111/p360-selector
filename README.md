@@ -118,9 +118,15 @@ The human side of the booking engine, behind the same owner login. Needs the thr
 - **Today**: each plumber's day in order with live status, ETAs and a Google Maps route link, plus
   jobs waiting for a time (book the first free slot, or add to a plumber's day).
 - **Needs attention**: the engine's queue of things it couldn't handle. Mark each one done.
-- **Jobs**: search by name, phone, address, suburb or job number. Each job shows what the customer
-  said, every text and plumber update, the invoice, and lets you move or cancel it (the customer is
-  texted).
+- **Jobs**: search (here or from the box in the header) by name, phone, email, address, job
+  number, invoice number, description or office notes. Filters: Open, Overdue (booked for an
+  earlier day and not done), Today, Callbacks, Done, Cancelled, All. Tick jobs to move them to a
+  day together (in a sensible driving order, keeping their plumber or giving them all to one) or
+  cancel them together. Each job shows what the customer said, every text and plumber update and
+  the invoice. You can edit the details, keep private office notes, move or cancel it, book a
+  return visit for a job that couldn't be finished, and book a **callback** on a finished job:
+  rework at no charge, linked to the original and counted against the plumber who did it (shown
+  on Plumbers). `tests/jobs_editing_test.py` checks all of this against a local engine.
 
 - **Plumbers**: home addresses, and the switch that plans routes from home (off by default).
 
