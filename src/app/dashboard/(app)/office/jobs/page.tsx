@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { bulkCancelAction, bulkMoveAction } from "@/app/dashboard/office-actions";
 import { SelectAll } from "@/components/office/BulkSelect";
+import { ClickableRow } from "@/components/office/ClickableRow";
 import { EngineError, Flash, JobLink, JobStatusBadge, NotConnected, TierLabel } from "@/components/office/bits";
 import { aucklandToday, loadJobs, loadPlumbers, officeEnabled, type JobCard } from "@/lib/office";
 
@@ -156,7 +157,11 @@ export default async function JobsPage({ searchParams }: Props) {
                   {jobs.map((j) => {
                     const actionable = !["completed", "invoiced", "paid", "cancelled"].includes(j.status);
                     return (
-                      <tr key={j.job_id} className={`border-t border-black/5 hover:bg-aqua-pale/50 ${j.overdue ? "bg-red-50/60" : ""}`}>
+                      <ClickableRow
+                        key={j.job_id}
+                        href={`/dashboard/office/jobs/${j.job_number}`}
+                        className={`border-t border-black/5 hover:bg-aqua-pale/50 ${j.overdue ? "bg-red-50/60" : ""}`}
+                      >
                         <td className="py-3 pl-5 align-top">
                           {actionable && (
                             <input
@@ -205,7 +210,7 @@ export default async function JobsPage({ searchParams }: Props) {
                           {j.overdue && <span className="mt-1 block text-xs font-semibold text-red-700">Overdue</span>}
                           {j.couldnt_finish && <span className="mt-1 block text-xs font-semibold text-red-700">Couldn&apos;t finish</span>}
                         </td>
-                      </tr>
+                      </ClickableRow>
                     );
                   })}
                 </tbody>
@@ -216,7 +221,7 @@ export default async function JobsPage({ searchParams }: Props) {
       </form>
       <p className="text-xs text-slate">
         Showing {jobs.length} job{jobs.length === 1 ? "" : "s"}
-        {jobs.length === 200 ? " (the newest 200; search to narrow it down)" : ""}. Moving a job texts the customer
+        {jobs.length === 200 ? " (the newest 200; search to narrow it down)" : ""}. Click any job to open it. Moving a job texts the customer
         its new day and time. Jobs that were started but not finished get a return visit.
       </p>
     </div>

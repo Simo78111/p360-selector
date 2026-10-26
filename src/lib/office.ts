@@ -423,3 +423,76 @@ export const loadJobMaterials = (jobId: string) => rpc<JobMaterialLine[]>("offic
 
 export type LabourRates = { plumber: string; is_gasfitter: boolean; plumbing: number | null; gas: number | null };
 export const loadLabourRates = (jobId: string) => rpc<LabourRates | null>("office_labour_rates", { p_job_id: jobId });
+
+// ── What happened on the visit, and photos ───────────────────────────────
+
+export type Visit = {
+  planned_start: string | null;
+  planned_min: number | null;
+  on_my_way: string | null;
+  arrived: string | null;
+  arrived_vs_planned_min: number | null;
+  finished: string | null;
+  on_site_min: number | null;
+  running_long_min: number | null;
+  cant_finish: string | null;
+  completion_note: string | null;
+  return_visit: boolean;
+  drive_min: number | null;
+  texts_sent: number;
+  texts_received: number;
+  invoice_sent: string | null;
+  paid: string | null;
+  photos: number;
+};
+
+export type JobPhoto = {
+  id: string;
+  path: string;
+  stage: "before" | "during" | "after" | "other";
+  caption: string | null;
+  by: string;
+  at: string;
+  url?: string;
+};
+
+export const PHOTO_BUCKET = "job-photos";
+
+export const loadJobVisit = (jobId: string) => rpc<Visit | null>("office_job_visit", { p_job_id: jobId });
+
+/** The job's photos, each with a link that works for an hour. */
+export async function loadJobPhotos(jobId: string): Promise<JobPhoto[]> {
+  const photos = await rpc<JobPhoto[]>("office_job_photos", { p_job_id: jobId });
+  if (!photos.length) return photos;
+  const { data, error } = await db().storage.from(PHOTO_BUCKET).createSignedUrls(photos.map((p) => p.path), 3600);
+  if (error) throw new Error(`Photos: ${error.message}`);
+  const byPath = new Map((data ?? []).map((d) => [d.path, d.signedUrl]));
+  return photos.map((p) => ({ ...p, url: byPath.get(p.path) ?? undefined }));
+}
+
+/** A one-off address the browser can upload one photo to, straight into storage. */
+export async function photoUploadUrl(path: string) {
+  const { data, error } = await db().storage.from(PHOTO_BUCKET).createSignedUploadUrl(path);
+  if (error || !data) throw new Error(`Photos: ${error?.message ?? "couldn't get an upload address"}`);
+  return data.signedUrl;
+}
+
+export const addPhoto = (jobId: string, path: string, stage: string, caption: string | null, bytes: number | null) =>
+  rpc<{ photo_id: string | null; photos: number }>("office_add_photo", {
+    p_job_id: jobId, p_path: path, p_stage: stage, p_caption: caption, p_bytes: bytes,
+  });
+
+export async function removePhoto(photoId: string) {
+  const path = await rpc<string>("office_remove_photo", { p_photo_id: photoId });
+  // the row is what the job shows; tidy the file too, but a failure here doesn't matter
+  await db().storage.from(PHOTO_BUCKET).remove([path]).catch(() => undefined);
+}
+
+export async function downloadPhoto(path: string): Promise<Buffer> {
+  const { data, error } = await db().storage.from(PHOTO_BUCKET).download(path);
+  if (error || !data) throw new Error(`Couldn't read ${path}: ${error?.message ?? "missing"}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export const notePhotosEmailed = (jobId: string, to: string, count: number) =>
+  rpc<null>("office_photos_emailed", { p_job_id: jobId, p_to: to, p_count: count });

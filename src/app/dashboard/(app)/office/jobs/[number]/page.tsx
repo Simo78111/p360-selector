@@ -11,14 +11,19 @@ import {
 import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, TierLabel } from "@/components/office/bits";
 import { formatPrice } from "@/lib/site";
 import { ExtraWorkBuilder } from "@/components/office/ExtraWorkBuilder";
+import { JobPhotos } from "@/components/office/JobPhotos";
 import {
   aucklandToday,
   loadJob,
   loadJobMaterials,
+  loadJobPhotos,
+  loadJobVisit,
   loadLabourRates,
   officeEnabled,
   type JobDetail,
   type JobMaterialLine,
+  type JobPhoto,
+  type Visit,
   type LabourRates,
   type TimelineEntry,
 } from "@/lib/office";
@@ -44,9 +49,22 @@ export default async function JobPage({ params, searchParams }: Props) {
   let job: JobDetail | null;
   let materials: JobMaterialLine[] = [];
   let rates: LabourRates | null = null;
+  let visit: Visit | null = null;
+  let photos: JobPhoto[] = [];
+  let photoError: string | null = null;
   try {
     job = await loadJob(n);
-    if (job) [materials, rates] = await Promise.all([loadJobMaterials(job.job_id), loadLabourRates(job.job_id)]);
+    if (job) {
+      [materials, rates, visit] = await Promise.all([
+        loadJobMaterials(job.job_id),
+        loadLabourRates(job.job_id),
+        loadJobVisit(job.job_id),
+      ]);
+      photos = await loadJobPhotos(job.job_id).catch((e) => {
+        photoError = e instanceof Error ? e.message : String(e);
+        return [];
+      });
+    }
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -144,6 +162,7 @@ export default async function JobPage({ params, searchParams }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-6">
+          {visit && (visit.arrived || visit.on_my_way || done) && <WhatHappened visit={visit} job={job} />}
           <section className="rounded-2xl bg-white p-5 sm:p-6">
             <h2 className="text-lg font-bold">What the customer said</h2>
             <p className="mt-2 whitespace-pre-line text-sm">{job.description || "Nothing written."}</p>
@@ -268,6 +287,21 @@ export default async function JobPage({ params, searchParams }: Props) {
             ) : (
               materials.length === 0 && <p className="mt-3 text-sm text-slate">No extra work or materials on this job.</p>
             )}
+          </section>
+
+          <section className="rounded-2xl bg-white p-5 sm:p-6" id="photos">
+            <h2 className="text-lg font-bold">Photos</h2>
+            {photoError && <p className="mt-2 text-sm text-red-800">{photoError}</p>}
+            <div className="mt-3">
+              <JobPhotos
+                jobId={job.job_id}
+                jobNumber={job.job_number}
+                photos={photos}
+                customerEmail={job.email}
+                firstName={job.customer.split(" ")[0]}
+                back={here}
+              />
+            </div>
           </section>
 
           <section className="rounded-2xl bg-white p-5 sm:p-6">
@@ -439,5 +473,66 @@ export default async function JobPage({ params, searchParams }: Props) {
         </aside>
       </div>
     </div>
+  );
+}
+
+const mins = (m: number) => (m >= 60 ? hours(m) : `${m} min`);
+
+function WhatHappened({ visit: v, job }: { visit: Visit; job: JobDetail }) {
+  const late = v.arrived_vs_planned_min;
+  const rows: [string, React.ReactNode][] = [
+    ["Booked", job.created_local],
+    ["Planned for", v.planned_start ? `${v.planned_start}${v.planned_min ? ` · ${mins(v.planned_min)} planned` : ""}` : null],
+    ["On the way", v.on_my_way ? `${v.on_my_way}${v.drive_min ? ` · about ${v.drive_min} min drive` : ""}` : null],
+    [
+      "Arrived",
+      v.arrived ? (
+        <>
+          {v.arrived}
+          {late !== null && (
+            <span className={`ml-2 text-xs font-semibold ${late > 15 ? "text-red-700" : late < -5 ? "text-emerald-700" : "text-slate"}`}>
+              {Math.abs(late) <= 5 ? "on time" : late > 0 ? `${mins(late)} late` : `${mins(-late)} early`}
+            </span>
+          )}
+        </>
+      ) : null,
+    ],
+    ["Ran long", v.running_long_min ? `Plumber added ${mins(v.running_long_min)}` : null],
+    ["Couldn't finish", v.cant_finish],
+    [
+      "Finished",
+      v.finished ? (
+        <>
+          {v.finished}
+          {v.on_site_min !== null && (
+            <span className="ml-2 text-xs text-slate">
+              {mins(v.on_site_min)} on site{v.planned_min ? ` (planned ${mins(v.planned_min)})` : ""}
+            </span>
+          )}
+        </>
+      ) : null,
+    ],
+    ["Plumber's note", v.completion_note],
+    ["Return visit", v.return_visit ? "Yes — this job was booked back in after the first visit" : null],
+    ["Invoice sent", v.invoice_sent],
+    ["Paid", v.paid],
+    ["Texts", `${v.texts_sent} sent, ${v.texts_received} received`],
+    ["Photos", v.photos ? <a key="ph" href="#photos" className="text-aqua-deep hover:underline">{v.photos} photo{v.photos === 1 ? "" : "s"}</a> : "None yet"],
+  ];
+  return (
+    <section className="rounded-2xl bg-white p-5 sm:p-6" aria-labelledby="what-happened">
+      <h2 id="what-happened" className="text-lg font-bold">What happened</h2>
+      <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[8rem_1fr]">
+        {rows
+          .filter(([, value]) => value !== null && value !== undefined && value !== "")
+          .map(([k, value]) => (
+            <div key={k} className="contents">
+              <dt className="text-slate">{k}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+      </dl>
+      <p className="mt-3 text-xs text-slate">Every text and update, in order, is under History below.</p>
+    </section>
   );
 }

@@ -26,7 +26,7 @@ async function send(email: Email): Promise<boolean> {
     console.info("[email] skipped (no RESEND_API_KEY):", email.subject, "→", email.to);
     return false;
   }
-  const res = await fetch("https://api.resend.com/emails", {
+  const res = await fetch(`${process.env.RESEND_API_BASE ?? "https://api.resend.com"}/emails`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -153,4 +153,28 @@ function engineLine(b: Booking) {
   const job = e.jobNumber ? `Job #${e.jobNumber}` : "Job";
   if (b.tier === "flexi") return `${job} is in the Flexi standby pool`;
   return e.when ? `${job} booked for ${e.when}; customer texted` : `${job} saved; the scheduler will find a time`;
+}
+
+
+/** Photos of a job, to the customer. Throws if email isn't set up, so the office knows. */
+export async function sendJobPhotos(p: {
+  to: string;
+  customerName: string;
+  jobNumber: number;
+  service: string;
+  message: string;
+  photos: { filename: string; data: Buffer }[];
+}) {
+  if (!emailEnabled()) throw new Error("Email isn't set up yet: add RESEND_API_KEY (and EMAIL_FROM) in Vercel.");
+  const first = p.customerName.split(" ")[0] || "there";
+  const note = p.message.trim();
+  const intro = `Here ${p.photos.length === 1 ? "is the photo" : `are the ${p.photos.length} photos`} from job #${p.jobNumber} (${p.service}).`;
+  await send({
+    to: p.to,
+    replyTo: officeTo(),
+    subject: `Photos from your job #${p.jobNumber} — ${site.name}`,
+    text: `Hi ${first},\n\n${note ? `${note}\n\n` : ""}${intro}\n\nThanks,\n${site.name}`,
+    html: `<p>Hi ${esc(first)},</p>${note ? `<p>${esc(note).replace(/\n/g, "<br>")}</p>` : ""}<p>${esc(intro)}</p><p>Thanks,<br>${esc(site.name)}</p>`,
+    attachments: p.photos.map((ph) => ({ filename: ph.filename, content: ph.data.toString("base64") })),
+  });
 }

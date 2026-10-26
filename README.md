@@ -118,6 +118,13 @@ The human side of the booking engine, behind the same owner login. Needs the thr
 - **Today**: each plumber's day in order with live status, ETAs and a Google Maps route link, plus
   jobs waiting for a time (book the first free slot, or add to a plumber's day).
 - **Needs attention**: the engine's queue of things it couldn't handle. Mark each one done.
+- **Finished jobs**: click anywhere on a job's row to open it. **What happened** shows the visit in
+  order with times (planned, on the way, arrived early/late, ran long, finished and time on site, the
+  plumber's note, invoice sent, paid). **Photos**: add before/after photos (shrunk to 1600px in the
+  browser and uploaded straight to the engine's private `job-photos` storage), see the plumbers'
+  ones, remove, and tick photos to email to the customer as attachments (needs `RESEND_API_KEY`).
+  `tests/job_photos_test.py` checks it; locally the gateway fakes Storage and Resend
+  (`RESEND_API_BASE`).
 - **Jobs**: search (here or from the box in the header) by name, phone, email, address, job
   number, invoice number, description or office notes. Filters: Open, Overdue (booked for an
   earlier day and not done), Today, Callbacks, Done, Cancelled, All. Tick jobs to move them to a
