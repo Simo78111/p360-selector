@@ -138,6 +138,15 @@ const time = (v: FormDataEntryValue | null) => {
   return /^\d{2}:\d{2}$/.test(s) ? s : undefined;
 };
 
+/** "$95", "95.50" → number; blank → null. */
+const rate = (v: FormDataEntryValue | null) => {
+  const s = String(v ?? "").replace(/[$,\s]/g, "");
+  if (s === "") return null;
+  const n = Number(s);
+  if (!Number.isFinite(n)) throw new Error(`"${String(v)}" isn't an hourly rate`);
+  return n;
+};
+
 /** Add a plumber (no id) or save changes to one. */
 export async function savePlumberAction(form: FormData) {
   const id = String(form.get("plumberId") ?? "") || null;
@@ -162,6 +171,9 @@ export async function savePlumberAction(form: FormData) {
       pgdb_licence_no: text("licence", 40) || null,
       shift_start: time(form.get("shiftStart")),
       shift_end: time(form.get("shiftEnd")),
+      is_gasfitter: form.get("gasfitter") === "on",
+      rate_plumbing: rate(form.get("ratePlumbing")),
+      rate_gas: rate(form.get("rateGas")),
     };
     const saved = await savePlumber(id, changes);
     const done = [saved.created ? `${name} added.` : `${name} saved.`];

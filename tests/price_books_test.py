@@ -77,16 +77,18 @@ with sync_playwright() as p:
     expect(results.get_by_text("Isolating valve 15mm, chrome")).to_be_visible()
     results.locator("li", has_text="Isolating valve").get_by_role("button", name="Add").click()
     results.locator("li", has_text="Isolating valve").get_by_role("button", name="Add").click()
-    page.get_by_role("button", name="+ Labour").click()
-    lab = page.locator("tr[data-line]", has=page.locator("input[placeholder=Labour]"))
-    lab.get_by_label("Quantity").fill("0.5")
+    page.get_by_role("button", name=re.compile(r"\+ Plumbing labour")).click()   # Simon has no rate set here: type one
+    expect(page.get_by_role("button", name=re.compile("Gas fitting labour"))).to_have_count(0)   # not a gas fitter
+    lab = page.locator("tr[data-line]", has_text="Plumbing labour")
+    expect(lab.get_by_text(re.compile("isn't set: type one"))).to_be_visible()
+    lab.get_by_label("Hours").fill("0.5")
     lab.get_by_label("Price each excl GST").fill("120")
     # 2 x 16.50 (cost 11 + 50%) + 60 = 93 excl → 106.95 incl
     expect(page.get_by_text(re.compile(r"will see \$106\.95 incl GST"))).to_be_visible()
     expect(page.get_by_text("materials cost $22.00")).to_be_visible()
     page.screenshot(path=f"{SHOTS}/pb_job_builder.png", full_page=True)
     page.get_by_role("button", name=re.compile("Text Ann for approval")).click()
-    expect(page.get_by_text(re.compile(r"Sent to Ann: 2 x Isolating valve 15mm, chrome, 0.5 x Labour, \$106.95"))).to_be_visible()
+    expect(page.get_by_text(re.compile(r"Sent to Ann: 2 x Isolating valve 15mm, chrome, 0.5 x Plumbing labour, \$106.95"))).to_be_visible()
     table = page.locator("#materials table").first
     expect(table.get_by_text("IV15C · Mico")).to_be_visible()
     expect(table.get_by_role("cell", name="$33.00")).to_be_visible()

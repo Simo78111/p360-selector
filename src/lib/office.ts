@@ -183,6 +183,9 @@ export type PlumbersInfo = {
     email: string | null;
     pgdb_licence_no: string | null;
     app_linked: boolean;
+    is_gasfitter: boolean;
+    rate_plumbing: number | null;
+    rate_gas: number | null;
     booked_ahead: number;
     home_address: string | null;
     home_set: boolean;
@@ -201,6 +204,9 @@ export type PlumberChanges = Partial<{
   shift_start: string;
   shift_end: string;
   active: boolean;
+  is_gasfitter: boolean;
+  rate_plumbing: number | null;
+  rate_gas: number | null;
 }>;
 export const savePlumber = (id: string | null, changes: PlumberChanges) =>
   rpc<{ plumber_id: string; created: boolean }>("office_save_plumber", { p_plumber_id: id, p_changes: changes });
@@ -394,6 +400,7 @@ export type JobMaterialLine = {
 
 export type ExtraLine =
   | { price_book_item_id: string; quantity: number; unit_price?: number }
+  | { labour: "plumbing" | "gas"; quantity: number; unit_price?: number }
   | { description: string; quantity: number; unit_price: number; kind: "labour" | "materials" | "other" };
 
 export const loadPriceBooks = () => rpc<PriceBooks>("office_price_books", {});
@@ -413,3 +420,6 @@ export const setMarkup = (supplierId: string | null, pct: number | null) =>
 export const proposeExtra = (jobId: string, lines: ExtraLine[], note: string | null) =>
   rpc<{ total_incl_gst: number; items: string }>("office_propose_extra", { p_job_id: jobId, p_lines: lines, p_note: note });
 export const loadJobMaterials = (jobId: string) => rpc<JobMaterialLine[]>("office_job_materials", { p_job_id: jobId });
+
+export type LabourRates = { plumber: string; is_gasfitter: boolean; plumbing: number | null; gas: number | null };
+export const loadLabourRates = (jobId: string) => rpc<LabourRates | null>("office_labour_rates", { p_job_id: jobId });

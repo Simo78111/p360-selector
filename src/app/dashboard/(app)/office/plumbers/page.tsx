@@ -88,6 +88,14 @@ export default async function PlumbersPage({ searchParams }: Props) {
                     {p.email && ` · ${p.email}`}
                     {p.pgdb_licence_no && ` · PGDB ${p.pgdb_licence_no}`}
                   </p>
+                  <p className="text-sm">
+                    <span className={`mr-2 rounded-full px-2 py-0.5 text-xs font-semibold ${p.is_gasfitter ? "bg-orange-100 text-orange-900" : "bg-aqua-pale text-aqua-deep"}`}>
+                      {p.is_gasfitter ? "Plumber + gas fitter" : "Plumber"}
+                    </span>
+                    {p.rate_plumbing ? `$${Number(p.rate_plumbing).toFixed(2)}/h plumbing` : <span className="text-amber-800">no plumbing rate</span>}
+                    {p.is_gasfitter &&
+                      (p.rate_gas ? ` · $${Number(p.rate_gas).toFixed(2)}/h gas` : <span className="text-amber-800"> · no gas rate</span>)}
+                  </p>
                   <p className="text-xs text-slate">
                     {p.shift} · {p.home_address ? `home: ${p.home_address}` : "no home address"} ·{" "}
                     {p.app_linked ? (
@@ -171,6 +179,24 @@ function PlumberForm({ plumber: p }: { plumber?: Plumber }) {
           <input id={`end-${k}`} name="shiftEnd" type="time" required defaultValue={p?.shift_end ?? "16:30"} className={field} />
         </label>
       </div>
+      <fieldset className="grid gap-3 rounded-2xl border border-black/10 bg-white/60 p-3 text-sm sm:col-span-2 sm:grid-cols-3">
+        <legend className="px-1 font-medium">Trade and hourly rates (excl GST)</legend>
+        <label className="flex items-center gap-2 self-end pb-2">
+          <input id={`gas-${k}`} name="gasfitter" type="checkbox" defaultChecked={p?.is_gasfitter} className="h-4 w-4" />
+          Also a gas fitter
+        </label>
+        <label>
+          <span className="mb-1 block">Plumbing $/hour</span>
+          <input id={`rate-plumbing-${k}`} name="ratePlumbing" inputMode="decimal" defaultValue={p?.rate_plumbing ?? ""} placeholder="e.g. 95" className={field} />
+        </label>
+        <label>
+          <span className="mb-1 block">Gas fitting $/hour</span>
+          <input id={`rate-gas-${k}`} name="rateGas" inputMode="decimal" defaultValue={p?.rate_gas ?? ""} placeholder="gas fitters only" className={field} />
+        </label>
+        <p className="text-xs text-slate sm:col-span-3">
+          Labour on extra work is charged at these rates. Gas jobs only go to gas fitters.
+        </p>
+      </fieldset>
       <label className="text-sm">
         <span className="mb-1 block font-medium">Home address</span>
         <input

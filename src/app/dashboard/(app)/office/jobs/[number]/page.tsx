@@ -15,9 +15,11 @@ import {
   aucklandToday,
   loadJob,
   loadJobMaterials,
+  loadLabourRates,
   officeEnabled,
   type JobDetail,
   type JobMaterialLine,
+  type LabourRates,
   type TimelineEntry,
 } from "@/lib/office";
 
@@ -41,9 +43,10 @@ export default async function JobPage({ params, searchParams }: Props) {
 
   let job: JobDetail | null;
   let materials: JobMaterialLine[] = [];
+  let rates: LabourRates | null = null;
   try {
     job = await loadJob(n);
-    if (job) materials = await loadJobMaterials(job.job_id);
+    if (job) [materials, rates] = await Promise.all([loadJobMaterials(job.job_id), loadLabourRates(job.job_id)]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -260,7 +263,7 @@ export default async function JobPage({ params, searchParams }: Props) {
                   Add materials from the price books, labour or anything else. {job.customer.split(" ")[0]} is texted the price
                   and replies YES; approved work goes on the invoice.
                 </p>
-                <ExtraWorkBuilder jobId={job.job_id} firstName={job.customer.split(" ")[0]} pending={extraPending} />
+                <ExtraWorkBuilder jobId={job.job_id} firstName={job.customer.split(" ")[0]} pending={extraPending} rates={rates} />
               </div>
             ) : (
               materials.length === 0 && <p className="mt-3 text-sm text-slate">No extra work or materials on this job.</p>

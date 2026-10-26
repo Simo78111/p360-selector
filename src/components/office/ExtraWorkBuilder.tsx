@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { searchMaterialsAction, sendExtraWorkAction } from "@/app/dashboard/price-book-actions";
-import type { ExtraLine, Material } from "@/lib/office";
+import type { ExtraLine, LabourRates, Material } from "@/lib/office";
 
 type Line = {
   key: string;
@@ -15,12 +15,23 @@ type Line = {
   unitPrice: number;   // excl GST
   cost?: number;
   kind: "materials" | "labour" | "other";
+  labour?: "plumbing" | "gas";
 };
 
 const $ = (n: number) => `$${n.toFixed(2)}`;
 const input = "rounded-full border border-black/10 bg-white px-3 py-1.5 text-sm";
 
-export function ExtraWorkBuilder({ jobId, firstName, pending }: { jobId: string; firstName: string; pending: boolean }) {
+export function ExtraWorkBuilder({
+  jobId,
+  firstName,
+  pending,
+  rates,
+}: {
+  jobId: string;
+  firstName: string;
+  pending: boolean;
+  rates: LabourRates | null;
+}) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Material[]>([]);
@@ -54,8 +65,14 @@ export function ExtraWorkBuilder({ jobId, firstName, pending }: { jobId: string;
     });
     setMsg(null);
   };
-  const addOther = (kind: "labour" | "other") =>
-    setLines((ls) => [...ls, { key: `${kind}-${Date.now()}`, description: kind === "labour" ? "Labour" : "", quantity: 1, unitPrice: 0, kind }]);
+  const addOther = () =>
+    setLines((ls) => [...ls, { key: `other-${Date.now()}`, description: "", quantity: 1, unitPrice: 0, kind: "other" }]);
+  const addLabour = (labour: "plumbing" | "gas") =>
+    setLines((ls) => [...ls, {
+      key: `${labour}-${Date.now()}`, labour, kind: "labour", quantity: 1,
+      description: labour === "gas" ? "Gas fitting labour" : "Plumbing labour",
+      unitPrice: Number((labour === "gas" ? rates?.gas : rates?.plumbing) ?? 0),
+    }]);
   const update = (key: string, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
   const excl = lines.reduce((s, l) => s + Math.round(l.quantity * l.unitPrice * 100) / 100, 0);
@@ -67,7 +84,9 @@ export function ExtraWorkBuilder({ jobId, firstName, pending }: { jobId: string;
     const payload: ExtraLine[] = lines.map((l) =>
       l.itemId
         ? { price_book_item_id: l.itemId, quantity: l.quantity, unit_price: l.unitPrice }
-        : { description: l.description.trim(), quantity: l.quantity, unit_price: l.unitPrice, kind: l.kind },
+        : l.labour
+          ? { labour: l.labour, quantity: l.quantity, unit_price: l.unitPrice }
+          : { description: l.description.trim(), quantity: l.quantity, unit_price: l.unitPrice, kind: l.kind },
     );
     const r = await sendExtraWorkAction(jobId, payload, note);
     setBusy(false);
@@ -139,19 +158,27 @@ export function ExtraWorkBuilder({ jobId, firstName, pending }: { jobId: string;
                         {l.description}
                         <span className="block font-mono text-xs text-slate">{l.code} · cost {$(l.cost ?? 0)}</span>
                       </>
+                    ) : l.labour ? (
+                      <>
+                        {l.description}
+                        <span className="block text-xs text-slate">
+                          hours · {rates?.plumber}&apos;s rate{" "}
+                          {(l.labour === "gas" ? rates?.gas : rates?.plumbing) ? "" : "isn't set: type one"}
+                        </span>
+                      </>
                     ) : (
                       <input
                         aria-label="Description"
                         value={l.description}
                         onChange={(e) => update(l.key, { description: e.target.value })}
-                        placeholder={l.kind === "labour" ? "Labour" : "What it is"}
+                        placeholder="What it is"
                         className={`${input} w-full`}
                       />
                     )}
                   </td>
                   <td className="py-2 pr-2">
                     <input
-                      aria-label="Quantity"
+                      aria-label={l.labour ? "Hours" : "Quantity"}
                       type="number"
                       min="0.25"
                       step="0.25"
@@ -185,10 +212,19 @@ export function ExtraWorkBuilder({ jobId, firstName, pending }: { jobId: string;
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => addOther("labour")} className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:border-ink">
-          + Labour
-        </button>
-        <button type="button" onClick={() => addOther("other")} className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:border-ink">
+        {rates ? (
+          <>
+            <button type="button" onClick={() => addLabour("plumbing")} className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:border-ink">
+              + Plumbing labour{rates.plumbing ? ` (${$(Number(rates.plumbing))}/h)` : ""}
+            </button>
+            {rates.is_gasfitter && (
+              <button type="button" onClick={() => addLabour("gas")} className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:border-ink">
+                + Gas fitting labour{rates.gas ? ` (${$(Number(rates.gas))}/h)` : ""}
+              </button>
+            )}
+          </>
+        ) : null}
+        <button type="button" onClick={() => addOther()} className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:border-ink">
           + Something not in the price book
         </button>
       </div>

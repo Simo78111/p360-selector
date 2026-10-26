@@ -129,7 +129,9 @@ The human side of the booking engine, behind the same owner login. Needs the thr
   on Plumbers). `tests/jobs_editing_test.py` checks all of this against a local engine.
 
 - **Plumbers**: add plumbers (name, mobile, email, PGDB number, shift, home address) and, with a
-  password, make their plumber-app login (Supabase Auth admin on the engine). Edit them, reset the app
+  password, make their plumber-app login (Supabase Auth admin on the engine). Tick "Also a gas fitter"
+  and set plumbing and gas fitting hourly rates; gas jobs only go to gas fitters, and labour on extra
+  work is charged at the job's plumber's rate. Edit them, reset the app
   password, or make them inactive (only once their booked jobs are moved). Also the switch that plans
   routes from home (off by default), and callbacks per plumber. `tests/plumbers_test.py` checks it;
   locally the gateway fakes the Auth admin API.
