@@ -215,3 +215,25 @@ The marketing agent (engine migration 38 and its `marketing-agent` function) dra
   them, approved posts wait on the page to copy and post by hand. `/api/engine/marketing` retries anything left
   half-published (daily Vercel cron, and the engine can nudge it).
 - Test: `python3 tests/marketing_test.py` (local engine with marketing drafts; site on :3360).
+
+## Office screen (/screen/&lt;link&gt;)
+
+A big-screen view for the TV in the office, for the Auckland booking engine (engine migration 39). Make the link in
+**Settings → Office screen**, open it in a browser on the computer connected to the TV, and click once: it goes full
+screen and turns on the chime for new urgent items.
+
+- **Top:** revenue today and this week (excl GST; progress bars once targets are set in Settings), jobs done of jobs
+  booked, money owed and overdue.
+- **Needs attention:** urgent items first, pulsing red; new urgent items get a ring and a chime.
+- **Plumbers today:** each plumber's current job (on the way / on site / minutes over), next job and how late it's
+  running, jobs done, open alerts, and a warning if their phone hasn't sent a location for 30+ minutes.
+- **New jobs (24h):** Priority jobs in red, Flexi and callbacks marked, and whether each has a time yet.
+- **Bottom:** paid today, quotes and extra work waiting on customers, jobs waiting for a time, Flexi pool, gaps being
+  filled, reviews asked this week, marketing drafts to approve.
+
+It refreshes every 30 seconds, shows "Not updating" if the connection drops for 2 minutes, keeps the computer's screen
+awake, and reloads itself twice a day to pick up website changes. It scales to the screen's resolution (1080p, 4K or a
+smaller monitor). Read-only, no password on the TV: the link is the key, so **Make a new link** if it gets out (the old
+one stops working at once) or **Switch off**. Customers show as first name and suburb only.
+
+Test: `python3 tests/screen_test.py` (local engine with the screen seed; site on :3360).

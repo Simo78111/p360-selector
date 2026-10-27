@@ -2,6 +2,9 @@ import { savePlumberGasAction, saveSettingsAction, saveSupplierAction } from "@/
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { loadSettings, type Settings } from "@/lib/automation";
 import { officeEnabled } from "@/lib/office";
+import { loadScreenSettings, type ScreenSettings } from "@/lib/screen";
+import { screenLinkAction, screenSettingsAction } from "@/app/dashboard/screen-actions";
+import { headers } from "next/headers";
 
 export const metadata = { title: "Settings" };
 
@@ -25,12 +28,16 @@ export default async function SettingsPage({ searchParams }: Props) {
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let s: Settings;
+  let screen: ScreenSettings;
   try {
-    s = await loadSettings();
+    [s, screen] = await Promise.all([loadSettings(), loadScreenSettings()]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
   const gasfitters = s.plumbers.filter((p) => p.is_gasfitter);
+  const h = await headers();
+  const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || `https://${h.get("host") ?? "www.plumbing360.nz"}`;
+  const screenUrl = screen.token ? `${origin}/screen/${screen.token}` : null;
 
   return (
     <div className="space-y-6">
@@ -169,6 +176,46 @@ export default async function SettingsPage({ searchParams }: Props) {
           <button className="rounded-full bg-ink px-6 py-3 text-sm font-semibold text-white">Save settings</button>
         </div>
       </form>
+
+      <section id="screen" className="scroll-mt-24 rounded-2xl bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-bold">Office screen</h2>
+        <p className="mt-1 max-w-3xl text-sm text-slate">
+          A big-screen view for the TV in the office: what needs attention, each plumber&apos;s day, new jobs and the money.
+          Open the link on the computer connected to the TV and click once (full screen, and the chime for urgent items).
+          The link is the only key — anyone with it can see the screen (customers show as first name and suburb only),
+          so make a new one if it gets out.
+        </p>
+        {screenUrl ? (
+          <div className="mt-4 space-y-3">
+            <input readOnly value={screenUrl} aria-label="Office screen link" className={`${field} font-mono text-xs`} />
+            <div className="flex flex-wrap gap-2">
+              <a href={screenUrl} target="_blank" rel="noreferrer" className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">Open the screen</a>
+              <form action={screenLinkAction}><input type="hidden" name="on" value="1" />
+                <button className="rounded-full bg-mist px-4 py-2 text-sm font-semibold">Make a new link</button></form>
+              <form action={screenLinkAction}><input type="hidden" name="on" value="0" />
+                <button className="rounded-full px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Switch off</button></form>
+            </div>
+          </div>
+        ) : (
+          <form action={screenLinkAction} className="mt-4"><input type="hidden" name="on" value="1" />
+            <button className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">Make the screen link</button></form>
+        )}
+        <form action={screenSettingsAction} className="mt-5 grid items-end gap-4 sm:grid-cols-4">
+          <div>
+            <label className={label} htmlFor="target_day">Daily revenue target ($ excl GST)</label>
+            <input id="target_day" name="target_day" inputMode="decimal" defaultValue={screen.target_day ?? ""} placeholder="Not set" className={field} />
+          </div>
+          <div>
+            <label className={label} htmlFor="target_week">Weekly revenue target ($ excl GST)</label>
+            <input id="target_week" name="target_week" inputMode="decimal" defaultValue={screen.target_week ?? ""} placeholder="Not set" className={field} />
+          </div>
+          <label className="flex items-center gap-2 pb-2 text-sm font-medium">
+            <input type="checkbox" name="chime" defaultChecked={screen.chime} className="h-4 w-4" /> Chime for new urgent items
+          </label>
+          <button className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">Save</button>
+          <p className={`${hint} sm:col-span-4`}>Leave the targets empty until you know them: the screen then shows the number of invoices and how this week compares with last week instead.</p>
+        </form>
+      </section>
 
       <section className="rounded-2xl bg-white p-5 sm:p-6">
         <h2 className="text-lg font-bold">Ordering from suppliers</h2>
