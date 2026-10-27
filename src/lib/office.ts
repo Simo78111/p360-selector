@@ -113,6 +113,9 @@ export type AttentionItem = {
   job_number: number | null;
   raised_local: string;
   waiting_min: number;
+  ai_summary: string | null;
+  ai_reply: string | null;
+  ai_sent: boolean | null;
 };
 
 export const officeEnabled = () => engine() !== null;
@@ -142,7 +145,7 @@ export const loadJob = (jobNumber: number) => rpc<JobDetail | null>("office_job"
 export async function loadAttention(): Promise<AttentionItem[]> {
   const { data, error } = await db()
     .from("needs_attention")
-    .select("source, id, severity, kind, message, job_number, raised_local, waiting_min");
+    .select("source, id, severity, kind, message, job_number, raised_local, waiting_min, ai_summary, ai_reply, ai_sent");
   if (error) throw new Error(error.message);
   return (data ?? []) as AttentionItem[];
 }
@@ -496,3 +499,11 @@ export async function downloadPhoto(path: string): Promise<Buffer> {
 
 export const notePhotosEmailed = (jobId: string, to: string, count: number) =>
   rpc<null>("office_photos_emailed", { p_job_id: jobId, p_to: to, p_count: count });
+
+// ── Customer texts: the assistant, office replies, test-mode texts ───────
+
+export type TextSettings = { sms_mode: "test" | "live" | string; ai_replies: "off" | "suggest" | "auto"; ai_connected: boolean };
+export const loadTextSettings = () => rpc<TextSettings>("office_text_settings", {});
+export const setAiReplies = (mode: string) => rpc<null>("office_set_ai_replies", { p_mode: mode });
+export const replyToText = (actionId: string, text: string) => rpc<{ sent: boolean }>("office_reply_text", { p_action_id: actionId, p_text: text });
+export const simulateText = (jobId: string, body: string) => rpc<{ action: string }>("office_simulate_text", { p_job_id: jobId, p_body: body });

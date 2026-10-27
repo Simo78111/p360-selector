@@ -6,6 +6,7 @@ import {
   cancelJobAction,
   moveJobAction,
   returnVisitAction,
+  simulateTextAction,
   updateJobAction,
 } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, TierLabel } from "@/components/office/bits";
@@ -19,12 +20,14 @@ import {
   loadJobPhotos,
   loadJobVisit,
   loadLabourRates,
+  loadTextSettings,
   officeEnabled,
   type JobDetail,
   type JobMaterialLine,
   type JobPhoto,
   type Visit,
   type LabourRates,
+  type TextSettings,
   type TimelineEntry,
 } from "@/lib/office";
 
@@ -50,15 +53,17 @@ export default async function JobPage({ params, searchParams }: Props) {
   let materials: JobMaterialLine[] = [];
   let rates: LabourRates | null = null;
   let visit: Visit | null = null;
+  let texts: TextSettings | null = null;
   let photos: JobPhoto[] = [];
   let photoError: string | null = null;
   try {
     job = await loadJob(n);
     if (job) {
-      [materials, rates, visit] = await Promise.all([
+      [materials, rates, visit, texts] = await Promise.all([
         loadJobMaterials(job.job_id),
         loadLabourRates(job.job_id),
         loadJobVisit(job.job_id),
+        loadTextSettings().catch(() => null),
       ]);
       photos = await loadJobPhotos(job.job_id).catch((e) => {
         photoError = e instanceof Error ? e.message : String(e);
@@ -350,6 +355,23 @@ export default async function JobPage({ params, searchParams }: Props) {
         </div>
 
         <aside className="space-y-4">
+          {texts?.sms_mode === "test" && (
+            <section className="rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50 p-5">
+              <h2 className="font-bold">Test: text as {job.customer.split(" ")[0]}</h2>
+              <p className="mt-1 text-sm text-slate">
+                Texts are in test mode, so you can pretend to be the customer. Try YES to approve extra work, or a question like
+                &ldquo;what time are you coming?&rdquo;. The reply shows under History.
+              </p>
+              <form action={simulateTextAction} className="mt-3 space-y-2">
+                <input type="hidden" name="jobId" value={job.job_id} />
+                <input type="hidden" name="back" value={here} />
+                <label className="sr-only" htmlFor="sim-text">Customer&apos;s text</label>
+                <textarea id="sim-text" name="body" rows={2} required maxLength={500} placeholder="Their text…"
+                          className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm" />
+                <button className="rounded-full bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Send as customer</button>
+              </form>
+            </section>
+          )}
           {waiting && job.status !== "offered" && (
             <form action={bookNowAction} className="rounded-2xl bg-white p-5">
               <h2 className="font-bold">Book a time</h2>

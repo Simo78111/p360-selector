@@ -117,7 +117,12 @@ The human side of the booking engine, behind the same owner login. Needs the thr
 
 - **Today**: each plumber's day in order with live status, ETAs and a Google Maps route link, plus
   jobs waiting for a time (book the first free slot, or add to a plumber's day).
-- **Needs attention**: the engine's queue of things it couldn't handle. Mark each one done.
+- **Needs attention**: the engine's queue of things it couldn't handle. Mark each one done. The
+  **text assistant** switch (Answer / Suggest only / Off) is here: Claude answers routine customer
+  texts and hands the rest over with a summary; reply to any customer text from its card (the
+  assistant's suggestion is pre-filled). While texts are in test mode, each job page has **Test:
+  text as the customer**. `tests/text_replies_test.py` checks it against a local engine and the
+  `answer-text` function with a fake Claude.
 - **Finished jobs**: click anywhere on a job's row to open it. **What happened** shows the visit in
   order with times (planned, on the way, arrived early/late, ran long, finished and time on site, the
   plumber's note, invoice sent, paid). **Photos**: add before/after photos (shrunk to 1600px in the

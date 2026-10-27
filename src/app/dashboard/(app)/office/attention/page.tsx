@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { resolveAction } from "@/app/dashboard/office-actions";
+import { aiRepliesAction, replyTextAction, resolveAction } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
-import { loadAttention, officeEnabled, type AttentionItem } from "@/lib/office";
+import { loadAttention, loadTextSettings, officeEnabled, type AttentionItem, type TextSettings } from "@/lib/office";
 
 export const metadata = { title: "Needs attention" };
 
@@ -19,6 +19,7 @@ const kindLabel: Record<string, string> = {
   xero_total_differs: "Xero total differs",
   invoice_overpaid: "Overpaid",
   follow_up_recommended: "Follow-up recommended",
+  eta_keeps_moving: "Arrival keeps moving",
 };
 
 const waited = (min: number) =>
@@ -28,8 +29,9 @@ export default async function AttentionPage({ searchParams }: Props) {
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let items: AttentionItem[];
+  let texts: TextSettings;
   try {
-    items = await loadAttention();
+    [items, texts] = await Promise.all([loadAttention(), loadTextSettings()]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -43,6 +45,28 @@ export default async function AttentionPage({ searchParams }: Props) {
         </p>
       </div>
       <Flash ok={ok} err={err} />
+
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4">
+        <div className="text-sm">
+          <p className="font-semibold">Text assistant</p>
+          <p className="text-slate">
+            {texts.ai_replies === "auto"
+              ? "Answers routine customer texts itself (times, invoices, gate codes) and passes everything else to you."
+              : texts.ai_replies === "suggest"
+                ? "Suggests a reply for each customer text. Nothing is sent until you send it."
+                : "Off. Every customer text comes to you."}
+            {texts.sms_mode === "test" && " Texts are in test mode, so nothing reaches customers yet."}
+          </p>
+        </div>
+        <form action={aiRepliesAction} className="flex gap-1 rounded-full bg-mist p-1 text-sm" aria-label="Text assistant">
+          {(["auto", "suggest", "off"] as const).map((m) => (
+            <button key={m} name="mode" value={m} aria-pressed={texts.ai_replies === m}
+                    className={`rounded-full px-3 py-1.5 font-medium ${texts.ai_replies === m ? "bg-ink text-white" : "text-slate hover:text-ink"}`}>
+              {{ auto: "Answer", suggest: "Suggest only", off: "Off" }[m]}
+            </button>
+          ))}
+        </form>
+      </section>
 
       {items.length === 0 ? (
         <p className="rounded-2xl bg-white p-8 text-center text-slate">All clear. Nothing needs you right now.</p>
@@ -62,6 +86,30 @@ export default async function AttentionPage({ searchParams }: Props) {
                   <p className="text-xs text-slate">waiting {waited(item.waiting_min)}</p>
                 </div>
                 <p className="mt-1">{item.message}</p>
+                {item.ai_summary && (
+                  <p className="mt-2 rounded-xl bg-aqua-pale/60 px-3 py-2 text-sm">
+                    <span className="font-semibold">Assistant:</span> {item.ai_summary}
+                    {item.ai_sent && item.ai_reply && <span className="block text-slate">Replied: &ldquo;{item.ai_reply}&rdquo;</span>}
+                  </p>
+                )}
+                {item.kind === "reply_needs_attention" && (
+                  <form action={replyTextAction} className="mt-3 space-y-2">
+                    <input type="hidden" name="id" value={item.id} />
+                    <label className="block text-sm font-medium" htmlFor={`reply-${item.id}`}>
+                      {item.ai_reply && !item.ai_sent ? "Suggested reply (edit if you like)" : "Reply by text"}
+                    </label>
+                    <textarea
+                      id={`reply-${item.id}`}
+                      name="text"
+                      rows={2}
+                      maxLength={480}
+                      required
+                      defaultValue={item.ai_reply && !item.ai_sent ? item.ai_reply : ""}
+                      className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
+                    />
+                    <button className="rounded-full bg-aqua px-4 py-2 text-sm font-semibold text-ink">Send reply and close</button>
+                  </form>
+                )}
                 {item.job_number && (
                   <Link href={`/dashboard/office/jobs/${item.job_number}`} className="mt-1 inline-block text-sm font-medium text-aqua-deep hover:underline">
                     Open job #{item.job_number} →

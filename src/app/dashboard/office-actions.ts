@@ -22,7 +22,10 @@ import {
   updateJob,
   type BulkResult,
   type JobChanges,
+  replyToText,
   savePlumber,
+  setAiReplies,
+  simulateText,
   setAppLogin,
   setPlumberHome,
   setRouteFromHome,
@@ -356,5 +359,40 @@ export async function bookCallbackAction(form: FormData) {
     const r = await bookCallback(jobId, reason, plumberId && date ? plumberId : null, plumberId && date ? date : null);
     const when = r.start_local ? ` for ${r.start_local}` : r.reason === "no_room" ? ", but there's no room yet: book it by hand" : "";
     return `Callback job #${r.job_number} booked${when}, no charge. The customer has been texted.`;
+  });
+}
+
+// ── Customer texts ───────────────────────────────────────────────────────
+
+export async function replyTextAction(form: FormData) {
+  const id = String(form.get("id") ?? "");
+  const text = String(form.get("text") ?? "").trim();
+  await run("/dashboard/office/attention", async () => {
+    await replyToText(id, text);
+    return "Reply sent.";
+  });
+}
+
+export async function aiRepliesAction(form: FormData) {
+  const mode = String(form.get("mode") ?? "");
+  await run("/dashboard/office/attention", async () => {
+    await setAiReplies(mode);
+    return {
+      auto: "The assistant now answers routine texts itself and passes the rest to you.",
+      suggest: "The assistant now only suggests replies; you send them.",
+      off: "The assistant is off. Every text comes to you.",
+    }[mode] ?? "Saved.";
+  });
+}
+
+export async function simulateTextAction(form: FormData) {
+  const jobId = String(form.get("jobId") ?? "");
+  const back = safePath(form.get("back"));
+  const body = String(form.get("body") ?? "").trim().slice(0, 500);
+  await run(back, async () => {
+    const r = await simulateText(jobId, body);
+    return r.action === "needs_attention"
+      ? "Text received. The assistant is answering it now: refresh in about 10 seconds, or see Needs attention."
+      : `Text received (${r.action.replaceAll("_", " ")}).`;
   });
 }
