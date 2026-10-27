@@ -41,9 +41,9 @@ export default async function AttentionPage({ searchParams }: Props) {
   let refs: AttentionRefs;
   const quotes: Record<string, Quote | null> = {};
   try {
-    [items, texts, refs] = await Promise.all([loadAttention(), loadTextSettings(), loadAttentionRefs()]);
+    [items, texts, refs] = await Promise.all([loadAttention(), loadTextSettings(), loadAttentionRefs().catch(() => ({}))]);
     await Promise.all(Object.values(refs).filter((r) => r.quote_id).map(async (r) => {
-      quotes[r.quote_id!] = await loadQuote(r.quote_id!);
+      quotes[r.quote_id!] = await loadQuote(r.quote_id!).catch(() => null);
     }));
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;

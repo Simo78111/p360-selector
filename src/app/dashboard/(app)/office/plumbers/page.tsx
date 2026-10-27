@@ -15,7 +15,7 @@ export default async function PlumbersPage({ searchParams }: Props) {
   let off: PlumberOff[];
   const today = aucklandToday();
   try {
-    [info, off] = await Promise.all([loadPlumbers(), loadPlumbersOff(today, shiftDate(today, 30))]);
+    [info, off] = await Promise.all([loadPlumbers(), loadPlumbersOff(today, shiftDate(today, 30)).catch(() => [])]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
