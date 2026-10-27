@@ -40,6 +40,8 @@ export const bookingSchema = z.object({
   time: z.enum(timesOfDay.map((t) => t.id) as [string, ...string[]]),
   // Flexi: OK to text offers when a plumber is nearby (required for Flexi).
   poolConsent: z.boolean().default(false),
+  // Maintenance reminders and offers (optional, never pre-ticked).
+  remindersConsent: z.boolean().default(false),
   terms: z.literal(true, { error: "Please accept the booking terms" }),
 }).superRefine((b, ctx) => {
   for (const [path, message] of Object.entries(tierRuleErrors(b))) ctx.addIssue({ code: "custom", path: [path], message });

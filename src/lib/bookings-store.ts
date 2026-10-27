@@ -74,6 +74,7 @@ const fromRow = (r: Row): Booking => ({
   time: r.time_of_day as string,
   tier: (r.tier as Booking["tier"]) ?? "standard",
   poolConsent: Boolean(r.pool_consent),
+  remindersConsent: false,
   engine: r.engine_status
     ? { status: r.engine_status as string, jobNumber: r.engine_job_number as number | null, when: r.scheduled_for as string | null }
     : undefined,

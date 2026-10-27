@@ -126,6 +126,10 @@ export async function sendToEngine(
       })
       .eq("id", jobId);
     if (updateError) console.error("[engine] saving preferences failed", b.reference, updateError);
+    if (b.remindersConsent) {
+      const { error: consentError } = await db.rpc("website_marketing_consent", { p_job_id: jobId });
+      if (consentError) console.error("[engine] saving reminders consent failed", b.reference, consentError);
+    }
 
     // Flexi waits in the standby pool; the scheduler books it in before its window ends.
     if (b.tier === "flexi") return { status: "booked", jobId, jobNumber, scheduled: false, when: tierInfo.flexi.when };

@@ -17,6 +17,7 @@ type Email = {
   text: string;
   replyTo?: string;
   attachments?: { filename: string; content: string }[];
+  headers?: Record<string, string>;
 };
 
 /** Returns false when skipped because email isn't set up; throws if Resend rejects it. */
@@ -37,6 +38,7 @@ async function send(email: Email): Promise<boolean> {
       text: email.text,
       reply_to: email.replyTo,
       attachments: email.attachments,
+      headers: email.headers,
     }),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
@@ -44,8 +46,11 @@ async function send(email: Email): Promise<boolean> {
 }
 
 /** An email the booking engine queued (supplier order, gas certificate, daily summary). */
-export async function sendEngineEmail(e: { to: string; to_name?: string | null; subject: string; text: string; html?: string | null; reply_to?: string | null }) {
+export async function sendEngineEmail(e: { to: string; to_name?: string | null; subject: string; text: string; html?: string | null; reply_to?: string | null;
+                                        list_unsubscribe?: string | null }) {
   return send({
+    // marketing emails: one-click unsubscribe in Gmail/Outlook (the link opens our unsubscribe page)
+    headers: e.list_unsubscribe ? { "List-Unsubscribe": `<${e.list_unsubscribe}>` } : undefined,
     to: e.to_name ? `${e.to_name.replace(/[<>"]/g, "")} <${e.to}>` : e.to,
     subject: e.subject,
     text: e.text,

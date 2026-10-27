@@ -45,6 +45,7 @@ const blank: Fields = {
   days: [],
   time: "any",
   poolConsent: false,
+  remindersConsent: false,
   terms: false,
 };
 
@@ -52,7 +53,7 @@ const steps: { title: string; fields: (keyof Fields)[] }[] = [
   { title: "The job", fields: ["description"] },
   { title: "Where", fields: ["street", "suburb", "postcode", "relationship", "access"] },
   { title: "When", fields: ["tier", "days", "time", "poolConsent"] },
-  { title: "Your details", fields: ["name", "phone", "email"] },
+  { title: "Your details", fields: ["name", "phone", "email", "remindersConsent"] },
   { title: "Review and pay", fields: ["terms"] },
 ];
 
@@ -429,6 +430,18 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
                   </Field>
                 </div>
                 <p className="text-sm text-slate">We text you about your booking at this number.</p>
+                <label className="flex items-start gap-3 rounded-2xl bg-mist p-4">
+                  <input
+                    type="checkbox"
+                    checked={fields.remindersConsent}
+                    onChange={(e) => set("remindersConsent", e.target.checked)}
+                    className="mt-1 h-5 w-5 accent-aqua-deep"
+                  />
+                  <span className="text-sm">
+                    <strong>Send me maintenance reminders</strong> (optional) — e.g. when a drain or hot water cylinder is due
+                    a check, or a seasonal offer. A few a year at most; reply STOP or unsubscribe any time.
+                  </span>
+                </label>
               </>
             )}
 

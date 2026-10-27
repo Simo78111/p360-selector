@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     days: form.getAll("days"),
     terms: form.get("terms") === "true",
     poolConsent: form.get("poolConsent") === "true",
+    remindersConsent: form.get("remindersConsent") === "true",
   });
   if (!parsed.success) {
     const errors: Record<string, string> = {};

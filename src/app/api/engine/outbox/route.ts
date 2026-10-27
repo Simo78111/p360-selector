@@ -11,7 +11,8 @@ export const maxDuration = 60;
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
-type Queued = { id: string; to: string; to_name: string | null; subject: string; text: string; html: string | null; reply_to: string | null };
+type Queued = { id: string; to: string; to_name: string | null; subject: string; text: string; html: string | null; reply_to: string | null;
+                list_unsubscribe: string | null };
 
 async function run() {
   const db = engine();

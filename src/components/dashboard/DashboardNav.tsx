@@ -12,6 +12,7 @@ const items = [
   { href: "/dashboard/office/orders", label: "Orders" },
   { href: "/dashboard/office/certificates", label: "Gas certs" },
   { href: "/dashboard/office/price-books", label: "Price books" },
+  { href: "/dashboard/office/marketing", label: "Marketing" },
   { href: "/dashboard/office/settings", label: "Settings" },
   { href: "/dashboard/office/xero", label: "Xero" },
   { href: "/dashboard", label: "Website", exact: true },

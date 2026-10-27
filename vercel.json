@@ -11,6 +11,10 @@
     {
       "path": "/api/xero/sync",
       "schedule": "30 19 * * *"
+    },
+    {
+      "path": "/api/engine/marketing",
+      "schedule": "15 20 * * *"
     }
   ]
 }

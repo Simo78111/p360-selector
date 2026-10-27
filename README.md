@@ -192,3 +192,26 @@ Go to `/dashboard` and log in with `DASHBOARD_PASSWORD`. Changing the password l
 Until Supabase is connected the dashboard shows **sample data** with a banner saying so. Running locally with no password set lets you in without logging in; the live site stays locked until `DASHBOARD_PASSWORD` is set.
 
 Tracking is anonymous: a random ID per browser tab, the page, and which job finder options were picked. No names, emails or IP addresses. Visits to `/dashboard` aren't counted.
+
+## Marketing (/dashboard/office/marketing)
+
+The marketing agent (engine migration 38 and its `marketing-agent` function) drafts four kinds of marketing.
+**Nothing goes out until you approve it** on the Marketing page, where every draft can be edited first.
+
+| Draft | When | On approval |
+|---|---|---|
+| Reminder | Daily, for customers due a drain, hot water or gas check (rules on the page) | Text and/or email to each, 9am–7pm Mon–Sat |
+| Post | Weekly, from finished jobs with a plumber's after photo | Facebook, Instagram, Google listing |
+| Area page | Weekly, a page per suburb (list in Settings) | Live at `/areas/<slug>` and in the sitemap |
+| Meta ad | Weekly, only when the next week has spare hours | Created in Meta Ads Manager (paused unless "start straight away" is on) |
+
+- Reminders only go to customers who ticked **Send me maintenance reminders** on the booking form (unticked by
+  default), at most one marketing message every 60 days, never after STOP or unsubscribe. Emails link to
+  `/unsubscribe/<token>`, which asks for a button press so link-scanners can't unsubscribe people.
+- The engine checks everything, whoever wrote it: texts need the business name and "Reply STOP to opt out"; posts
+  can't name the customer or give the street; area pages can't claim years in business, stars or "cheapest"; ads
+  must link here, stay in Auckland and inside the daily and monthly budget caps.
+- Publishing switches on per channel with the `META_*` and `GOOGLE_BUSINESS_*` keys (see `.env.example`). Without
+  them, approved posts wait on the page to copy and post by hand. `/api/engine/marketing` retries anything left
+  half-published (daily Vercel cron, and the engine can nudge it).
+- Test: `python3 tests/marketing_test.py` (local engine with marketing drafts; site on :3360).
