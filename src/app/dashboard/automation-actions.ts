@@ -10,7 +10,10 @@ import {
   markPlumberBack,
   markPlumberOff,
   matchBill,
+  officePartsCancel,
+  officePartsReady,
   orderPlaced,
+  saveBranch,
   resendGasCertificate,
   savePlumberGas,
   saveSettings,
@@ -131,6 +134,35 @@ export async function orderPlacedAction(form: FormData) {
   await run(safePath(form.get("back"), "/dashboard/office/orders"), async () => {
     await orderPlaced(str(form, "poId"));
     return "Marked as placed.";
+  });
+}
+
+// ---------- same-day couriers ----------
+export async function partsReadyOfficeAction(form: FormData) {
+  await run("/dashboard/office/orders", async () => {
+    await officePartsReady(str(form, "deliveryId"));
+    return "Booking the courier now.";
+  });
+}
+
+export async function partsCancelAction(form: FormData) {
+  await run("/dashboard/office/orders", async () => {
+    await officePartsCancel(str(form, "deliveryId"));
+    return "Courier delivery cancelled.";
+  });
+}
+
+const tri = (v: string) => (v === "yes" ? true : v === "no" ? false : null);
+export async function saveBranchAction(form: FormData) {
+  await run("/dashboard/office/orders#branches", async () => {
+    await saveBranch(str(form, "branchId"), {
+      order_email: str(form, "order_email"),
+      urgent_ok: tri(str(form, "urgent_ok")),
+      courier_ok: tri(str(form, "courier_ok")),
+      pick_minutes: num(form, "pick_minutes") ?? 20,
+      active: form.get("active") === "on",
+    });
+    return `${str(form, "name")} saved.`;
   });
 }
 

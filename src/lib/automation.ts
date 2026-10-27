@@ -71,6 +71,8 @@ export type JobCosts = {
   orders: { po_number: string; supplier: string; status: string; estimate: number | null }[];
   bills: { supplier: string | null; number: string | null; date: string | null; total: number | null; matched_by: string | null }[];
   bills_total: number; invoiced: number;
+  couriers?: { branch: string | null; status: string; fee: number | null; sim: boolean; delivered_at: string | null }[];
+  couriers_total?: number;
 };
 export const loadOrders = () => rpc<PurchaseOrder[]>("office_purchase_orders", { p_limit: 100 });
 export const orderPlaced = (id: string) => rpc<null>("office_order_placed", { p_po_id: id });
@@ -140,3 +142,32 @@ export const gasCertNotNeeded = (token: string, reason: string) =>
 // ---------- trend ----------
 export type TouchDay = { date: string; jobs_done: number; human_touches: number; touches_per_job: number | null };
 export const loadTouchTrend = (days = 30) => rpc<TouchDay[]>("office_touch_trend", { p_days: days });
+
+// ---------- same-day parts by courier (Uber Direct) ----------
+export type PartDelivery = {
+  id: string; status: string; job_number: number; branch: string | null; branch_phone: string | null; km: number | null;
+  po_number: string | null; plumber: string | null; fee: number | null; sim: boolean; tracking_url: string | null;
+  courier: string | null; dropoff_eta: string | null; ready_at: string | null; delivered_at: string | null;
+  last_error: string | null; created_at: string;
+};
+export type Branch = {
+  id: string; supplier: string; code: string | null; name: string; address: string; suburb: string | null; postcode: string | null;
+  lat: number | null; lng: number | null; location_checked: boolean; phone: string | null; order_email: string | null;
+  weekday: string; saturday: string; urgent_ok: boolean | null; courier_ok: boolean | null; pick_minutes: number;
+  live_stock: boolean; active: boolean; notes: string | null;
+};
+export type PartsReadyView = {
+  status: string; po_number: string; job_number: number; branch: string; company: string; account: string | null;
+  ready_at: string | null; ready_note: string | null; courier_name: string | null; pickup_eta: string | null;
+  lines: { code: string | null; description: string; quantity: number }[];
+};
+export const loadPartDeliveries = () => rpc<PartDelivery[]>("office_part_deliveries", { p_limit: 50 });
+export const officePartsReady = (id: string) => rpc<{ ok: boolean; status: string }>("office_parts_ready", { p_delivery_id: id });
+export const officePartsCancel = (id: string) => rpc<{ ok: boolean }>("office_parts_cancel", { p_delivery_id: id });
+export const loadBranches = () => rpc<Branch[]>("office_branches");
+export const saveBranch = (id: string, changes: Record<string, unknown>) =>
+  rpc<null>("office_save_branch", { p_branch_id: id, p_changes: changes });
+// the branch's page (the token in the emailed link is the only key)
+export const partsReadyView = (token: string) => rpc<PartsReadyView | null>("parts_ready_view", { p_token: token });
+export const partsReady = (token: string, ok: boolean, note: string | null) =>
+  rpc<{ ok: boolean; status?: string; reason?: string }>("parts_ready", { p_token: token, p_ok: ok, p_note: note, p_by: "branch" });

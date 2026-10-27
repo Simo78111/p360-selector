@@ -281,7 +281,7 @@ export default async function JobPage({ params, searchParams }: Props) {
                   {q.status === "draft" && <QuoteReview quote={q} back={here} />}
                 </div>
               ))}
-              {costs && (costs.orders.length > 0 || costs.bills.length > 0) && (
+              {costs && (costs.orders.length > 0 || costs.bills.length > 0 || (costs.couriers ?? []).length > 0) && (
                 <div className="mt-3 border-t border-black/5 pt-3 text-sm">
                   {costs.orders.map((o) => (
                     <p key={o.po_number}>{o.po_number} · {o.supplier} · {o.status}{o.estimate != null && ` · about $${Number(o.estimate).toFixed(2)}`}</p>
@@ -289,8 +289,15 @@ export default async function JobPage({ params, searchParams }: Props) {
                   {costs.bills.map((b, i) => (
                     <p key={i} className="text-slate">Bill {b.number} · {b.supplier} · ${Number(b.total ?? 0).toFixed(2)}</p>
                   ))}
+                  {(costs.couriers ?? []).map((c, i) => (
+                    <p key={`c${i}`} className="text-slate">
+                      Courier from {c.branch ?? "supplier"} · {c.status}{c.fee != null && ` · $${Number(c.fee).toFixed(2)}`}{c.sim && " (test run)"}
+                    </p>
+                  ))}
                   <p className="mt-2 font-semibold">
-                    Supplier bills ${Number(costs.bills_total).toFixed(2)} · invoiced ${Number(costs.invoiced).toFixed(2)}
+                    Supplier bills ${Number(costs.bills_total).toFixed(2)}
+                    {Number(costs.couriers_total ?? 0) > 0 && ` · couriers $${Number(costs.couriers_total).toFixed(2)}`}
+                    {" "}· invoiced ${Number(costs.invoiced).toFixed(2)}
                     {costs.invoiced > 0 && ` · materials ${Math.round((Number(costs.bills_total) / Number(costs.invoiced)) * 100)}% of the invoice`}
                   </p>
                 </div>
