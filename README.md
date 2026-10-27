@@ -123,6 +123,12 @@ The human side of the booking engine, behind the same owner login. Needs the thr
   assistant's suggestion is pre-filled). While texts are in test mode, each job page has **Test:
   text as the customer**. `tests/text_replies_test.py` checks it against a local engine and the
   `answer-text` function with a fake Claude.
+- **Customer profile**: each job page has **About {name} and the property** — practical notes (gate
+  code, access, pets, parking, water shut-off, hazards, equipment, preferences) from the office,
+  plumbers and the text assistant. Mark a note **Still right**, remove it (its text is wiped), add one,
+  or **Forget this customer's details** (wipes every note; needs the tick box). Keep it to practical
+  details: no children's names or health information. Gate codes only show in the plumber's app on the
+  day of the visit. `tests/profile_test.py` checks it.
 - **Finished jobs**: click anywhere on a job's row to open it. **What happened** shows the visit in
   order with times (planned, on the way, arrived early/late, ran long, finished and time on site, the
   plumber's note, invoice sent, paid). **Photos**: add before/after photos (shrunk to 1600px in the

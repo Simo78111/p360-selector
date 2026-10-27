@@ -507,3 +507,38 @@ export const loadTextSettings = () => rpc<TextSettings>("office_text_settings", 
 export const setAiReplies = (mode: string) => rpc<null>("office_set_ai_replies", { p_mode: mode });
 export const replyToText = (actionId: string, text: string) => rpc<{ sent: boolean }>("office_reply_text", { p_action_id: actionId, p_text: text });
 export const simulateText = (jobId: string, body: string) => rpc<{ action: string }>("office_simulate_text", { p_job_id: jobId, p_body: body });
+
+// ── Customer and property profile ────────────────────────────────────────
+
+export const NOTE_KINDS = {
+  gate_code: { label: "Gate/door code", icon: "🔑" },
+  access: { label: "Getting in", icon: "🚪" },
+  pet: { label: "Pets", icon: "🐕" },
+  parking: { label: "Parking", icon: "🚗" },
+  water_shutoff: { label: "Water shut-off", icon: "🚰" },
+  hazard: { label: "Hazard", icon: "⚠️" },
+  equipment: { label: "Equipment", icon: "🔧" },
+  preference: { label: "Preference", icon: "💬" },
+  other: { label: "Note", icon: "📝" },
+} as const;
+export type NoteKind = keyof typeof NOTE_KINDS;
+
+export type ProfileNote = {
+  id: string;
+  kind: NoteKind;
+  label: string;
+  body: string;
+  about: "property" | "customer";
+  source: string;
+  noted: string;
+  checked: string;
+  stale: boolean;
+  job_number: number | null;
+};
+
+export const loadProfile = (jobId: string) => rpc<ProfileNote[]>("office_profile", { p_job_id: jobId });
+export const addProfileNote = (jobId: string, kind: string, body: string) =>
+  rpc<string>("office_add_profile_note", { p_job_id: jobId, p_kind: kind, p_body: body });
+export const confirmProfileNote = (id: string) => rpc<null>("office_confirm_profile_note", { p_note_id: id });
+export const removeProfileNote = (id: string) => rpc<null>("office_remove_profile_note", { p_note_id: id });
+export const forgetProfile = (jobId: string) => rpc<number>("office_forget_profile", { p_job_id: jobId });

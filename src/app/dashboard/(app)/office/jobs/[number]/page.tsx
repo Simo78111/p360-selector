@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  addNoteAction,
   bookCallbackAction,
+  confirmNoteAction,
+  forgetProfileAction,
+  removeNoteAction,
   bookNowAction,
   cancelJobAction,
   moveJobAction,
@@ -19,6 +23,9 @@ import {
   loadJobMaterials,
   loadJobPhotos,
   loadJobVisit,
+  loadProfile,
+  NOTE_KINDS,
+  type ProfileNote,
   loadLabourRates,
   loadTextSettings,
   officeEnabled,
@@ -54,16 +61,18 @@ export default async function JobPage({ params, searchParams }: Props) {
   let rates: LabourRates | null = null;
   let visit: Visit | null = null;
   let texts: TextSettings | null = null;
+  let profile: ProfileNote[] = [];
   let photos: JobPhoto[] = [];
   let photoError: string | null = null;
   try {
     job = await loadJob(n);
     if (job) {
-      [materials, rates, visit, texts] = await Promise.all([
+      [materials, rates, visit, texts, profile] = await Promise.all([
         loadJobMaterials(job.job_id),
         loadLabourRates(job.job_id),
         loadJobVisit(job.job_id),
         loadTextSettings().catch(() => null),
+        loadProfile(job.job_id),
       ]);
       photos = await loadJobPhotos(job.job_id).catch((e) => {
         photoError = e instanceof Error ? e.message : String(e);
@@ -246,6 +255,8 @@ export default async function JobPage({ params, searchParams }: Props) {
               </ul>
             </section>
           )}
+
+          <Profile notes={profile} jobId={job.job_id} back={here} firstName={job.customer.split(" ")[0]} />
 
           <section className="rounded-2xl bg-white p-5 sm:p-6" id="materials">
             <h2 className="text-lg font-bold">Materials and extra work</h2>
@@ -555,6 +566,78 @@ function WhatHappened({ visit: v, job }: { visit: Visit; job: JobDetail }) {
           ))}
       </dl>
       <p className="mt-3 text-xs text-slate">Every text and update, in order, is under History below.</p>
+    </section>
+  );
+}
+
+function Profile({ notes, jobId, back, firstName }: { notes: ProfileNote[]; jobId: string; back: string; firstName: string }) {
+  const small = "rounded-full border border-black/15 px-3 py-1 text-xs font-medium hover:border-ink";
+  return (
+    <section className="rounded-2xl bg-white p-5 sm:p-6" id="profile" aria-labelledby="profile-h">
+      <h2 id="profile-h" className="text-lg font-bold">About {firstName} and the property</h2>
+      <p className="mt-1 text-sm text-slate">
+        Practical things that make visits smoother. Plumbers see these on the job; gate codes only on the day. Not for
+        children&apos;s names or health details.
+      </p>
+      {notes.length === 0 ? (
+        <p className="mt-4 text-sm text-slate">Nothing noted yet.</p>
+      ) : (
+        <ul className="mt-4 divide-y divide-black/5" aria-label="Profile notes">
+          {notes.map((n) => (
+            <li key={n.id} className="flex flex-wrap items-start justify-between gap-2 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm">
+                  <span aria-hidden className="mr-1.5">{NOTE_KINDS[n.kind]?.icon}</span>
+                  <span className="font-semibold">{n.label}:</span> {n.body}
+                  {n.stale && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">over a year old: check it</span>}
+                </p>
+                <p className="text-xs text-slate">
+                  {n.about === "customer" ? "About the customer" : "About the property"} · {n.source} · {n.noted}
+                  {n.checked !== n.noted && ` · checked ${n.checked}`}
+                  {n.job_number && ` · job #${n.job_number}`}
+                </p>
+              </div>
+              <div className="flex gap-1.5">
+                <form action={confirmNoteAction}>
+                  <input type="hidden" name="noteId" value={n.id} />
+                  <input type="hidden" name="back" value={back} />
+                  <button className={small}>Still right</button>
+                </form>
+                <form action={removeNoteAction}>
+                  <input type="hidden" name="noteId" value={n.id} />
+                  <input type="hidden" name="back" value={back} />
+                  <button className={`${small} hover:border-red-700 hover:text-red-700`} aria-label={`Remove ${n.label}`}>Remove</button>
+                </form>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form action={addNoteAction} className="mt-4 flex flex-wrap gap-2">
+        <input type="hidden" name="jobId" value={jobId} />
+        <input type="hidden" name="back" value={back} />
+        <label className="sr-only" htmlFor="note-kind">Kind of note</label>
+        <select id="note-kind" name="kind" defaultValue="access" className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm">
+          {Object.entries(NOTE_KINDS).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
+        </select>
+        <label className="sr-only" htmlFor="note-body">Note</label>
+        <input id="note-body" name="body" required maxLength={300} placeholder="e.g. Max the labrador, friendly"
+               className="min-w-0 flex-1 rounded-full border border-black/10 px-4 py-2 text-sm" />
+        <button className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">Add note</button>
+      </form>
+      {notes.length > 0 && (
+        <details className="mt-4 text-sm">
+          <summary className="cursor-pointer text-slate hover:text-ink">Customer asked us to forget their details?</summary>
+          <form action={forgetProfileAction} className="mt-2 flex flex-wrap items-center gap-3 rounded-xl bg-red-50 p-3">
+            <input type="hidden" name="jobId" value={jobId} />
+            <input type="hidden" name="back" value={back} />
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="sure" className="h-4 w-4" /> Wipe every note about {firstName} and their property
+            </label>
+            <button className="rounded-full bg-red-700 px-4 py-2 text-sm font-semibold text-white">Wipe notes</button>
+          </form>
+        </details>
+      )}
     </section>
   );
 }

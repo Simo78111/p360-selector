@@ -48,8 +48,9 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Send as customer").click()
     answer(latest_action("The gate code is 4321"))
     page.goto(job_url)
-    expect(page.get_by_text(re.compile(r"Gate code 4321 \(texted"))).to_be_visible()
-    print("2. gate code added to the access notes")
+    expect(page.get_by_label("Profile notes").get_by_text(re.compile("Gate/door code: Gate code 4321"))).to_be_visible()
+    expect(page.get_by_label("Profile notes").get_by_text(re.compile("From a text"))).to_be_visible()
+    print("2. gate code added to the customer's profile")
 
     # 3. Reschedule → handed to the office with a holding reply; office replies and closes it
     page.fill("#sim-text", "Can you come Thursday instead?")

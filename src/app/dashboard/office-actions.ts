@@ -22,6 +22,11 @@ import {
   updateJob,
   type BulkResult,
   type JobChanges,
+  addProfileNote,
+  confirmProfileNote,
+  forgetProfile,
+  removeProfileNote,
+  NOTE_KINDS,
   replyToText,
   savePlumber,
   setAiReplies,
@@ -394,5 +399,43 @@ export async function simulateTextAction(form: FormData) {
     return r.action === "needs_attention"
       ? "Text received. The assistant is answering it now: refresh in about 10 seconds, or see Needs attention."
       : `Text received (${r.action.replaceAll("_", " ")}).`;
+  });
+}
+
+// ── Customer and property profile ────────────────────────────────────────
+
+export async function addNoteAction(form: FormData) {
+  const back = safePath(form.get("back"));
+  const kind = String(form.get("kind") ?? "");
+  const body = String(form.get("body") ?? "").trim().slice(0, 300);
+  await run(back, async () => {
+    if (!(kind in NOTE_KINDS)) throw new Error("Pick what kind of note it is.");
+    await addProfileNote(String(form.get("jobId") ?? ""), kind, body);
+    return "Note saved.";
+  });
+}
+
+export async function confirmNoteAction(form: FormData) {
+  const back = safePath(form.get("back"));
+  await run(back, async () => {
+    await confirmProfileNote(String(form.get("noteId") ?? ""));
+    return "Marked as still right.";
+  });
+}
+
+export async function removeNoteAction(form: FormData) {
+  const back = safePath(form.get("back"));
+  await run(back, async () => {
+    await removeProfileNote(String(form.get("noteId") ?? ""));
+    return "Note removed.";
+  });
+}
+
+export async function forgetProfileAction(form: FormData) {
+  const back = safePath(form.get("back"));
+  await run(back, async () => {
+    if (form.get("sure") !== "on") throw new Error("Tick the box to confirm.");
+    const n = await forgetProfile(String(form.get("jobId") ?? ""));
+    return `Done: ${n} note${n === 1 ? "" : "s"} about this customer and their property wiped.`;
   });
 }
