@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { bookingSchema, MAX_PHOTO_BYTES, MAX_PHOTOS, newReference } from "@/lib/booking";
 import { createBooking, type Photo } from "@/lib/bookings-store";
-import { sendToEngine, type EngineResult } from "@/lib/engine";
+import { attachBookingPhotos, sendToEngine, type EngineResult } from "@/lib/engine";
 import { resolve } from "@/lib/finder";
 import { tierInfo, tierPrices, tiersFor } from "@/lib/tiers";
 import { pricing } from "@/lib/site";
@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
     );
   }
   if (engine.status === "failed") console.error("[booking] engine failed", reference, engine.error);
+  // The customer's photos go onto the job too, so the office and the plumber can see them.
+  if (engine.status === "booked" && photos.length) await attachBookingPhotos(engine.jobId, reference, photos);
 
   await createBooking(
     {

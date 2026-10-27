@@ -133,7 +133,7 @@ The human side of the booking engine, behind the same owner login. Needs the thr
   order with times (planned, on the way, arrived early/late, ran long, finished and time on site, the
   plumber's note, invoice sent, paid). **Photos**: add before/after photos (shrunk to 1600px in the
   browser and uploaded straight to the engine's private `job-photos` storage), see the plumbers'
-  ones, remove, and tick photos to email to the customer as attachments (needs `RESEND_API_KEY`).
+  ones and the customer's (photos sent with a website booking are copied onto the job, marked Customer), remove, and tick photos to email to the customer as attachments (needs `RESEND_API_KEY`).
   `tests/job_photos_test.py` checks it; locally the gateway fakes Storage and Resend
   (`RESEND_API_BASE`).
 - **Jobs**: search (here or from the box in the header) by name, phone, email, address, job

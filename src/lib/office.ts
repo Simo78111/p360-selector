@@ -455,6 +455,7 @@ export type JobPhoto = {
   stage: "before" | "during" | "after" | "other";
   caption: string | null;
   by: string;
+  from_customer?: boolean;
   at: string;
   url?: string;
 };

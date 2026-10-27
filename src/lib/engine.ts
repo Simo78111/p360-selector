@@ -13,7 +13,7 @@ export type EngineResult =
   | { status: "skipped"; reason: "not_configured" | "emergency" }
   | { status: "address_not_found" }
   | { status: "outside_area" }
-  | { status: "booked"; jobNumber: number | null; scheduled: boolean; when: string | null }
+  | { status: "booked"; jobId: string; jobNumber: number | null; scheduled: boolean; when: string | null }
   | { status: "failed"; error: string };
 
 let client: SupabaseClient | null | undefined;
@@ -128,17 +128,47 @@ export async function sendToEngine(
     if (updateError) console.error("[engine] saving preferences failed", b.reference, updateError);
 
     // Flexi waits in the standby pool; the scheduler books it in before its window ends.
-    if (b.tier === "flexi") return { status: "booked", jobNumber, scheduled: false, when: tierInfo.flexi.when };
+    if (b.tier === "flexi") return { status: "booked", jobId, jobNumber, scheduled: false, when: tierInfo.flexi.when };
 
     const { data: placed, error: scheduleError } = await db.rpc("auto_schedule_job", { p_job_id: jobId });
     if (scheduleError) {
       // The job is saved; the scheduler retries every 5 minutes and tells the office if it can't fit.
       console.error("[engine] auto-schedule failed", b.reference, scheduleError);
-      return { status: "booked", jobNumber, scheduled: false, when: null };
+      return { status: "booked", jobId, jobNumber, scheduled: false, when: null };
     }
     const p = placed as { scheduled: boolean; start_local?: string };
-    return { status: "booked", jobNumber, scheduled: p.scheduled, when: p.scheduled ? p.start_local ?? null : null };
+    return { status: "booked", jobId, jobNumber, scheduled: p.scheduled, when: p.scheduled ? p.start_local ?? null : null };
   } catch (err) {
     return { status: "failed", error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * Puts the photos a customer sent with their booking into the job's Photos section
+ * (private job-photos storage). A photo that fails is logged, never the booking.
+ */
+export async function attachBookingPhotos(
+  jobId: string,
+  reference: string,
+  photos: { type: string; data: Buffer }[],
+): Promise<number> {
+  const db = engine();
+  if (!db) return 0;
+  let saved = 0;
+  for (const [i, photo] of photos.entries()) {
+    const ext = photo.type === "image/png" ? "png" : photo.type === "image/webp" ? "webp" : "jpg";
+    const path = `${jobId}/booking-${reference.replace(/[^A-Za-z0-9-]/g, "")}-${i + 1}.${ext}`;
+    try {
+      const { error: upErr } = await db.storage
+        .from("job-photos")
+        .upload(path, photo.data, { contentType: ext === "jpg" ? "image/jpeg" : photo.type, upsert: true });
+      if (upErr) throw new Error(upErr.message);
+      const { error } = await db.rpc("website_add_photo", { p_job_id: jobId, p_path: path, p_bytes: photo.data.length });
+      if (error) throw new Error(`${error.hint ?? error.code}: ${error.message}`);
+      saved++;
+    } catch (err) {
+      console.error("[engine] booking photo not saved", reference, i + 1, err);
+    }
+  }
+  return saved;
 }
