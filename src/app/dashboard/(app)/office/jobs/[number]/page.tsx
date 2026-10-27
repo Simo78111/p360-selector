@@ -1,3 +1,5 @@
+import { QuoteReview } from "@/components/office/QuoteReview";
+import { loadJobCosts, loadJobQuotes, type JobCosts, type Quote } from "@/lib/automation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -64,6 +66,8 @@ export default async function JobPage({ params, searchParams }: Props) {
   let profile: ProfileNote[] = [];
   let photos: JobPhoto[] = [];
   let photoError: string | null = null;
+  let quotes: Quote[] = [];
+  let costs: JobCosts | null = null;
   try {
     job = await loadJob(n);
     if (job) {
@@ -73,6 +77,10 @@ export default async function JobPage({ params, searchParams }: Props) {
         loadJobVisit(job.job_id),
         loadTextSettings().catch(() => null),
         loadProfile(job.job_id),
+      ]);
+      [quotes, costs] = await Promise.all([
+        loadJobQuotes(job.job_id).catch(() => []),
+        loadJobCosts(job.job_id).catch(() => null),
       ]);
       photos = await loadJobPhotos(job.job_id).catch((e) => {
         photoError = e instanceof Error ? e.message : String(e);
@@ -257,6 +265,38 @@ export default async function JobPage({ params, searchParams }: Props) {
           )}
 
           <Profile notes={profile} jobId={job.job_id} back={here} firstName={job.customer.split(" ")[0]} />
+
+          {(quotes.length > 0 || (costs && (costs.orders.length > 0 || costs.bills.length > 0))) && (
+            <section className="rounded-2xl bg-white p-5 sm:p-6" id="quotes">
+              <h2 className="text-lg font-bold">Quotes, parts and costs</h2>
+              {quotes.map((q) => (
+                <div key={q.id} className="mt-3 border-t border-black/5 pt-3 text-sm">
+                  <p>
+                    <strong>Quote:</strong> {q.summary} — ${Number(q.total).toFixed(2)} incl GST ·{" "}
+                    {{ draft: "waiting for you to check", sent: "sent, waiting for YES", accepted: "accepted", declined: "declined" }[q.status] ?? q.status}
+                    {q.booked_job_number && (
+                      <> · booked as <Link href={`/dashboard/office/jobs/${q.booked_job_number}`} className="text-aqua-deep hover:underline">job #{q.booked_job_number}</Link></>
+                    )}
+                  </p>
+                  {q.status === "draft" && <QuoteReview quote={q} back={here} />}
+                </div>
+              ))}
+              {costs && (costs.orders.length > 0 || costs.bills.length > 0) && (
+                <div className="mt-3 border-t border-black/5 pt-3 text-sm">
+                  {costs.orders.map((o) => (
+                    <p key={o.po_number}>{o.po_number} · {o.supplier} · {o.status}{o.estimate != null && ` · about $${Number(o.estimate).toFixed(2)}`}</p>
+                  ))}
+                  {costs.bills.map((b, i) => (
+                    <p key={i} className="text-slate">Bill {b.number} · {b.supplier} · ${Number(b.total ?? 0).toFixed(2)}</p>
+                  ))}
+                  <p className="mt-2 font-semibold">
+                    Supplier bills ${Number(costs.bills_total).toFixed(2)} · invoiced ${Number(costs.invoiced).toFixed(2)}
+                    {costs.invoiced > 0 && ` · materials ${Math.round((Number(costs.bills_total) / Number(costs.invoiced)) * 100)}% of the invoice`}
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="rounded-2xl bg-white p-5 sm:p-6" id="materials">
             <h2 className="text-lg font-bold">Materials and extra work</h2>

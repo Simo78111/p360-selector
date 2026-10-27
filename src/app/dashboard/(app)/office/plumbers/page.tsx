@@ -1,6 +1,8 @@
 import { homeRoutingAction, plumberActiveAction, savePlumberAction } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
-import { loadPlumbers, officeEnabled, type PlumbersInfo } from "@/lib/office";
+import { plumberBackAction, plumberOffAction } from "@/app/dashboard/automation-actions";
+import { loadPlumbersOff, type PlumberOff } from "@/lib/automation";
+import { aucklandToday, loadPlumbers, officeEnabled, shiftDate, type PlumbersInfo } from "@/lib/office";
 
 export const metadata = { title: "Plumbers" };
 
@@ -10,8 +12,10 @@ export default async function PlumbersPage({ searchParams }: Props) {
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let info: PlumbersInfo;
+  let off: PlumberOff[];
+  const today = aucklandToday();
   try {
-    info = await loadPlumbers();
+    [info, off] = await Promise.all([loadPlumbers(), loadPlumbersOff(today, shiftDate(today, 30))]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -29,6 +33,52 @@ export default async function PlumbersPage({ searchParams }: Props) {
         </p>
       </div>
       <Flash ok={ok} err={err} />
+
+      <section className="rounded-2xl bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-bold">Off sick or on leave</h2>
+        <p className="mt-1 max-w-3xl text-sm text-slate">
+          Plumbers can tap &ldquo;I&apos;m off sick&rdquo; in their app. Either way, their jobs that day go to someone else who
+          can fit them, or to the next free day, and each customer is texted. Nothing new is booked with them that day.
+        </p>
+        {off.length > 0 && (
+          <ul className="mt-3 divide-y divide-black/5 text-sm">
+            {off.map((o) => (
+              <li key={`${o.plumber_id}-${o.date}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span><strong>{o.plumber}</strong> · {o.date} · {o.reason}{o.note && ` — ${o.note}`}</span>
+                <form action={plumberBackAction}>
+                  <input type="hidden" name="plumberId" value={o.plumber_id} />
+                  <input type="hidden" name="date" value={o.date} />
+                  <input type="hidden" name="name" value={o.plumber} />
+                  <button className="rounded-full bg-mist px-3 py-1 text-xs font-semibold">Back on</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form action={plumberOffAction} className="mt-4 flex flex-wrap items-end gap-2 text-sm">
+          <div>
+            <label className="block font-medium" htmlFor="off-plumber">Plumber</label>
+            <select id="off-plumber" name="plumberId" required className="rounded-full border border-black/10 px-3 py-2">
+              {info.plumbers.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block font-medium" htmlFor="off-date">Day</label>
+            <input id="off-date" name="date" type="date" required defaultValue={today} min={today} className="rounded-full border border-black/10 px-3 py-2" />
+          </div>
+          <div>
+            <label className="block font-medium" htmlFor="off-reason">Why</label>
+            <select id="off-reason" name="reason" className="rounded-full border border-black/10 px-3 py-2">
+              <option value="sick">Sick</option>
+              <option value="leave">Leave</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <input name="note" placeholder="Note (optional)" aria-label="Note" className="min-w-0 flex-1 rounded-full border border-black/10 px-3 py-2" />
+          <input type="hidden" name="name" value="" />
+          <button className="rounded-full bg-ink px-4 py-2 font-semibold text-white">Mark off and move their jobs</button>
+        </form>
+      </section>
 
       <section className="rounded-2xl bg-white p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">

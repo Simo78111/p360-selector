@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { aiRepliesAction, replyTextAction, resolveAction } from "@/app/dashboard/office-actions";
+import { eghrdDoneAction, orderPlacedAction } from "@/app/dashboard/automation-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
+import { QuoteReview } from "@/components/office/QuoteReview";
+import { loadAttentionRefs, loadQuote, type AttentionRefs, type Quote } from "@/lib/automation";
 import { loadAttention, loadTextSettings, officeEnabled, type AttentionItem, type TextSettings } from "@/lib/office";
 
 export const metadata = { title: "Needs attention" };
@@ -20,6 +23,11 @@ const kindLabel: Record<string, string> = {
   invoice_overpaid: "Overpaid",
   follow_up_recommended: "Follow-up recommended",
   eta_keeps_moving: "Arrival keeps moving",
+  order_needs_placing: "Order to place",
+  reschedule_no_reply: "No reply to new times",
+  plumber_off_unplaced: "Plumber off: job to rebook",
+  gas_certificate_no_certifier: "Gas certificate",
+  eghrd_entry_due: "EGHRD entry due",
 };
 
 const waited = (min: number) =>
@@ -30,8 +38,13 @@ export default async function AttentionPage({ searchParams }: Props) {
   const { ok, err } = await searchParams;
   let items: AttentionItem[];
   let texts: TextSettings;
+  let refs: AttentionRefs;
+  const quotes: Record<string, Quote | null> = {};
   try {
-    [items, texts] = await Promise.all([loadAttention(), loadTextSettings()]);
+    [items, texts, refs] = await Promise.all([loadAttention(), loadTextSettings(), loadAttentionRefs()]);
+    await Promise.all(Object.values(refs).filter((r) => r.quote_id).map(async (r) => {
+      quotes[r.quote_id!] = await loadQuote(r.quote_id!);
+    }));
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -108,6 +121,23 @@ export default async function AttentionPage({ searchParams }: Props) {
                       className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
                     />
                     <button className="rounded-full bg-aqua px-4 py-2 text-sm font-semibold text-ink">Send reply and close</button>
+                  </form>
+                )}
+                {refs[item.id]?.quote_id && quotes[refs[item.id].quote_id!] && (
+                  <QuoteReview quote={quotes[refs[item.id].quote_id!]!} back="/dashboard/office/attention" />
+                )}
+                {item.kind === "order_needs_placing" && refs[item.id]?.po_id && (
+                  <form action={orderPlacedAction} className="mt-2">
+                    <input type="hidden" name="poId" value={refs[item.id].po_id} />
+                    <input type="hidden" name="back" value="/dashboard/office/attention" />
+                    <button className="rounded-full bg-aqua px-4 py-2 text-sm font-semibold text-ink">I&apos;ve placed the order</button>
+                  </form>
+                )}
+                {item.kind === "eghrd_entry_due" && refs[item.id]?.cert_id && (
+                  <form action={eghrdDoneAction} className="mt-2">
+                    <input type="hidden" name="certId" value={refs[item.id].cert_id} />
+                    <input type="hidden" name="back" value="/dashboard/office/attention" />
+                    <button className="rounded-full bg-aqua px-4 py-2 text-sm font-semibold text-ink">Entered on the EGHRD</button>
                   </form>
                 )}
                 {item.job_number && (

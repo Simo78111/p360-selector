@@ -43,6 +43,17 @@ async function send(email: Email): Promise<boolean> {
   return true;
 }
 
+/** An email the booking engine queued (supplier order, gas certificate, daily summary). */
+export async function sendEngineEmail(e: { to: string; to_name?: string | null; subject: string; text: string; html?: string | null; reply_to?: string | null }) {
+  return send({
+    to: e.to_name ? `${e.to_name.replace(/[<>"]/g, "")} <${e.to}>` : e.to,
+    subject: e.subject,
+    text: e.text,
+    html: e.html ?? `<pre style="font-family:inherit;white-space:pre-wrap">${esc(e.text)}</pre>`,
+    replyTo: e.reply_to ?? undefined,
+  });
+}
+
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 

@@ -322,7 +322,7 @@ async function sendInvoice(inv: PendingInvoice) {
 
 // ── The sync run ──────────────────────────────────────────────────────────
 
-export type SyncResult = { sent: string[]; failed: { invoice: string; error: string }[]; paid: number; checked: number };
+export type SyncResult = { sent: string[]; failed: { invoice: string; error: string }[]; paid: number; checked: number; bills?: number };
 
 /** Sends waiting invoices, then (when due) checks Xero for payments. */
 export async function runXeroSync(opts: { push?: boolean; poll?: boolean } = {}): Promise<SyncResult> {
@@ -374,8 +374,43 @@ export async function runXeroSync(opts: { push?: boolean; poll?: boolean } = {})
       }
     }
     await rpc("xero_mark_polled");
+    // supplier bills changed in the last week → matched to jobs by PO number (job costs)
+    try {
+      result.bills = await syncSupplierBills();
+    } catch (err) {
+      console.error("[xero] supplier bills", err);
+    }
   }
   return result;
+}
+
+type XeroBill = {
+  InvoiceID: string; InvoiceNumber?: string; Reference?: string; DateString?: string; Date?: string; Status: string;
+  SubTotal?: number; Total?: number; Contact?: { Name?: string }; LineItems?: { Description?: string }[];
+};
+
+/** Supplier bills (ACCPAY) changed in the last 7 days, sent to the engine to match to orders and jobs. */
+async function syncSupplierBills(): Promise<number> {
+  const since = new Date(Date.now() - 7 * 86400_000).toUTCString();
+  let saved = 0;
+  for (let page = 1; page <= 5; page++) {
+    const r = await xero<{ Invoices: XeroBill[] }>("GET", `/Invoices?where=${encodeURIComponent('Type=="ACCPAY"')}&page=${page}`,
+                                                   undefined, { "If-Modified-Since": since });
+    const bills = (r.Invoices ?? []).filter((b) => b.Status !== "DELETED" && b.Status !== "VOIDED");
+    if (bills.length) {
+      const out = await rpc<{ saved: number }>("supplier_bills_save", {
+        p_bills: bills.map((b) => ({
+          xero_invoice_id: b.InvoiceID, supplier: b.Contact?.Name ?? null, number: b.InvoiceNumber ?? null,
+          reference: b.Reference ?? null, date: (b.DateString ?? "").slice(0, 10) || null,
+          subtotal: b.SubTotal ?? null, total: b.Total ?? null, status: b.Status,
+          text: (b.LineItems ?? []).map((l) => l.Description ?? "").join(" ").slice(0, 2000),
+        })),
+      });
+      saved += out.saved;
+    }
+    if ((r.Invoices ?? []).length < 100) break;
+  }
+  return saved;
 }
 
 // ── For the settings page ─────────────────────────────────────────────────
