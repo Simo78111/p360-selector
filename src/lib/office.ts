@@ -45,7 +45,24 @@ export type JobCard = {
   /** How many callbacks this job has had */
   callbacks: number;
   couldnt_finish: boolean;
+  /** Where it sits on the status board, and why it's red or amber */
+  board: BoardState | null;
 };
+
+export type BoardStage = "to_book" | "booked" | "on_job" | "to_invoice" | "awaiting" | "paid";
+export type BoardHealth = "red" | "amber" | "green";
+export type BoardState = { stage: BoardStage; health: BoardHealth; why: string | null; value: number };
+export type BoardColumn = { id: BoardStage; label: string; red: number; amber: number; green: number; value: number };
+
+export const BOARD_STAGES: BoardStage[] = ["to_book", "booked", "on_job", "to_invoice", "awaiting", "paid"];
+export const loadJobBoard = () => rpc<BoardColumn[]>("office_job_board", {});
+
+/** "board:booked" or "board:booked:red" → its parts; anything else → null. */
+export function parseBoardFilter(f: string | undefined): { stage: BoardStage; health: BoardHealth | null } | null {
+  const m = f?.match(/^board:([a-z_]+)(?::(red|amber|green))?$/);
+  if (!m || !BOARD_STAGES.includes(m[1] as BoardStage)) return null;
+  return { stage: m[1] as BoardStage, health: (m[2] as BoardHealth) ?? null };
+}
 
 export type JobStatus =
   | "requested" | "pooled" | "offered" | "scheduled" | "en_route" | "on_site"

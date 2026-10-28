@@ -3,7 +3,17 @@ import { bulkCancelAction, bulkMoveAction } from "@/app/dashboard/office-actions
 import { SelectAll } from "@/components/office/BulkSelect";
 import { ClickableRow } from "@/components/office/ClickableRow";
 import { EngineError, Flash, JobLink, JobStatusBadge, NotConnected, TierLabel } from "@/components/office/bits";
-import { aucklandToday, loadJobs, loadPlumbers, officeEnabled, type JobCard } from "@/lib/office";
+import { JobBoard } from "@/components/office/JobBoard";
+import {
+  aucklandToday,
+  loadJobBoard,
+  loadJobs,
+  loadPlumbers,
+  officeEnabled,
+  parseBoardFilter,
+  type BoardColumn,
+  type JobCard,
+} from "@/lib/office";
 
 export const metadata = { title: "Jobs" };
 
@@ -22,16 +32,24 @@ type Props = { searchParams: Promise<{ q?: string; f?: string; ok?: string; err?
 export default async function JobsPage({ searchParams }: Props) {
   if (!officeEnabled()) return <NotConnected />;
   const { q = "", f, ok, err } = await searchParams;
-  const filter = filters.some((x) => x.id === f) ? f! : q ? "all" : "open";
+  const board = parseBoardFilter(f);
+  const filter = board || filters.some((x) => x.id === f) ? f! : q ? "all" : "open";
   const search = q.trim().slice(0, 100);
   const here = `/dashboard/office/jobs?f=${filter}${search ? `&q=${encodeURIComponent(search)}` : ""}`;
 
   let jobs: JobCard[];
   let plumbers: { id: string; name: string }[] = [];
   let overdueCount = 0;
+  let columns: BoardColumn[] = [];
   try {
-    const [j, p, o] = await Promise.all([loadJobs(search, filter), loadPlumbers(), filter === "overdue" ? null : loadJobs("", "overdue")]);
+    const [j, p, o, b] = await Promise.all([
+      loadJobs(search, filter),
+      loadPlumbers(),
+      filter === "overdue" ? null : loadJobs("", "overdue"),
+      loadJobBoard(),
+    ]);
     jobs = j;
+    columns = b ?? [];
     plumbers = p.plumbers.filter((x) => x.active);
     overdueCount = o ? o.length : j.length;
   } catch (e) {
@@ -75,6 +93,26 @@ export default async function JobsPage({ searchParams }: Props) {
           </span>
           <span className="text-sm font-semibold whitespace-nowrap">Review →</span>
         </Link>
+      )}
+
+      {columns.length > 0 && <JobBoard columns={columns} selected={board} search={search} />}
+
+      {board && (
+        <p className="flex flex-wrap items-center gap-2 text-sm">
+          Showing{" "}
+          <strong>
+            {columns.find((c) => c.id === board.stage)?.label}
+            {board.health ? ` · ${board.health}` : ""}
+          </strong>
+          {board.health && (
+            <Link href={`/dashboard/office/jobs?f=board:${board.stage}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className="text-aqua-deep hover:underline">
+              all colours
+            </Link>
+          )}
+          <Link href="/dashboard/office/jobs" className="text-aqua-deep hover:underline">
+            clear
+          </Link>
+        </p>
       )}
 
       <nav className="flex flex-wrap gap-2" aria-label="Filter jobs">
@@ -209,6 +247,13 @@ export default async function JobsPage({ searchParams }: Props) {
                           <JobStatusBadge status={j.status} />
                           {j.overdue && <span className="mt-1 block text-xs font-semibold text-red-700">Overdue</span>}
                           {j.couldnt_finish && <span className="mt-1 block text-xs font-semibold text-red-700">Couldn&apos;t finish</span>}
+                          {j.board?.why && !j.overdue && (
+                            <span
+                              className={`mt-1 block text-xs font-semibold ${j.board.health === "red" ? "text-red-700" : j.board.health === "amber" ? "text-amber-800" : "text-slate"}`}
+                            >
+                              {j.board.why}
+                            </span>
+                          )}
                         </td>
                       </ClickableRow>
                     );
