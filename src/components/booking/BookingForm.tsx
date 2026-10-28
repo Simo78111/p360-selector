@@ -14,7 +14,9 @@ import {
 import { formatPrice, pricing, site } from "@/lib/site";
 import { tierInfo, type Tier } from "@/lib/tiers";
 import { track } from "@/lib/track";
+import type { CustomerProfile } from "@/lib/customer";
 import { PhotoPicker, type PickedPhoto } from "./PhotoPicker";
+import { ReturningCustomer } from "./ReturningCustomer";
 
 export type JobSummary = {
   answers: string;
@@ -59,8 +61,26 @@ const steps: { title: string; fields: (keyof Fields)[] }[] = [
 
 const DRAFT_KEY = "p360-booking-draft";
 
-export function BookingForm({ job, payments }: { job: JobSummary; payments: "on" | "test" | "off" }) {
+/** +64211234567 → 021 123 4567-ish: the format people recognise */
+const localPhone = (p: string) => (p.startsWith("+64") ? `0${p.slice(3)}` : p);
+
+export function BookingForm({
+  job,
+  payments,
+  customer = null,
+  signIn = false,
+}: {
+  job: JobSummary;
+  payments: "on" | "test" | "off";
+  /** Signed-in returning customer (from the cookie), if any */
+  customer?: CustomerProfile | null;
+  /** Show "Booked with us before?" (needs the booking engine) */
+  signIn?: boolean;
+}) {
   const deposits = payments !== "off";
+  const [me, setMe] = useState<CustomerProfile | null>(customer);
+  // which saved address is chosen ("new" = typing one)
+  const [addressId, setAddressId] = useState<string>("new");
   const [step, setStep] = useState(0);
   const offered = job.tiers.map((t) => t.id);
   const startTier: Tier = offered.includes("standard") ? "standard" : offered[0];
@@ -92,6 +112,34 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
     } catch {}
   }, [fields]);
 
+  // Signed in: fill in what's still empty, and start with their most recent address
+  useEffect(() => {
+    if (!me) return;
+    setFields((f) => {
+      const next = {
+        ...f,
+        name: f.name || me.name,
+        phone: f.phone || localPhone(me.phone),
+        email: f.email || me.email || "",
+      };
+      const known = me.addresses.find((a) => a.street.toLowerCase() === f.street.trim().toLowerCase());
+      const pick = known ?? (f.street.trim() ? null : me.addresses[0]);
+      if (pick) {
+        setAddressId(pick.id);
+        return { ...next, street: pick.street, suburb: pick.suburb, postcode: pick.postcode ?? next.postcode };
+      }
+      return next;
+    });
+  }, [me]);
+
+  function chooseAddress(id: string) {
+    setAddressId(id);
+    const a = me?.addresses.find((x) => x.id === id);
+    setFields((f) => (a ? { ...f, street: a.street, suburb: a.suburb, postcode: a.postcode ?? "" } : { ...f, street: "", suburb: "", postcode: "" }));
+    setErrors((e) => ({ ...e, street: undefined, suburb: undefined, postcode: undefined }));
+  }
+  const saved = me?.addresses.find((a) => a.id === addressId) ?? null;
+  const typingAddress = !saved || !saved.postcode;
   const set = <K extends keyof Fields>(key: K, value: Fields[K]) => {
     setFields((f) => ({ ...f, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined }));
@@ -168,6 +216,18 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
       <div>
+        {signIn && (
+          <ReturningCustomer
+            me={me}
+            onSignedIn={(p) => setMe(p)}
+            onSignedOut={() => {
+              // "Not you?": take their details back off the form
+              setMe(null);
+              setAddressId("new");
+              setFields((f) => ({ ...f, name: "", phone: "", email: "", street: "", suburb: "", postcode: "" }));
+            }}
+          />
+        )}
         <ol className="mb-8 flex gap-2" aria-label="Booking steps">
           {steps.map((s, i) => (
             <li key={s.title} className="flex-1">
@@ -220,6 +280,38 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
 
             {step === 1 && (
               <>
+                {me && me.addresses.length > 0 && (
+                  <fieldset>
+                    <legend className="mb-2 font-medium">Your addresses</legend>
+                    <div className="grid gap-2">
+                      {me.addresses.map((a) => (
+                        <Choice key={a.id} type="radio" name="saved-address" checked={addressId === a.id} onChange={() => chooseAddress(a.id)}>
+                          <span>
+                            {a.street}, {a.suburb}
+                            {a.last_visit && <span className="block text-xs font-normal text-slate">Last booked {a.last_visit}</span>}
+                          </span>
+                        </Choice>
+                      ))}
+                      <Choice type="radio" name="saved-address" checked={addressId === "new"} onChange={() => chooseAddress("new")}>
+                        Somewhere else
+                      </Choice>
+                    </div>
+                  </fieldset>
+                )}
+                {saved && saved.notes.length > 0 && (
+                  <div className="rounded-2xl bg-mist p-4 text-sm">
+                    <p className="font-medium">We already have these notes for the plumber:</p>
+                    <ul className="mt-1 text-slate">
+                      {saved.notes.map((n, i) => (
+                        <li key={i}>
+                          {n.label}: {n.body}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {typingAddress && (
+                <>
                 <Field label="Street address" error={errors.street} htmlFor="street">
                   <input
                     id="street"
@@ -251,6 +343,8 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
                     />
                   </Field>
                 </div>
+                </>
+                )}
                 {outsideAuckland && (
                   <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900" role="status">
                     That postcode looks like it&apos;s outside {site.area}. We&apos;re only working in {site.area} for now,
@@ -273,7 +367,11 @@ export function BookingForm({ job, payments }: { job: JobSummary; payments: "on"
                     ))}
                   </div>
                 </fieldset>
-                <Field label="Access notes (optional)" htmlFor="access" hint="Gate codes, pets, parking, where to find the toby…">
+                <Field
+                  label={saved ? "Anything new for the plumber? (optional)" : "Access notes (optional)"}
+                  htmlFor="access"
+                  hint={saved ? "A new gate code, a new dog… anything that's changed." : "Gate codes, pets, parking, where to find the toby…"}
+                >
                   <textarea
                     id="access"
                     rows={2}

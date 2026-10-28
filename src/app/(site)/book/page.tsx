@@ -4,6 +4,7 @@ import { ButtonLink, Container } from "@/components/ui";
 import { resolve } from "@/lib/finder";
 import { tierPrices, tiersFor } from "@/lib/tiers";
 import { paymentMode } from "@/lib/stripe";
+import { currentCustomer, signInAvailable } from "@/lib/customer";
 
 export const metadata: Metadata = {
   title: "Book a job",
@@ -48,7 +49,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
             Payment was cancelled and nothing was charged. Your details are still here when you&apos;re ready.
           </p>
         )}
-        <BookingForm job={job} payments={paymentMode()} />
+        <BookingForm job={job} payments={paymentMode()} customer={await currentCustomer()} signIn={signInAvailable()} />
       </Container>
     </section>
   );
