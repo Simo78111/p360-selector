@@ -5,6 +5,7 @@ import { formatPrice, pricing, site } from "@/lib/site";
 import { markDepositPaid } from "@/lib/bookings-store";
 import { getStripe } from "@/lib/stripe";
 import { tierIds, tierInfo, type Tier } from "@/lib/tiers";
+import { loadContactCard, localNumber } from "@/lib/contact-card";
 
 export const metadata: Metadata = {
   title: "Booking received",
@@ -24,6 +25,7 @@ export default async function ConfirmedPage({ searchParams }: Props) {
   // "Wed 28 Oct morning": a day and window; the exact time is texted the afternoon before
   const windowed = when ? /(morning|afternoon)$/.test(when) : false;
   const steps = nextSteps(tier, when, area === "out", windowed);
+  const card = await loadContactCard();
 
   // Check with Stripe that the deposit really went through.
   let paid: number | null = null;
@@ -80,6 +82,18 @@ export default async function ConfirmedPage({ searchParams }: Props) {
               ))}
             </ol>
           </div>
+
+          {card.text_number && (
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-aqua-pale p-5 text-left">
+              <p className="text-sm">
+                <strong className="block text-base">Save us in your phone</strong>
+                Your booking texts come from {localNumber(card.text_number)}. Next time, just text &ldquo;new job&rdquo; to book.
+              </p>
+              <a href="/plumbing360.vcf" className="rounded-full bg-ink px-5 py-2 text-sm font-semibold text-white">
+                Add to contacts
+              </a>
+            </div>
+          )}
 
           <p className="mt-6 text-sm text-slate">
             Questions? Call <a href={site.phoneHref} className="font-medium text-aqua-deep">{site.phone}</a>. Our hours

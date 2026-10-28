@@ -5,6 +5,8 @@ import { officeEnabled } from "@/lib/office";
 import { loadScreenSettings, type ScreenSettings } from "@/lib/screen";
 import { screenLinkAction, screenSettingsAction } from "@/app/dashboard/screen-actions";
 import { headers } from "next/headers";
+import { contactCardAction } from "@/app/dashboard/contact-card-actions";
+import { loadContactCardSettings, localNumber, type ContactCardSettings } from "@/lib/contact-card";
 
 export const metadata = { title: "Settings" };
 
@@ -29,8 +31,9 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { ok, err } = await searchParams;
   let s: Settings;
   let screen: ScreenSettings;
+  let card: ContactCardSettings;
   try {
-    [s, screen] = await Promise.all([loadSettings(), loadScreenSettings()]);
+    [s, screen, card] = await Promise.all([loadSettings(), loadScreenSettings(), loadContactCardSettings()]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -214,6 +217,28 @@ export default async function SettingsPage({ searchParams }: Props) {
           </label>
           <button className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">Save</button>
           <p className={`${hint} sm:col-span-4`}>Leave the targets empty until you know them: the screen then shows the number of invoices and how this week compares with last week instead.</p>
+        </form>
+      </section>
+
+      <section id="save-contact" className="scroll-mt-24 rounded-2xl bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-bold">Save us in your phone</h2>
+        <p className="mt-1 max-w-3xl text-sm text-slate">
+          The morning after a customer&apos;s first job, one text with a link that adds you to their contacts (name, logo
+          and this number), and tells them to text &ldquo;new job&rdquo; next time — the text assistant replies with a
+          booking link. Once per customer; not after callbacks, complaints or urgent problems.{" "}
+          <a href="/save" target="_blank" className="font-medium text-aqua-deep underline">See the page</a>
+        </p>
+        <form action={contactCardAction} className="mt-4 grid items-end gap-4 sm:grid-cols-3">
+          <div>
+            <label className={label} htmlFor="text_number">The number customers text</label>
+            <input id="text_number" name="text_number" type="tel" defaultValue={card.text_number ? localNumber(card.text_number) : ""} placeholder="e.g. 022 000 0360" className={field} />
+            <p className={hint}>Your texting number from the SMS provider. No number, no texts.</p>
+          </div>
+          <label className="flex items-center gap-2 pb-2 text-sm font-medium">
+            <input type="checkbox" name="on" defaultChecked={card.on} className="h-4 w-4" /> Send after the first job
+          </label>
+          <button className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white sm:justify-self-start">Save</button>
+          <p className={`${hint} sm:col-span-3`}>Sent so far: {card.sent}</p>
         </form>
       </section>
 
