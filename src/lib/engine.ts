@@ -126,6 +126,11 @@ export async function sendToEngine(
       })
       .eq("id", jobId);
     if (updateError) console.error("[engine] saving preferences failed", b.reference, updateError);
+    // the customer's notes for the plumber: the assistant files the practical bits on the property
+    if (b.access?.trim()) {
+      const { error: notesError } = await db.rpc("website_booking_notes", { p_job_id: jobId, p_notes: b.access });
+      if (notesError) console.error("[engine] handing over access notes failed", b.reference, notesError);
+    }
     if (b.remindersConsent) {
       const { error: consentError } = await db.rpc("website_marketing_consent", { p_job_id: jobId });
       if (consentError) console.error("[engine] saving reminders consent failed", b.reference, consentError);
