@@ -447,6 +447,19 @@ export type Visit = {
   invoice_sent: string | null;
   paid: string | null;
   photos: number;
+  arrived_place: VisitPlace | null;
+  finished_place: VisitPlace | null;
+};
+
+/** Where the plumber's phone was when they pressed "I've arrived" / "Job done". */
+export type VisitPlace = {
+  at: string;
+  lat: number | null;
+  lng: number | null;
+  distance_m: number | null;
+  accuracy_m: number | null;
+  fix_age_min: number | null;
+  verdict: "at" | "near" | "far" | "rough" | "none" | "no_pin";
 };
 
 export type JobPhoto = {

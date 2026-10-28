@@ -35,6 +35,7 @@ import {
   type JobMaterialLine,
   type JobPhoto,
   type Visit,
+  type VisitPlace,
   type LabourRates,
   type TextSettings,
   type TimelineEntry,
@@ -558,6 +559,45 @@ export default async function JobPage({ params, searchParams }: Props) {
 
 const mins = (m: number) => (m >= 60 ? hours(m) : `${m} min`);
 
+const metres = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)} km` : `${m} m`);
+
+const PLACE: Record<VisitPlace["verdict"], { label: string; tone: string }> = {
+  at: { label: "At the address", tone: "bg-emerald-100 text-emerald-900" },
+  near: { label: "Near the address", tone: "bg-amber-100 text-amber-900" },
+  far: { label: "Not at the address", tone: "bg-red-100 text-red-800" },
+  rough: { label: "Rough location only", tone: "bg-amber-100 text-amber-900" },
+  none: { label: "No location", tone: "bg-black/5 text-slate" },
+  no_pin: { label: "Address has no map pin", tone: "bg-black/5 text-slate" },
+};
+
+/** One line of the location record: verdict, distance, accuracy, exact time and a map link. */
+function Place({ p }: { p: VisitPlace | null }) {
+  if (!p) return null;
+  const v = PLACE[p.verdict];
+  const bits = [
+    p.distance_m !== null ? `${metres(p.distance_m)} from the address` : null,
+    p.accuracy_m !== null ? `phone accurate to ±${metres(Math.round(p.accuracy_m))}` : null,
+    p.fix_age_min ? `location ${p.fix_age_min} min old` : null,
+  ].filter(Boolean);
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span className={`rounded-full px-2 py-0.5 font-semibold ${v.tone}`}>{v.label}</span>
+      {bits.length > 0 && <span className="text-slate">{bits.join(" · ")}</span>}
+      {p.lat !== null && p.lng !== null && (
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`}
+          target="_blank"
+          rel="noopener"
+          className="font-semibold text-aqua-deep hover:underline"
+        >
+          Map
+        </a>
+      )}
+      <span className="text-slate">Pressed {p.at}</span>
+    </span>
+  );
+}
+
 function WhatHappened({ visit: v, job }: { visit: Visit; job: JobDetail }) {
   const late = v.arrived_vs_planned_min;
   const rows: [string, React.ReactNode][] = [
@@ -574,6 +614,7 @@ function WhatHappened({ visit: v, job }: { visit: Visit; job: JobDetail }) {
               {Math.abs(late) <= 5 ? "on time" : late > 0 ? `${mins(late)} late` : `${mins(-late)} early`}
             </span>
           )}
+          <Place p={v.arrived_place} />
         </>
       ) : null,
     ],
@@ -589,6 +630,7 @@ function WhatHappened({ visit: v, job }: { visit: Visit; job: JobDetail }) {
               {mins(v.on_site_min)} on site{v.planned_min ? ` (planned ${mins(v.planned_min)})` : ""}
             </span>
           )}
+          <Place p={v.finished_place} />
         </>
       ) : null,
     ],
