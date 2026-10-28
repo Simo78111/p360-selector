@@ -27,11 +27,13 @@ function inline(text: string, key: string): ReactNode[] {
   return out;
 }
 
+type Item = { text: string; sub: { ordered: boolean; items: string[] } | null };
+
 export function SimpleMarkdown({ source }: { source: string }) {
   const blocks: ReactNode[] = [];
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   let para: string[] = [];
-  let list = null as { ordered: boolean; items: string[] } | null;
+  let list = null as { ordered: boolean; items: Item[] } | null;
   const flushPara = () => {
     if (!para.length) return;
     const k = `p${blocks.length}`;
@@ -41,7 +43,14 @@ export function SimpleMarkdown({ source }: { source: string }) {
   const flushList = () => {
     if (!list) return;
     const k = `l${blocks.length}`;
-    const items = list.items.map((it, j) => <li key={j}>{inline(it, `${k}-${j}`)}</li>);
+    const items = list.items.map((it, j) => (
+      <li key={j}>
+        {inline(it.text, `${k}-${j}`)}
+        {it.sub && (it.sub.ordered
+          ? <ol className="mt-1 list-decimal space-y-1 pl-6">{it.sub.items.map((t, n) => <li key={n}>{inline(t, `${k}-${j}-${n}`)}</li>)}</ol>
+          : <ul className="mt-1 list-disc space-y-1 pl-6">{it.sub.items.map((t, n) => <li key={n}>{inline(t, `${k}-${j}-${n}`)}</li>)}</ul>)}
+      </li>
+    ));
     blocks.push(list.ordered
       ? <ol key={k} className="list-decimal space-y-1 pl-6 text-slate">{items}</ol>
       : <ul key={k} className="list-disc space-y-1 pl-6 text-slate">{items}</ul>);
@@ -50,6 +59,7 @@ export function SimpleMarkdown({ source }: { source: string }) {
   const flush = () => { flushPara(); flushList(); };
   for (const raw of lines) {
     const line = raw.trim();
+    const indented = /^( {2,}|\t)/.test(raw);
     let m: RegExpMatchArray | null;
     if (!line) { flush(); continue; }
     if ((m = line.match(/^(#{2,3})\s+(.*)$/))) {
@@ -63,9 +73,16 @@ export function SimpleMarkdown({ source }: { source: string }) {
     if ((m = line.match(/^(?:[-*]|(\d+)\.)\s+(.*)$/))) {
       flushPara();
       const ordered = Boolean(m[1]);
+      // an indented item under a list item belongs to that item (e.g. options under step 2)
+      if (indented && list && list.items.length) {
+        const last = list.items[list.items.length - 1];
+        last.sub = last.sub ?? { ordered, items: [] };
+        last.sub.items.push(m[2]);
+        continue;
+      }
       if (list && list.ordered !== ordered) flushList();
       list = list ?? { ordered, items: [] };
-      list.items.push(m[2]);
+      list.items.push({ text: m[2], sub: null });
       continue;
     }
     flushList();
