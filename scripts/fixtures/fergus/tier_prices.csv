@@ -1,0 +1,5 @@
+Tier,Item Code,Supplier,Sell Price,Markup
+Cost + 60,PB,,99.00,
+Cost + 60,GF,,104.50,
+Default tier (cost +40),PB,,,35
+Cost + 60,FAKE-CODE-9,,12.00,

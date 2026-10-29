@@ -1,0 +1,4 @@
+Contact ID,Customer ID,First Name,Last Name,Position,Phone,Mobile,Email,Primary,Receives Quotes,Receives Invoices,Site
+FK-3001,FC-1001,Sam,Sitemanager,Site manager,,021 555 3001,sam@kowhai-construction.example,No,Yes,No,12 Rimu Grove
+FK-3002,FC-1001,Ana,Accounts,Accounts,09 555 3002,,accounts@kowhai-construction.example,No,No,Yes,
+FK-3003,FC-1002,Tom,Tenant,Tenant,,022 555 3003,not-an-email,No,No,No,88 Fake Harbour Rd

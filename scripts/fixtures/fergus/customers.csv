@@ -1,0 +1,5 @@
+Customer ID,Customer Name,Main Contact First Name,Main Contact Last Name,Customer Type,Phone,Mobile,Email,Postal Address,Payment Terms,Pricing Tier,Notes
+FC-1001,Kowhai Construction Ltd,Maria,Tane,Builder,09 555 1001,021 555 1001,maria@kowhai-construction.example,PO Box 101 Avondale,20,Cost + 60,Fake test customer
+FC-1002,Harbourview Body Corporate 4412,Pita,Rangi,Property manager,09 555 1002,,pita@harbourview-bc.example,,20,Default tier (cost +40),
+FC-1003,Lena Fakehouse,Lena,Fakehouse,Residential,,022 555 1003,lena@example.com,,7,,
+FC-1004,"Totara Cafe, Ponsonby",,,Commercial,09 555 1004,,accounts@totara-cafe.example,,20,Gold tier,Unknown tier on purpose
