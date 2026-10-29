@@ -1,4 +1,5 @@
 import "server-only";
+import { liveServiceAllowed } from "./test-mode";
 // Google Business Profile updates ("posts" on the Google listing).
 // Switches on with GOOGLE_BUSINESS_ACCOUNT_ID, GOOGLE_BUSINESS_LOCATION_ID, and an OAuth client
 // (GOOGLE_BUSINESS_CLIENT_ID / _CLIENT_SECRET) with a refresh token for the owner's Google login
@@ -8,7 +9,7 @@ import "server-only";
 type Fetch = typeof fetch;
 
 export const gbpEnabled = () =>
-  Boolean(process.env.GOOGLE_BUSINESS_ACCOUNT_ID && process.env.GOOGLE_BUSINESS_LOCATION_ID &&
+  liveServiceAllowed() && Boolean(process.env.GOOGLE_BUSINESS_ACCOUNT_ID && process.env.GOOGLE_BUSINESS_LOCATION_ID &&
           process.env.GOOGLE_BUSINESS_CLIENT_ID && process.env.GOOGLE_BUSINESS_CLIENT_SECRET &&
           process.env.GOOGLE_BUSINESS_REFRESH_TOKEN);
 

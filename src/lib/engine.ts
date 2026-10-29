@@ -8,6 +8,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { BookingInput } from "./booking";
 import type { Outcome } from "./finder";
 import { tierInfo } from "./tiers";
+import { databaseAllowed } from "./test-mode";
 
 export type EngineResult =
   | { status: "skipped"; reason: "not_configured" | "emergency" }
@@ -21,7 +22,7 @@ export function engine() {
   if (client === undefined) {
     const url = process.env.ENGINE_SUPABASE_URL;
     const key = process.env.ENGINE_SUPABASE_SERVICE_ROLE_KEY;
-    client = url && key && process.env.GOOGLE_MAPS_SERVER_KEY
+    client = url && key && databaseAllowed(url) && process.env.GOOGLE_MAPS_SERVER_KEY
       ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
       : null;
   }

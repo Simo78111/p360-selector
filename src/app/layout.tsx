@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { site } from "@/lib/site";
+import { isTestSite } from "@/lib/test-mode";
 import "@fontsource/poppins/400.css";
 import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
@@ -30,6 +31,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         >
           Skip to content
         </a>
+        {isTestSite() && (
+          <div className="bg-red-200 px-4 py-1.5 text-center text-sm font-semibold text-red-950" role="status">
+            TEST SITE: fake data only. No texts, emails, Fergus, Xero or payments reach anyone real.
+          </div>
+        )}
         {children}
       </body>
     </html>

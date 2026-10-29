@@ -1,4 +1,5 @@
 import "server-only";
+import { liveServiceAllowed } from "./test-mode";
 // Facebook page posts, Instagram posts and Facebook/Instagram ads, through Meta's Graph API.
 // Each part switches on when its keys are set (see .env.example):
 //   Page posts:  META_PAGE_ID + META_PAGE_TOKEN (a long-lived Page access token)
@@ -26,9 +27,9 @@ export type AdInput = {
 const version = () => process.env.META_GRAPH_VERSION || "v23.0";
 const graph = (path: string) => `https://graph.facebook.com/${version()}/${path}`;
 
-export const metaPageEnabled = () => Boolean(process.env.META_PAGE_ID && process.env.META_PAGE_TOKEN);
-export const metaInstagramEnabled = () => Boolean(process.env.META_IG_USER_ID && process.env.META_PAGE_TOKEN);
-export const metaAdsEnabled = () => Boolean(process.env.META_AD_ACCOUNT_ID && process.env.META_ADS_TOKEN && process.env.META_PAGE_ID);
+export const metaPageEnabled = () => liveServiceAllowed() && Boolean(process.env.META_PAGE_ID && process.env.META_PAGE_TOKEN);
+export const metaInstagramEnabled = () => liveServiceAllowed() && Boolean(process.env.META_IG_USER_ID && process.env.META_PAGE_TOKEN);
+export const metaAdsEnabled = () => liveServiceAllowed() && Boolean(process.env.META_AD_ACCOUNT_ID && process.env.META_ADS_TOKEN && process.env.META_PAGE_ID);
 
 async function post(f: Fetch, path: string, params: Record<string, unknown>, token: string) {
   const body = new URLSearchParams();
@@ -48,6 +49,7 @@ async function post(f: Fetch, path: string, params: Record<string, unknown>, tok
 
 /** A post on the Facebook page, with a photo if there is one. */
 export async function postToFacebook(message: string, imageUrl: string | undefined, f: Fetch = fetch) {
+  if (!liveServiceAllowed()) throw new Error("Not on the test site");
   const page = process.env.META_PAGE_ID!, token = process.env.META_PAGE_TOKEN!;
   const r = imageUrl
     ? await post(f, `${page}/photos`, { url: imageUrl, caption: message }, token)
@@ -57,6 +59,7 @@ export async function postToFacebook(message: string, imageUrl: string | undefin
 
 /** An Instagram post (Instagram needs a photo). */
 export async function postToInstagram(caption: string, imageUrl: string, f: Fetch = fetch) {
+  if (!liveServiceAllowed()) throw new Error("Not on the test site");
   const ig = process.env.META_IG_USER_ID!, token = process.env.META_PAGE_TOKEN!;
   const media = await post(f, `${ig}/media`, { image_url: imageUrl, caption }, token);
   const done = await post(f, `${ig}/media_publish`, { creation_id: media.id }, token);
@@ -65,6 +68,7 @@ export async function postToInstagram(caption: string, imageUrl: string, f: Fetc
 
 /** Campaign → (photo) → ad set → creative → ad. Returns Meta's ids. */
 export async function createAd(ad: AdInput, f: Fetch = fetch) {
+  if (!liveServiceAllowed()) throw new Error("Not on the test site");
   const account = `act_${process.env.META_AD_ACCOUNT_ID!.replace(/^act_/, "")}`;
   const token = process.env.META_ADS_TOKEN!, page = process.env.META_PAGE_ID!;
   const status = ad.live ? "ACTIVE" : "PAUSED";

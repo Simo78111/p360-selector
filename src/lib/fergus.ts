@@ -1,13 +1,14 @@
 import "server-only";
 import { relationships, timesOfDay } from "./booking";
 import type { Booking, Photo } from "./bookings-store";
+import { liveServiceAllowed } from "./test-mode";
 
 // Creates an enquiry in Fergus (Enquiries inbox) with the photos attached, so
 // the office can convert it into a customer and job. Switched on by
 // FERGUS_API_TOKEN, a Personal Access Token created in your Fergus account.
 const BASE = "https://api.fergus.com";
 
-export const fergusEnabled = () => Boolean(process.env.FERGUS_API_TOKEN);
+export const fergusEnabled = () => liveServiceAllowed() && Boolean(process.env.FERGUS_API_TOKEN);
 
 async function call(path: string, init: RequestInit) {
   const res = await fetch(`${BASE}${path}`, {

@@ -2,6 +2,7 @@ import "server-only";
 import { relationships, timesOfDay } from "./booking";
 import type { Booking, Photo } from "./bookings-store";
 import { formatPrice, site } from "./site";
+import { isTestSite, testInbox } from "./test-mode";
 
 // Email through Resend (resend.com). Switched on by RESEND_API_KEY.
 // EMAIL_FROM must use a domain you've verified in Resend.
@@ -26,6 +27,15 @@ async function send(email: Email): Promise<boolean> {
   if (!key) {
     console.info("[email] skipped (no RESEND_API_KEY):", email.subject, "→", email.to);
     return false;
+  }
+  if (isTestSite()) {
+    // test site: never email a real customer or supplier
+    const inbox = testInbox();
+    if (!inbox) {
+      console.info("[email] test site, no TEST_EMAIL_TO: skipped", email.subject, "→", email.to);
+      return false;
+    }
+    email = { ...email, subject: `[TEST for ${email.to}] ${email.subject}`, to: inbox };
   }
   const res = await fetch(`${process.env.RESEND_API_BASE ?? "https://api.resend.com"}/emails`, {
     method: "POST",

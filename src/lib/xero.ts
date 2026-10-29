@@ -4,6 +4,7 @@ import "server-only";
 // plus the engine keys. The engine keeps the connection and decides what to send
 // (see the engine repo, migration xero_sync); this file does the talking to Xero.
 import { engine } from "./engine";
+import { liveServiceAllowed } from "./test-mode";
 
 const LOGIN = process.env.XERO_LOGIN_BASE ?? "https://login.xero.com";
 const IDENTITY = process.env.XERO_IDENTITY_BASE ?? "https://identity.xero.com";
@@ -18,7 +19,7 @@ export const XERO_SCOPES = [
   "accounting.settings.read",
 ].join(" ");
 
-export const xeroConfigured = () => Boolean(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET && engine());
+export const xeroConfigured = () => liveServiceAllowed() && Boolean(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET && engine());
 
 export class XeroError extends Error {
   constructor(

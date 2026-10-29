@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { databaseAllowed } from "./test-mode";
 
 // Server-side Supabase client using the service role key. It bypasses Row
 // Level Security, so it must never be imported into browser code.
@@ -10,7 +11,7 @@ export function getSupabase(): SupabaseClient | null {
   if (client === undefined) {
     const url = process.env.SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    client = url && key ? createClient(url, key, { auth: { persistSession: false } }) : null;
+    client = url && key && databaseAllowed(url) ? createClient(url, key, { auth: { persistSession: false } }) : null;
   }
   return client;
 }
