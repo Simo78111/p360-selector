@@ -85,14 +85,14 @@ with sync_playwright() as p:
     pg.goto(f'{base}/dashboard/office/companies')
     expect(pg.get_by_role('heading', name='Project 360')).to_be_visible()
     ptsl = pg.locator('section', has=pg.get_by_role('heading', name='Project 360'))
-    expect(ptsl).to_contain_text('next job PTSL-19938')
+    expect(ptsl).to_contain_text('next job PTSL-3000')
     expect(ptsl.get_by_label('Default markup on materials (%)')).to_have_value('23')
     expect(pg.locator('section', has=pg.get_by_role('heading', name='Plumbing 360')).get_by_label('Default markup on materials (%)')).to_have_value('60')
     ptsl.get_by_label('Email').fill('projects@example.com')
     ptsl.get_by_role('button', name='Save Project 360').click()
     expect(pg.get_by_role('status').first).to_contain_text('Project 360 saved')
     pg.screenshot(path=f'{shots}/4-companies.png', full_page=True)
-    print('4. Companies: Plumbing 360 60%, Project 360 23% with PTSL-19938 next; details saved')
+    print('4. Companies: Plumbing 360 60%, Project 360 23% with PTSL-3000 next; details saved')
 
     # 5. Customers: each company sees only its own
     pg.goto(f'{base}/dashboard/office/customers?co=PTSL')
