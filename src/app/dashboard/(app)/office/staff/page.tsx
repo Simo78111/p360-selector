@@ -273,7 +273,7 @@ function PermForm({ s, p }: { s: Staff; p: StaffPerms }) {
       <h3 className="text-sm font-bold">Permissions</h3>
       <input type="hidden" name="staffId" value={s.id} />
       <input type="hidden" name="name" value={s.full_name} />
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {(Object.keys(PERM_LABEL) as Perm[]).map((k) => (
           <div key={k}>
             <label className={label} htmlFor={`perm-${k}-${s.id}`}>{PERM_LABEL[k]}</label>
@@ -286,8 +286,9 @@ function PermForm({ s, p }: { s: Staff; p: StaffPerms }) {
         ))}
       </div>
       <p className="text-xs text-slate">
-        Anyone with an office role can build draft quotes on jobs they can work on. Publishing and sending, seeing cost prices and margins, and
-        changing the favourites library follow these settings (role default: owner/admin and office manager yes, supervisor no).
+        Anyone with an office role can build draft quotes on jobs they can work on. Publishing and sending, seeing cost prices and margins,
+        changing the favourites library, and booking and moving people on the diary follow these settings (role default: owner/admin and
+        office manager yes, supervisor no).
       </p>
       <button className={quietBtn}>Save permissions</button>
     </form>

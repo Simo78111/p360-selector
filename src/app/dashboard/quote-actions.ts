@@ -305,7 +305,7 @@ export async function staffPermissionsAction(form: FormData) {
     const id = text(form, "staffId", 40);
     if (!isId(id)) throw new Error("Staff member not found.");
     const perms: Partial<Record<Perm, "default" | "on" | "off">> = {};
-    for (const k of ["send_quotes", "see_costs", "edit_favourites"] as Perm[]) {
+    for (const k of ["send_quotes", "see_costs", "edit_favourites", "book_diary"] as Perm[]) {
       const v = text(form, k, 10);
       if (v === "default" || v === "on" || v === "off") perms[k] = v;
     }
