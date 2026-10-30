@@ -173,8 +173,10 @@ function JobTable({ rows }: { rows: JobRow[] }) {
               </div>
               <p className="mt-0.5">{r.title}</p>
               <p className="text-xs text-slate">
-                {r.kind === "booking" ? "Booking" : r.parent_ref ? `Variation of ${r.parent_ref}` : r.variations > 0 ? `${r.variations} variation${r.variations === 1 ? "" : "s"}` : ""}
-                {r.order_number && ` · Order ${r.order_number}`}
+                {[
+                  r.kind === "booking" ? "Booking" : r.parent_ref ? `Variation of ${r.parent_ref}` : r.variations > 0 ? `${r.variations} variation${r.variations === 1 ? "" : "s"}` : "",
+                  r.order_number ? `Order ${r.order_number}` : "",
+                ].filter(Boolean).join(" · ")}
               </p>
             </td>
             <td className="px-4 py-3">
