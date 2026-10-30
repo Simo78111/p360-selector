@@ -189,7 +189,7 @@ export default async function FavouritesPage({ searchParams }: Props) {
                   <th className="w-24 py-1 text-right font-semibold">Unit sell</th>
                   {costs && <th className="w-24 py-1 text-right font-semibold">Total cost</th>}
                   <th className="w-24 py-1 text-right font-semibold">Total sell</th>
-                  {edit && <th className="w-56 py-1 font-semibold">Change</th>}
+                  {edit && <th className="w-56 py-1 pl-2 font-semibold">Change</th>}
                 </tr>
               </thead>
               <tbody>

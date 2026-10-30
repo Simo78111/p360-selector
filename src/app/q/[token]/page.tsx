@@ -6,7 +6,12 @@ import { publicAcceptAction } from "@/app/q/actions";
 import { lines as splitLines, publicQuote, textBlocks, type PublicQuote } from "@/lib/quotes";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Your quote", robots: { index: false, follow: false } };
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const q = /^[0-9a-f]{40,80}$/.test(token) ? await publicQuote(token, false).catch(() => null) : null;
+  // the company's own name, not the Plumbing360 website's
+  return { title: { absolute: q ? `Quote ${q.number} | ${q.company.name}` : "Quote" }, robots: { index: false, follow: false } };
+}
 
 type Props = { params: Promise<{ token: string }>; searchParams: Promise<{ accepted?: string; err?: string }> };
 
