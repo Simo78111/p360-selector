@@ -14,7 +14,9 @@ const done = () => revalidatePath("/dashboard/office/diary");
 
 export type BookingInput = {
   id?: string | null;          // null/undefined = new booking
-  phase_id?: string;           // new bookings only
+  phase_id?: string;           // new job bookings only
+  title?: string;              // a holder: what the booking is for (no job)
+  colour?: string | null;      // a holder's colour
   plumber_id?: string | null;  // null = Unassigned; undefined = leave as is
   starts_at?: string;
   ends_at?: string;
@@ -26,8 +28,9 @@ export async function saveBookingAction(b: BookingInput): Promise<DiaryResult> {
     const s = await assertOffice("jobs");
     const changes: Record<string, unknown> = {};
     if (!b.id) {
-      if (!isId(b.phase_id)) throw new Error("Pick the job phase to book.");
-      changes.phase_id = b.phase_id;
+      if (isId(b.phase_id)) changes.phase_id = b.phase_id;
+      else if (b.title?.trim()) changes.title = b.title.trim().slice(0, 120);
+      else throw new Error("Say what the booking is for, or pick a job phase.");
     } else if (!isId(b.id)) throw new Error("That booking isn't on the diary any more.");
     if (b.plumber_id !== undefined) {
       if (b.plumber_id !== null && !isId(b.plumber_id)) throw new Error("Pick a person.");
@@ -42,6 +45,11 @@ export async function saveBookingAction(b: BookingInput): Promise<DiaryResult> {
       changes.ends_at = b.ends_at;
     }
     if (b.note !== undefined) changes.note = String(b.note ?? "").slice(0, 1000);
+    if (b.id && b.title !== undefined) changes.title = String(b.title).trim().slice(0, 120);
+    if (b.colour !== undefined) {
+      if (b.colour !== null && !/^#[0-9a-f]{6}$/i.test(b.colour)) throw new Error("Pick a colour.");
+      changes.colour = b.colour ?? "";
+    }
     const r = await saveBooking(s, b.id ?? null, changes);
     done();
     return { ok: true, message: `${r.booking.phase_ref} ${b.id ? "saved" : "booked"}.`, warnings: r.warnings };

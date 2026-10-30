@@ -5,6 +5,8 @@
 //     move it (to another person or time), drag its right/bottom edge to change the length.
 //   * Week view: a cell per person per day; drag a booking to another day or person (times stay the same).
 //   * "To schedule" list: drag a phase onto someone (books 7:30 AM for 7.5 hours, or where you drop it in Day view).
+//   * One click on an empty spot: "What is the booking for?" — a holder with no job (Training, Yard day…), or pick a
+//     job phase on the other tab.
 //   * Click a booking to change it by keyboard: person, times, note, add another person, remove, job colour.
 //   * "Schedule not sent" on a person until their changes are sent; Send schedule = an app notification.
 //   * The Plumbing 360 booking engine's appointments show greyed and can't be moved (its own scheduler books them).
@@ -252,7 +254,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
         let b = snap(d.cur);
         if (!d.moved || Math.abs(b - a) < SLOT_MIN) {
           a = snap(d.anchor);
-          b = Math.min(24 * 60, a + DEFAULT_LENGTH_MIN);
+          b = Math.min(24 * 60, a + 60); // one click: an hour, change it in the box
         }
         if (b < a) [a, b] = [b, a];
         setDialog({ mode: "new", phaseId: null, lane: d.lane, day: d.day, start: a, end: b });
@@ -385,13 +387,16 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
       else sty.height = Math.max(18, size);
     }
     // "PTSL-3000b Lot 12 new house plumbing – Rough-in": phase number, job name and phase name (when different)
+    const holder = b.kind === "holder";
     const title = b.job_title ?? b.phase_name;
-    const label = `${b.phase_ref}${title ? ` ${title}` : ""}${b.job_title && b.phase_name && b.phase_name !== b.job_title ? ` – ${b.phase_name}` : ""}`;
+    const label = holder
+      ? b.title ?? b.phase_ref
+      : `${b.phase_ref}${title ? ` ${title}` : ""}${b.job_title && b.phase_name && b.phase_name !== b.job_title ? ` – ${b.phase_name}` : ""}`;
     return (
       <div
         role="button"
         tabIndex={0}
-        aria-label={`${label}, ${b.start_label}, ${b.length_label}${b.busy ? "" : `. ${b.customer}, ${b.site}`}`}
+        aria-label={`${label}, ${b.start_label}, ${b.length_label}${b.busy || holder ? "" : `. ${b.customer}, ${b.site}`}`}
         className={`group absolute select-none overflow-hidden rounded-md border-l-4 px-2 py-1 text-[12px] leading-snug text-ink shadow-sm ${editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${b.busy ? "border border-dashed" : ""}`}
         style={sty}
         data-testid="booking"
@@ -427,7 +432,8 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
           </div>
         )}
         <div className="truncate font-bold">{label}</div>
-        {!b.busy && (
+        {!b.busy && holder && b.note && <div className="truncate">{b.note}</div>}
+        {!b.busy && !holder && (
           <>
             {compact ? (
               <div className="truncate">
@@ -830,6 +836,8 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
           people={diary.people}
           peopleById={peopleById}
           canEdit={(code) => canEditCompany(code)}
+          canBookAny={canBookAny}
+          bookableCodes={diary.companies.filter((c) => c.can_book).map((c) => c.code)}
           pending={pending}
           onClose={() => setDialog(null)}
           onSave={(b) => save(b, () => setDialog(null))}
@@ -843,17 +851,26 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
 }
 
 // ── the booking dialog (keyboard way to do everything the drag does) ───────────
+const HOLDER_COLOURS = ["#e5e7eb", "#fde68a", "#fecaca", "#bfdbfe", "#bbf7d0", "#ddd6fe", "#fbcfe8", "#fed7aa"];
+type DialogState =
+  | { mode: "edit"; booking: DiaryBooking }
+  | { mode: "new"; phaseId: string | null; lane: string; day: string; start: number; end: number };
+
 function BookingDialog({
-  dialog, phases, people, peopleById, canEdit, pending, onClose, onSave, onAddPerson, onRemove, onColour,
+  dialog, phases, people, peopleById, canEdit, canBookAny, bookableCodes, pending, onClose, onSave, onAddPerson, onRemove, onColour,
 }: {
-  dialog: { mode: "edit"; booking: DiaryBooking } | { mode: "new"; phaseId: string | null; lane: string; day: string; start: number; end: number };
-  phases: DiaryPhase[]; people: DiaryPerson[]; peopleById: Map<string, DiaryPerson>; canEdit: (code: string | undefined) => boolean;
+  dialog: DialogState; phases: DiaryPhase[]; people: DiaryPerson[]; peopleById: Map<string, DiaryPerson>;
+  canEdit: (code: string | undefined) => boolean; canBookAny: boolean; bookableCodes: string[];
   pending: boolean; onClose: () => void; onSave: (b: BookingInput) => void; onAddPerson: (b: BookingInput) => void;
   onRemove: (id: string) => void; onColour: (jobId: string, colour: string | null) => void;
 }) {
   const b = dialog.mode === "edit" ? dialog.booking : null;
   const s0 = b ? nzParts(b.starts_at) : { date: dialog.mode === "new" ? dialog.day : "", min: dialog.mode === "new" ? dialog.start : 0 };
   const e0 = b ? nzParts(b.ends_at) : { date: dialog.mode === "new" ? dialog.day : "", min: dialog.mode === "new" ? dialog.end : 0 };
+  // a holder (no job) or a job phase; a click on an empty spot starts as a holder
+  const [kind, setKind] = useState<"holder" | "job">(b ? (b.kind === "holder" ? "holder" : "job") : dialog.mode === "new" && dialog.phaseId ? "job" : "holder");
+  const [title, setTitle] = useState(b?.title ?? "");
+  const [hColour, setHColour] = useState<string | null>(b?.kind === "holder" ? b.colour : null);
   const [phaseId, setPhaseId] = useState<string | null>(dialog.mode === "new" ? dialog.phaseId : b?.phase_id ?? null);
   const [find, setFind] = useState("");
   const [plumber, setPlumber] = useState<string>(b ? b.plumber_id ?? "" : dialog.mode === "new" && dialog.lane !== UNASSIGNED ? dialog.lane : "");
@@ -863,13 +880,18 @@ function BookingDialog({
   const [eMin, setEMin] = useState(e0.min === 0 && e0.date !== s0.date ? 24 * 60 : e0.min);
   const [note, setNote] = useState(b?.note ?? "");
   const [another, setAnother] = useState("");
+  const holder = kind === "holder";
   const phase = phases.find((p) => p.phase_id === phaseId) ?? null;
-  const company = b?.company_code ?? phase?.company_code;
-  const editable = b ? !!b.can_edit : canEdit(company);
-  const eligible = people.filter((p) => !company || (p.companies ?? []).includes(company));
+  const company = holder ? b?.company_code : b?.company_code ?? phase?.company_code;
+  const editable = b ? !!b.can_edit : holder || !phase ? canBookAny : canEdit(company);
+  // who can be booked: a job's company; a holder: anyone in a company this person can book
+  const eligible = people.filter((p) =>
+    holder ? (p.companies ?? []).some((c) => bookableCodes.includes(c)) || p.plumber_id === b?.plumber_id
+           : !company || (p.companies ?? []).includes(company));
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    dialogRef.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+    const root = dialogRef.current;
+    (root?.querySelector<HTMLElement>("[data-autofocus]") ?? root?.querySelector<HTMLElement>("input, select, textarea, button"))?.focus();
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
@@ -877,7 +899,8 @@ function BookingDialog({
 
   const startsAt = sDate ? nzInstant(sDate, sMin) : "";
   const endsAt = eDate ? (eMin >= 24 * 60 ? nzInstant(addDays(eDate, 1), 0) : nzInstant(eDate, eMin)) : "";
-  const valid = !!phaseId && !!startsAt && !!endsAt && Date.parse(endsAt) > Date.parse(startsAt);
+  const timesOk = !!startsAt && !!endsAt && Date.parse(endsAt) > Date.parse(startsAt);
+  const valid = timesOk && (holder ? !!title.trim() : !!phaseId);
   const mins = Date.parse(endsAt) - Date.parse(startsAt);
   const field = "w-full rounded-lg border border-black/15 bg-white px-2 py-1.5 text-sm disabled:bg-mist";
   const lbl = "block text-xs font-semibold text-slate";
@@ -885,6 +908,17 @@ function BookingDialog({
     const q = find.trim().toLowerCase();
     return !q || `${p.phase_ref} ${p.phase_name} ${p.job_title ?? ""} ${p.customer} ${p.site}`.toLowerCase().includes(q);
   });
+  const switchTo = (k: "holder" | "job") => {
+    setKind(k);
+    // a job phase usually takes the day: stretch a one-hour click to 7.5 hours
+    if (k === "job" && sDate === eDate && eMin - sMin === 60) setEMin(Math.min(24 * 60, sMin + DEFAULT_LENGTH_MIN));
+  };
+  const save = () =>
+    onSave(
+      holder
+        ? { id: b?.id ?? null, title: title.trim(), colour: hColour, plumber_id: plumber || null, starts_at: startsAt, ends_at: endsAt, note }
+        : { id: b?.id ?? null, phase_id: phaseId ?? undefined, plumber_id: plumber || null, starts_at: startsAt, ends_at: endsAt, note },
+    );
 
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center bg-black/30 p-4" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -893,18 +927,26 @@ function BookingDialog({
           <div>
             <h2 id="booking-title" className="text-lg font-bold">
               {b
-                ? `${b.phase_ref} ${b.job_title ?? b.phase_name ?? ""}${b.job_title && b.phase_name && b.phase_name !== b.job_title ? ` – ${b.phase_name}` : ""}`
-                : phase ? `Book ${phase.phase_ref} ${phase.phase_name}` : "New booking"}
+                ? holder
+                  ? b.title
+                  : `${b.phase_ref} ${b.job_title ?? b.phase_name ?? ""}${b.job_title && b.phase_name && b.phase_name !== b.job_title ? ` – ${b.phase_name}` : ""}`
+                : holder ? "New booking" : phase ? `Book ${phase.phase_ref} ${phase.phase_name}` : "Book a job phase"}
             </h2>
-            {(b || phase) && (
+            {b && !holder && (
               <p className="text-sm text-slate">
-                {b?.customer ?? phase?.customer} · {b?.site ?? phase?.site}
+                {b.customer} · {b.site}
                 <br />
-                {b?.stage_label ?? phase?.stage_label}
-                {b && (b.not_sent ? " · Not sent yet" : b.sent_at ? " · Sent to the plumber" : "")}
-                {b?.started_at ? ` · Started ${new Date(b.started_at).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}
+                {b.stage_label}
+                {b.not_sent ? " · Not sent yet" : b.sent_at ? " · Sent to the plumber" : ""}
+                {b.started_at ? ` · Started ${new Date(b.started_at).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}
               </p>
             )}
+            {b && holder && (
+              <p className="text-sm text-slate">
+                Holder (no job){b.not_sent ? " · Not sent yet" : b.sent_at ? " · Sent to the plumber" : ""}
+              </p>
+            )}
+            {!b && phase && !holder && <p className="text-sm text-slate">{phase.customer} · {phase.site}</p>}
           </div>
           <button type="button" onClick={onClose} className="rounded-full bg-mist px-3 py-1 text-sm font-semibold" aria-label="Close">
             ✕
@@ -912,6 +954,40 @@ function BookingDialog({
         </div>
 
         {!b && (
+          <div className="mt-4 flex rounded-lg bg-[#eef1fb] p-1" role="tablist" aria-label="Kind of booking">
+            {(["holder", "job"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={kind === k}
+                onClick={() => switchTo(k)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold ${kind === k ? "bg-[#1d3fce] text-white" : "text-[#1d3fce]"}`}
+              >
+                {k === "holder" ? "Holder (no job)" : "Job phase"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {holder && (
+          <div className="mt-4">
+            <label className={lbl} htmlFor="bk-title">What is the booking for?</label>
+            <input
+              id="bk-title"
+              data-autofocus
+              disabled={!editable}
+              value={title}
+              maxLength={120}
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && valid && editable && !pending && save()}
+              placeholder="e.g. Training, Yard day, Hold for Lot 14, Dentist"
+              className={field}
+            />
+          </div>
+        )}
+
+        {!b && !holder && (
           <div className="mt-4">
             <label className={lbl} htmlFor="bk-find">Job phase</label>
             <input id="bk-find" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a phase, customer or site" className={field} />
@@ -964,13 +1040,32 @@ function BookingDialog({
             </div>
           </div>
           <p className="text-xs text-slate sm:col-span-2">
-            {valid ? (sDate === eDate ? lengthLabel(mins / 60000) : `${Math.round(mins / 86400000 + 0.49)} days`) : "The finish has to be after the start."}
-            {" · "}15-minute steps. Several people on one phase: book each person (or use “Add another person” below).
+            {timesOk ? (sDate === eDate ? lengthLabel(mins / 60000) : `${Math.round(mins / 86400000 + 0.49)} days`) : "The finish has to be after the start."}
+            {" · "}15-minute steps.
+            {holder ? " A holder blocks the time in the diary; it isn't a job." : " Several people on one phase: book each person (or use “Add another person” below)."}
           </p>
           <div className="sm:col-span-2">
             <label className={lbl} htmlFor="bk-note">Note for the plumber</label>
             <textarea id="bk-note" disabled={!editable} value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={1000} className={`${field} rounded-xl`} />
           </div>
+          {holder && editable && (
+            <div className="sm:col-span-2">
+              <span className={lbl}>Colour</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {HOLDER_COLOURS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={`Colour ${c}`}
+                    aria-pressed={(hColour ?? "#e5e7eb") === c}
+                    onClick={() => setHColour(c === "#e5e7eb" ? null : c)}
+                    className={`size-6 rounded-full border ${(hColour ?? "#e5e7eb") === c ? "border-2 border-ink" : "border-black/20"}`}
+                    style={{ background: c }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {editable && (
@@ -978,7 +1073,7 @@ function BookingDialog({
             <button
               type="button"
               disabled={pending || !valid}
-              onClick={() => onSave({ id: b?.id ?? null, phase_id: phaseId ?? undefined, plumber_id: plumber || null, starts_at: startsAt, ends_at: endsAt, note })}
+              onClick={save}
               className="rounded-full bg-[#1d3fce] px-4 py-2 text-sm font-semibold text-white disabled:bg-black/20"
             >
               {b ? "Save" : "Book"}
@@ -988,7 +1083,7 @@ function BookingDialog({
                 type="button"
                 disabled={pending || !!b.started_at}
                 title={b.started_at ? "The plumber has started this booking" : undefined}
-                onClick={() => confirm(`Remove ${b.phase_ref} from ${peopleById.get(b.plumber_id ?? "")?.name ?? "Unassigned"}'s diary?`) && onRemove(b.id)}
+                onClick={() => confirm(`Remove ${holder ? `"${b.title}"` : b.phase_ref} from ${peopleById.get(b.plumber_id ?? "")?.name ?? "Unassigned"}'s diary?`) && onRemove(b.id)}
                 className="rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 disabled:opacity-50"
               >
                 Remove
@@ -1001,10 +1096,12 @@ function BookingDialog({
             )}
           </div>
         )}
-        {!editable && b?.job_ref && (
+        {!editable && (
           <p className="mt-4 text-sm">
-            <Link href={`/dashboard/office/job/${encodeURIComponent(b.job_ref)}`} className="font-semibold text-aqua-deep hover:underline">Open job {b.job_ref}</Link>
-            <span className="text-slate"> · Changing the diary needs &ldquo;Can book the diary&rdquo;.</span>
+            {b?.job_ref && (
+              <Link href={`/dashboard/office/job/${encodeURIComponent(b.job_ref)}`} className="font-semibold text-aqua-deep hover:underline">Open job {b.job_ref} · </Link>
+            )}
+            <span className="text-slate">Changing the diary needs &ldquo;Can book the diary&rdquo;.</span>
           </p>
         )}
 
@@ -1023,7 +1120,11 @@ function BookingDialog({
                   type="button"
                   disabled={pending || !another}
                   onClick={() => {
-                    onAddPerson({ phase_id: b.phase_id, plumber_id: another, starts_at: b.starts_at, ends_at: b.ends_at, note: b.note ?? "" });
+                    onAddPerson(
+                      holder
+                        ? { title: b.title ?? "", colour: b.colour === "#e5e7eb" ? null : b.colour, plumber_id: another, starts_at: b.starts_at, ends_at: b.ends_at, note: b.note ?? "" }
+                        : { phase_id: b.phase_id, plumber_id: another, starts_at: b.starts_at, ends_at: b.ends_at, note: b.note ?? "" },
+                    );
                     setAnother("");
                   }}
                   className="rounded-full bg-mist px-3 text-sm font-semibold disabled:opacity-50"
@@ -1032,22 +1133,24 @@ function BookingDialog({
                 </button>
               </div>
             </div>
-            <div>
-              <span className={lbl}>Job colour</span>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {COLOURS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-label={`Colour ${c}`}
-                    aria-pressed={b.colour === c}
-                    onClick={() => b.job_id && onColour(b.job_id, c)}
-                    className={`size-6 rounded-full border ${b.colour === c ? "border-2 border-ink" : "border-black/20"}`}
-                    style={{ background: c }}
-                  />
-                ))}
+            {!holder && (
+              <div>
+                <span className={lbl}>Job colour</span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {COLOURS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      aria-label={`Colour ${c}`}
+                      aria-pressed={b.colour === c}
+                      onClick={() => b.job_id && onColour(b.job_id, c)}
+                      className={`size-6 rounded-full border ${b.colour === c ? "border-2 border-ink" : "border-black/20"}`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

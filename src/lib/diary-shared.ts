@@ -8,6 +8,8 @@ export type DiaryPerson = {
 export type DiaryBooking = {
   id: string; plumber_id: string | null; starts_at: string; ends_at: string; start_label: string; length_label: string;
   phase_ref: string; description: string; colour: string;
+  kind?: "job" | "holder";   // holder = a booking with no job ("what is the booking for?")
+  title?: string | null;
   // missing on a "Busy" block (an office-only job the viewer can't open)
   busy?: boolean;
   phase_id?: string; job_id?: string; company_id?: string; company_code?: string; phase_name?: string; stage?: string;
