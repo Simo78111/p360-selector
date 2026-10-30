@@ -1,7 +1,7 @@
 import { QuoteReview } from "@/components/office/QuoteReview";
 import { loadJobCosts, loadJobQuotes, type JobCosts, type Quote } from "@/lib/automation";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   addNoteAction,
   bookCallbackAction,
@@ -40,6 +40,8 @@ import {
   type TextSettings,
   type TimelineEntry,
 } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
+import { jobRefForNumber } from "@/lib/jobs";
 
 export const metadata = { title: "Job" };
 
@@ -53,11 +55,15 @@ const kindStyle: Record<TimelineEntry["kind"], { label: string; dot: string }> =
 };
 
 export default async function JobPage({ params, searchParams }: Props) {
+  const session = await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { number } = await params;
   const { ok, err } = await searchParams;
   const n = Number(number);
   if (!Number.isInteger(n) || n <= 0) notFound();
+  // Office-run jobs (Project 360 and the like) have their own job page.
+  const where = await jobRefForNumber(session, n).catch(() => null);
+  if (where?.managed) redirect(`/dashboard/office/job/${encodeURIComponent(where.job_ref)}`);
 
   let job: JobDetail | null;
   let materials: JobMaterialLine[] = [];

@@ -2,12 +2,14 @@ import Link from "next/link";
 import { bookNowAction, moveJobAction, planRouteAction } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, shortDate, TierLabel } from "@/components/office/bits";
 import { aucklandToday, loadDay, loadJobs, officeEnabled, shiftDate, validDate, type OfficeDay, type PlumberDay } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Today" };
 
 type Props = { searchParams: Promise<{ date?: string; ok?: string; err?: string }> };
 
 export default async function TodayPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { date: dateParam, ok, err } = await searchParams;
   const today = aucklandToday();

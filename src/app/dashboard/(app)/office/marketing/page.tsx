@@ -14,6 +14,7 @@ import { loadMarketing, type Draft, type Marketing } from "@/lib/marketing";
 import { gbpEnabled } from "@/lib/gbp";
 import { metaAdsEnabled, metaInstagramEnabled, metaPageEnabled } from "@/lib/meta";
 import { officeEnabled } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Marketing" };
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ function Section({ id, title, intro, children }: { id?: string; title: string; i
 }
 
 export default async function MarketingPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let m: Marketing;

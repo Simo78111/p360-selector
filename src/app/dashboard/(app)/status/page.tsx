@@ -2,10 +2,12 @@ import { Card } from "@/components/dashboard/ui";
 import { fromAddress, officeAddress } from "@/lib/email";
 import { pricing } from "@/lib/site";
 import { TestEmailForm } from "./TestEmailForm";
+import { requireOffice } from "@/lib/auth";
 
 const has = (name: string) => Boolean(process.env[name]);
 
-export default function StatusPage() {
+export default async function StatusPage() {
+  await requireOffice("owner");
   const services = [
     { name: "Saving bookings and photos", detail: "Supabase", on: has("SUPABASE_URL") && has("SUPABASE_SERVICE_ROLE_KEY") },
     { name: "Booking emails", detail: `Resend, sent from ${fromAddress()}`, on: has("RESEND_API_KEY") },

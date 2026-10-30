@@ -4,19 +4,21 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { CompanyTabs, input, label, primaryBtn } from "@/components/office/jm";
 import { CUSTOMER_KINDS, loadCompanies, loadCustomers, loadPricing, pickCompany, type Company, type CustomerRow, type Pricing } from "@/lib/jm";
 import { officeEnabled } from "@/lib/office";
+import { can, canEditCompany, requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Customers" };
 
 type Props = { searchParams: Promise<{ ok?: string; err?: string; co?: string; q?: string }> };
 
 export default async function CustomersPage({ searchParams }: Props) {
+  const session = await requireOffice("customers");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err, co, q = "" } = await searchParams;
   let companies: Company[];
   let rows: CustomerRow[];
   let pricing: Pricing;
   try {
-    companies = await loadCompanies();
+    companies = (await loadCompanies()).filter((x) => can(session, "customers", x.id));
     const c = pickCompany(companies, co);
     [rows, pricing] = await Promise.all([loadCustomers(c.id, q), loadPricing(c.id)]);
   } catch (e) {
@@ -43,7 +45,7 @@ export default async function CustomersPage({ searchParams }: Props) {
           <button className={primaryBtn}>Search</button>
         </form>
 
-        <details className="group mt-4 rounded-2xl border-2 border-dashed border-aqua/60 open:border-solid open:bg-aqua-pale/30">
+        {canEditCompany(session, company.id) && <details className="group mt-4 rounded-2xl border-2 border-dashed border-aqua/60 open:border-solid open:bg-aqua-pale/30">
           <summary className="cursor-pointer list-none px-4 py-3 font-semibold text-aqua-deep">
             <span className="group-open:hidden">+ Add a {company.name} customer</span>
             <span className="hidden group-open:inline">New {company.name} customer</span>
@@ -84,7 +86,7 @@ export default async function CustomersPage({ searchParams }: Props) {
               <button className={primaryBtn}>Add customer</button>
             </div>
           </form>
-        </details>
+        </details>}
 
         <table className="mt-4 w-full text-left text-sm">
           <thead className="text-xs text-slate">

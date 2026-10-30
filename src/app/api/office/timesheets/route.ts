@@ -1,6 +1,6 @@
 // Timesheets as CSV for payroll: /api/office/timesheets?from=2026-11-02&to=2026-11-08 (owner login only)
 import { NextResponse, type NextRequest } from "next/server";
-import { isOwner } from "@/lib/auth";
+import { can, getOfficeSession } from "@/lib/auth";
 import { timesheetRows } from "@/lib/automation";
 import { validDate } from "@/lib/office";
 
@@ -12,7 +12,8 @@ const cell = (v: unknown) => {
 };
 
 export async function GET(req: NextRequest) {
-  if (!(await isOwner())) return NextResponse.json({ error: "Not allowed" }, { status: 401 });
+  const session = await getOfficeSession();
+  if (!session || !can(session, "bookings")) return NextResponse.json({ error: "Not allowed" }, { status: 401 });
   const from = validDate(req.nextUrl.searchParams.get("from") ?? undefined);
   const to = validDate(req.nextUrl.searchParams.get("to") ?? undefined);
   if (!from || !to) return NextResponse.json({ error: "from and to (YYYY-MM-DD) needed" }, { status: 400 });

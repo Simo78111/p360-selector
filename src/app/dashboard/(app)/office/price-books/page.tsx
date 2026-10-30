@@ -2,6 +2,7 @@ import { markupAction } from "@/app/dashboard/price-book-actions";
 import { PriceBookUpload } from "@/components/office/PriceBookUpload";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { loadPriceBooks, officeEnabled, searchMaterials, type Material, type PriceBooks } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Price books" };
 
@@ -10,6 +11,7 @@ type Props = { searchParams: Promise<{ q?: string; ok?: string; err?: string }> 
 const $ = (n: number) => `$${Number(n).toFixed(2)}`;
 
 export default async function PriceBooksPage({ searchParams }: Props) {
+  await requireOffice("pricing");
   if (!officeEnabled()) return <NotConnected />;
   const { q = "", ok, err } = await searchParams;
   const query = q.trim().slice(0, 100);

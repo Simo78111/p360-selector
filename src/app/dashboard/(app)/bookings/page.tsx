@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { formatDateTime, parseDays, RangeTabs, StatusBadge, statusList } from "@/components/dashboard/ui";
 import { loadBookings, type BookingStatus } from "@/lib/dashboard-data";
+import { requireOffice } from "@/lib/auth";
 
 type Props = { searchParams: Promise<{ days?: string; status?: string }> };
 
 export default async function BookingsPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   const params = await searchParams;
   const days = parseDays(params.days);
   const status = statusList.some((s) => s.id === params.status) ? (params.status as BookingStatus) : undefined;

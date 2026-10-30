@@ -3,6 +3,7 @@ import { eghrdDoneAction, resendCertAction } from "@/app/dashboard/automation-ac
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { loadGasCertificates, type GasCertRow } from "@/lib/automation";
 import { officeEnabled } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Gas certificates" };
 
@@ -13,6 +14,7 @@ const statusText: Record<string, string> = {
 };
 
 export default async function CertificatesPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let certs: GasCertRow[];

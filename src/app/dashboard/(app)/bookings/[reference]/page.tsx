@@ -5,11 +5,13 @@ import { relationships, timesOfDay } from "@/lib/booking";
 import { loadBooking, usingSampleData } from "@/lib/dashboard-data";
 import { formatPrice } from "@/lib/site";
 import { setBookingStatus } from "../../../actions";
+import { requireOffice } from "@/lib/auth";
 
 const label = <T extends { id: string; label: string }>(list: readonly T[], id: string) =>
   list.find((x) => x.id === id)?.label ?? id;
 
 export default async function BookingPage({ params }: { params: Promise<{ reference: string }> }) {
+  await requireOffice("bookings");
   const { reference } = await params;
   const { booking, photoUrls } = await loadBooking(reference);
   if (!booking) notFound();

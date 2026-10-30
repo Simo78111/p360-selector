@@ -3,7 +3,7 @@
 // gas certificates. Each checks the owner login, calls the engine and returns with ?ok= or ?err=.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { assertOffice, type Area } from "@/lib/auth";
 import {
   approveTimesheets,
   eghrdDone,
@@ -38,10 +38,10 @@ const num = (form: FormData, k: string) => {
   return n;
 };
 
-async function run(path: string, work: () => Promise<string>) {
-  await requireOwner();
+async function run(path: string, work: () => Promise<string>, area: Area = "bookings") {
   let target: string;
   try {
+    await assertOffice(area);
     target = back(path, "ok", await work());
   } catch (err) {
     target = back(path, "err", err instanceof Error ? err.message : String(err));
@@ -74,7 +74,7 @@ export async function saveSettingsAction(form: FormData) {
     }
     await saveSettings(p);
     return "Settings saved.";
-  });
+  }, "owner");
 }
 
 export async function saveSupplierAction(form: FormData) {

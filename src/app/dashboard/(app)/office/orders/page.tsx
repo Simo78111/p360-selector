@@ -7,6 +7,7 @@ import {
   type Branch, loadBranches, loadOrders, loadPartDeliveries, loadUnmatchedBills, type PartDelivery, type PurchaseOrder, type UnmatchedBill,
 } from "@/lib/automation";
 import { officeEnabled } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Orders" };
 
@@ -37,6 +38,7 @@ const triValue = (v: boolean | null) => (v === true ? "yes" : v === false ? "no"
 const money = (n: number | null | undefined) => (n == null ? "—" : `$${Number(n).toFixed(2)}`);
 
 export default async function OrdersPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let orders: PurchaseOrder[];

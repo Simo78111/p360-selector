@@ -3,12 +3,14 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { input, label, primaryBtn } from "@/components/office/jm";
 import { loadCompanies, type Company } from "@/lib/jm";
 import { officeEnabled } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Companies" };
 
 type Props = { searchParams: Promise<{ ok?: string; err?: string }> };
 
 export default async function CompaniesPage({ searchParams }: Props) {
+  await requireOffice("owner");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let companies: Company[];

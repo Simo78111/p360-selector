@@ -4,14 +4,14 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { assertOffice } from "@/lib/auth";
 import { sendJobPhotos } from "@/lib/email";
 import { addPhoto, downloadPhoto, loadJob, loadJobPhotos, notePhotosEmailed, photoUploadUrl, removePhoto } from "@/lib/office";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 async function attempt<T>(work: () => Promise<T>): Promise<Result<T>> {
-  await requireOwner();
   try {
+    await assertOffice("bookings");
     return { ok: true, data: await work() };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -37,7 +37,7 @@ export async function finishPhotoUploadAction(jobId: string, path: string, stage
 }
 
 export async function removePhotoAction(form: FormData) {
-  await requireOwner();
+  await assertOffice("bookings");
   const back = String(form.get("back") ?? "/dashboard/office");
   let q: string;
   try {

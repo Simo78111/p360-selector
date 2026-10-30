@@ -1,6 +1,6 @@
 // Xero sends the owner back here after they've signed in and picked an organisation.
 import { NextResponse, type NextRequest } from "next/server";
-import { isOwner } from "@/lib/auth";
+import { can, getOfficeSession } from "@/lib/auth";
 import { callbackUrl, completeConnection } from "@/lib/xero";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
     res.cookies.delete({ name: "xero_state", path: "/api/xero" });
     return res;
   };
-  if (!(await isOwner())) return NextResponse.redirect(new URL("/dashboard/login", req.url));
+  const session = await getOfficeSession();
+  if (!session || !can(session, "owner")) return NextResponse.redirect(new URL("/dashboard/login", req.url));
 
   const q = req.nextUrl.searchParams;
   if (q.get("error")) return back("err", `Xero said: ${q.get("error_description") ?? q.get("error")}`);

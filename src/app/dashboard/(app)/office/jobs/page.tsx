@@ -14,6 +14,7 @@ import {
   type BoardColumn,
   type JobCard,
 } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Jobs" };
 
@@ -30,6 +31,7 @@ const filters = [
 type Props = { searchParams: Promise<{ q?: string; f?: string; ok?: string; err?: string }> };
 
 export default async function JobsPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { q = "", f, ok, err } = await searchParams;
   const board = parseBoardFilter(f);

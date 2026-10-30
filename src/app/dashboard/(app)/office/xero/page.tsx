@@ -10,6 +10,7 @@ import { loadXeroStatus, officeEnabled, type XeroStatus } from "@/lib/office";
 import { formatPrice } from "@/lib/site";
 import { headers } from "next/headers";
 import { callbackUrl, listTenants, salesAccounts, trackingCategories, xeroConfigured, type XeroTenant } from "@/lib/xero";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Xero" };
 
@@ -23,6 +24,7 @@ const syncLabel: Record<XeroStatus["invoices"][number]["xero_status"], { text: s
 };
 
 export default async function XeroPage({ searchParams }: Props) {
+  await requireOffice("owner");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
 

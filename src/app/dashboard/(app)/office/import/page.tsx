@@ -2,10 +2,12 @@ import { EngineError, NotConnected } from "@/components/office/bits";
 import { FergusImport } from "@/components/office/FergusImport";
 import { loadCompanies, loadImports, type Company, type ImportRun } from "@/lib/jm";
 import { officeEnabled } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Import from Fergus" };
 
 export default async function ImportPage() {
+  await requireOffice("owner");
   if (!officeEnabled()) return <NotConnected />;
   let companies: Company[];
   let runs: (ImportRun & { company: string })[];

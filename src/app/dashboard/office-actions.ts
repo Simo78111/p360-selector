@@ -3,7 +3,7 @@
 // then returns to the page with a message (?ok= or ?err=) to show.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { assertOffice, type Area } from "@/lib/auth";
 import { fetchDriveTimes } from "@/lib/drive-times";
 import { geocode, geocodeAddress, toE164 } from "@/lib/engine";
 import {
@@ -42,10 +42,10 @@ import { chooseTenant, runXeroSync } from "@/lib/xero";
 const back = (path: string, key: "ok" | "err", message: string) =>
   `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(message)}`;
 
-async function run(path: string, work: () => Promise<string>) {
-  await requireOwner();
+async function run(path: string, work: () => Promise<string>, area: Area = "bookings") {
   let target: string;
   try {
+    await assertOffice(area);
     target = back(path, "ok", await work());
   } catch (err) {
     target = back(path, "err", err instanceof Error ? err.message : String(err));
@@ -232,7 +232,7 @@ export async function xeroSettingsAction(form: FormData) {
     return enabled
       ? "Saved. New invoices now go to Xero, and customers get a link to view and pay."
       : "Saved. Invoices aren't being sent to Xero.";
-  });
+  }, "owner");
 }
 
 export async function xeroSyncNowAction() {
@@ -245,7 +245,7 @@ export async function xeroSyncNowAction() {
     ];
     if (r.failed.length && !r.sent.length) throw new Error(parts.filter(Boolean).join(" "));
     return parts.filter(Boolean).join(" ");
-  });
+  }, "owner");
 }
 
 export async function xeroSendInvoiceAction(form: FormData) {
@@ -255,7 +255,7 @@ export async function xeroSendInvoiceAction(form: FormData) {
     const r = await runXeroSync({ push: true, poll: false });
     if (r.failed.length) throw new Error(`Couldn't send: ${r.failed.map((f) => f.error).join("; ")}`);
     return `Sent ${r.sent.join(", ")} to Xero.`;
-  });
+  }, "owner");
 }
 
 export async function xeroChooseTenantAction(form: FormData) {
@@ -263,14 +263,14 @@ export async function xeroChooseTenantAction(form: FormData) {
   await run(XERO_PAGE, async () => {
     const t = await chooseTenant(tenantId);
     return `Now using ${t.tenantName}.`;
-  });
+  }, "owner");
 }
 
 export async function xeroDisconnectAction() {
   await run(XERO_PAGE, async () => {
     await disconnectXero();
     return "Disconnected. Invoices aren't sent to Xero until you connect again.";
-  });
+  }, "owner");
 }
 
 // ── Jobs: bulk actions, editing, return visits, callbacks ────────────────

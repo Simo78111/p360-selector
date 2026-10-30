@@ -5,6 +5,7 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { QuoteReview } from "@/components/office/QuoteReview";
 import { loadAttentionRefs, loadQuote, type AttentionRefs, type Quote } from "@/lib/automation";
 import { loadAttention, loadTextSettings, officeEnabled, type AttentionItem, type TextSettings } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Needs attention" };
 
@@ -34,6 +35,7 @@ const waited = (min: number) =>
   min < 60 ? `${min} min` : min < 1440 ? `${Math.round(min / 60)} h` : `${Math.round(min / 1440)} days`;
 
 export default async function AttentionPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let items: AttentionItem[];

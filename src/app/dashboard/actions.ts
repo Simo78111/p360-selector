@@ -2,11 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { checkPasswordAndSignIn, requireOwner, signOut } from "@/lib/auth";
+import { assertOffice, checkPasswordAndSignIn, getOfficeSession, homeFor, signOut, staffSignIn } from "@/lib/auth";
 import { sendTestEmail } from "@/lib/email";
 import { officeEnabled } from "@/lib/office";
 import { getSupabase } from "@/lib/supabase";
 
+/** Staff sign-in: email and password. */
+export async function staffLogin(_prev: string | null, form: FormData): Promise<string | null> {
+  const email = String(form.get("email") ?? "").trim();
+  const pass = String(form.get("password") ?? "");
+  if (!email || !pass) return "Enter your email and password.";
+  const problem = await staffSignIn(email, pass);
+  if (problem) return problem;
+  const s = await getOfficeSession();
+  redirect(s ? homeFor(s) : "/dashboard/login");
+}
+
+/** The owner's backup password. */
 export async function login(_prev: string | null, form: FormData): Promise<string | null> {
   const ok = await checkPasswordAndSignIn(String(form.get("password") ?? ""));
   if (!ok) return "That password isn't right.";
@@ -22,7 +34,7 @@ export async function logout() {
 const statuses = ["new", "pending_payment", "paid", "completed", "cancelled"] as const;
 
 export async function setBookingStatus(reference: string, status: string) {
-  await requireOwner();
+  await assertOffice("bookings");
   if (!statuses.includes(status as (typeof statuses)[number])) return;
   const db = getSupabase();
   if (!db) return;
@@ -33,7 +45,7 @@ export async function setBookingStatus(reference: string, status: string) {
 export type TestEmailResult = { ok: boolean; message: string } | null;
 
 export async function testEmail(_prev: TestEmailResult, form: FormData): Promise<TestEmailResult> {
-  await requireOwner();
+  await assertOffice("owner");
   const to = String(form.get("to") ?? "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { ok: false, message: "Enter a valid email address." };
   try {

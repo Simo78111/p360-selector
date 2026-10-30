@@ -3,29 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const items = [
-  { href: "/dashboard/office", label: "Today", exact: true },
-  { href: "/dashboard/office/attention", label: "Needs attention" },
-  { href: "/dashboard/office/jobs", label: "Jobs" },
-  { href: "/dashboard/office/customers", label: "Customers" },
-  { href: "/dashboard/office/plumbers", label: "Plumbers" },
-  { href: "/dashboard/office/staff", label: "Staff" },
-  { href: "/dashboard/office/timesheets", label: "Timesheets" },
-  { href: "/dashboard/office/orders", label: "Orders" },
-  { href: "/dashboard/office/certificates", label: "Gas certs" },
-  { href: "/dashboard/office/price-books", label: "Price books" },
-  { href: "/dashboard/office/pricing", label: "Pricing tiers" },
-  { href: "/dashboard/office/marketing", label: "Marketing" },
-  { href: "/dashboard/office/settings", label: "Settings" },
-  { href: "/dashboard/office/companies", label: "Companies" },
-  { href: "/dashboard/office/import", label: "Fergus import" },
-  { href: "/dashboard/office/xero", label: "Xero" },
-  { href: "/dashboard", label: "Website", exact: true },
-  { href: "/dashboard/bookings", label: "Web bookings" },
-  { href: "/dashboard/status", label: "Status" },
-];
+export type NavItem = { href: string; label: string; exact?: boolean };
 
-export function DashboardNav() {
+/** The office console menu: the layout passes only the items this person's role can open. */
+export function DashboardNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-wrap gap-1" aria-label="Dashboard">

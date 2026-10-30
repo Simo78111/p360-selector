@@ -1,12 +1,15 @@
 "use server";
 // Office actions for job management (staff, companies, customers, pricing, Fergus import).
-// Each checks the owner login, calls the engine, then returns to the page with ?ok= or ?err=.
+// Each checks the signed-in person's role, calls the engine, then returns to the page with ?ok= or ?err=.
+// Staff, companies and the Fergus import: owner/admin. Customers, sites, contacts and pricing tiers:
+// owner/admin or office manager of that company.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { assertOffice, canEditCompany } from "@/lib/auth";
 import {
   fergusImport,
   findItemByCode,
+  loadCustomer,
   loadPricing,
   linkStaffLogin,
   ROLES,
@@ -27,10 +30,23 @@ import {
 const back = (path: string, key: "ok" | "err", message: string) =>
   `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(message)}`;
 
-async function run(path: string, work: () => Promise<string>) {
-  await requireOwner();
+const ownerOnly = () => assertOffice("owner");
+
+/** Customers, sites, contacts and tiers: owner/admin or office manager of that company. */
+async function mayEditCompany(companyId: string | null) {
+  const s = await assertOffice("customers");
+  if (!companyId || !canEditCompany(s, companyId)) throw new Error("Your role can't change this company's records.");
+}
+async function mayEditCustomer(customerId: string) {
+  const c = customerId ? await loadCustomer(customerId) : null;
+  if (!c) throw new Error("Customer not found.");
+  await mayEditCompany(c.company_id);
+}
+
+async function run(path: string, work: () => Promise<string>, check: () => Promise<unknown> = ownerOnly) {
   let target: string;
   try {
+    await check();
     target = back(path, "ok", await work());
   } catch (err) {
     target = back(path, "err", err instanceof Error ? err.message : String(err));
@@ -137,11 +153,12 @@ export async function saveCompanyAction(form: FormData) {
 
 // ── Customers, sites, contacts ──────────────────────────────────────────────
 export async function saveCustomerAction(form: FormData) {
-  await requireOwner();
   const id = text(form, "customerId", 40) || null;
   const company = text(form, "companyId", 40) || null;
   let target: string;
   try {
+    if (id) await mayEditCustomer(id);
+    else await mayEditCompany(company);
     const c = await saveCustomer(id, company, {
       business_name: text(form, "business_name"),
       full_name: text(form, "full_name", 120),
@@ -178,7 +195,7 @@ export async function saveSiteAction(form: FormData) {
       ...(form.has("active") ? { active: form.get("active") === "true" } : {}),
     });
     return siteId ? "Site saved." : "Site added.";
-  });
+  }, () => mayEditCustomer(customerId));
 }
 
 export async function saveContactAction(form: FormData) {
@@ -201,7 +218,7 @@ export async function saveContactAction(form: FormData) {
       gets_invoices: checked(form, "gets_invoices"),
     });
     return contactId ? "Contact saved." : "Contact added.";
-  });
+  }, () => mayEditCustomer(customerId));
 }
 
 // ── Pricing tiers ──────────────────────────────────────────────────────────
@@ -209,6 +226,9 @@ export async function saveTierAction(form: FormData) {
   const code = text(form, "co", 8);
   await run(`/dashboard/office/pricing?co=${code}`, async () => {
     const id = text(form, "tierId", 40) || null;
+    if (id && !(await loadPricing(text(form, "companyId", 40))).tiers.some((t) => t.id === id)) {
+      throw new Error("That tier isn't in this company.");
+    }
     await saveTier(id, text(form, "companyId", 40), {
       name: text(form, "name", 80),
       markup_pct: num(form, "markup_pct"),
@@ -216,7 +236,7 @@ export async function saveTierAction(form: FormData) {
       ...(form.has("active") ? { active: form.get("active") === "true" } : {}),
     });
     return id ? "Tier saved." : "Tier added.";
-  });
+  }, () => mayEditCompany(text(form, "companyId", 40)));
 }
 
 export async function saveTierItemAction(form: FormData) {
@@ -232,17 +252,21 @@ export async function saveTierItemAction(form: FormData) {
       if (!item) throw new Error(`No price book item with the code "${code}".`);
       itemId = item.id;
     }
-    await saveTierItem(text(form, "tierId", 40), itemId, sell === "" ? null : Number(sell), markup === "" ? null : Number(markup));
+    const tierId = text(form, "tierId", 40);
+    if (!(await loadPricing(text(form, "companyId", 40))).tiers.some((t) => t.id === tierId)) {
+      throw new Error("That tier isn't in this company.");
+    }
+    await saveTierItem(tierId, itemId, sell === "" ? null : Number(sell), markup === "" ? null : Number(markup));
     return sell === "" && markup === "" ? "Override removed." : "Price saved.";
-  });
+  }, () => mayEditCompany(text(form, "companyId", 40)));
 }
 
 // ── Fergus import (called from the upload screen, returns the result) ─────────
 export async function fergusImportAction(
   companyId: string, kind: string, rows: Record<string, string>[], dryRun: boolean, fileName: string,
 ): Promise<{ ok: true; result: ImportResult } | { ok: false; error: string }> {
-  await requireOwner();
   try {
+    await ownerOnly();
     const result = await fergusImport(companyId, kind, rows, dryRun, fileName.slice(0, 200));
     if (!dryRun) revalidatePath("/dashboard/office", "layout");
     return { ok: true, result };

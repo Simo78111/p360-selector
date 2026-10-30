@@ -4,10 +4,12 @@ import { StatTile } from "@/components/dashboard/StatTile";
 import { TrendChart } from "@/components/dashboard/TrendChart";
 import { Card, formatDateTime, parseDays, RangeTabs, StatusBadge } from "@/components/dashboard/ui";
 import { loadStats } from "@/lib/dashboard-data";
+import { requireOffice } from "@/lib/auth";
 
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "–");
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
+  await requireOffice("bookings");
   const days = parseDays((await searchParams).days);
   const stats = await loadStats(days);
   const period = `${days} days`;

@@ -3,18 +3,20 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { CompanyTabs, input, label, money, primaryBtn, quietBtn } from "@/components/office/jm";
 import { loadCompanies, loadPricing, pickCompany, type Company, type Pricing, type Tier } from "@/lib/jm";
 import { officeEnabled } from "@/lib/office";
+import { can, requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Pricing" };
 
 type Props = { searchParams: Promise<{ ok?: string; err?: string; co?: string }> };
 
 export default async function PricingPage({ searchParams }: Props) {
+  const session = await requireOffice("pricing");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err, co } = await searchParams;
   let companies: Company[];
   let pricing: Pricing;
   try {
-    companies = await loadCompanies();
+    companies = (await loadCompanies()).filter((x) => can(session, "pricing", x.id));
     pricing = await loadPricing(pickCompany(companies, co).id);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
@@ -104,6 +106,7 @@ function TierCard({ tier: t, company, back, labour }: { tier: Tier; company: Com
                 <form action={saveTierItemAction}>
                   <input type="hidden" name="tierId" value={t.id} />
                   <input type="hidden" name="itemId" value={o.item_id} />
+                  <input type="hidden" name="companyId" value={company.id} />
                   <input type="hidden" name="co" value={company.code} />
                   <input type="hidden" name="back" value={back} />
                   <button className="text-xs text-red-700 underline">Remove</button>

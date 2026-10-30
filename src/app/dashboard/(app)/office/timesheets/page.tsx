@@ -3,6 +3,7 @@ import { approveTimesheetsAction, saveTimesheetAction } from "@/app/dashboard/au
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { loadTimesheets, type TimesheetPlumber } from "@/lib/automation";
 import { aucklandToday, officeEnabled, shiftDate, validDate } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Timesheets" };
 
@@ -20,6 +21,7 @@ const statusTone = { auto: "text-slate", confirmed: "text-aqua-deep", approved: 
 const statusLabel = { auto: "From the app", confirmed: "Confirmed", approved: "Approved" } as const;
 
 export default async function TimesheetsPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { week, ok, err } = await searchParams;
   const from = monday(validDate(week) ?? aucklandToday());

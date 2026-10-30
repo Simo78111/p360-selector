@@ -3,12 +3,14 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { area, input, label, money, nzDate, primaryBtn, quietBtn } from "@/components/office/jm";
 import { LICENCE_KINDS, loadCompanies, loadStaff, ROLE_LABEL, ROLES, TRADES, type Company, type Staff } from "@/lib/jm";
 import { officeEnabled } from "@/lib/office";
+import { can, requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Staff" };
 
 type Props = { searchParams: Promise<{ ok?: string; err?: string; show?: string }> };
 
 export default async function StaffPage({ searchParams }: Props) {
+  const session = await requireOffice("staff");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err, show } = await searchParams;
   let staff: Staff[];
@@ -21,6 +23,8 @@ export default async function StaffPage({ searchParams }: Props) {
   const active = staff.filter((s) => s.active);
   const listed = show === "all" ? staff : active;
   const warnings = active.filter((s) => s.licence_warning);
+  // Office managers see who's who and their licences; only an owner/admin changes staff, roles and rates.
+  const owner = can(session, "owner");
 
   return (
     <div className="space-y-6">
@@ -33,6 +37,7 @@ export default async function StaffPage({ searchParams }: Props) {
         </p>
       </div>
       <Flash ok={ok} err={err} />
+      {!owner && <p className="text-sm text-slate">View only: an owner/admin adds and changes staff, roles and rates.</p>}
 
       {warnings.length > 0 && (
         <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
@@ -56,7 +61,7 @@ export default async function StaffPage({ searchParams }: Props) {
           </p>
         </div>
 
-        <details className="group mt-4 rounded-2xl border-2 border-dashed border-aqua/60 open:border-solid open:bg-aqua-pale/30">
+        {owner && <details className="group mt-4 rounded-2xl border-2 border-dashed border-aqua/60 open:border-solid open:bg-aqua-pale/30">
           <summary className="cursor-pointer list-none px-4 py-3 font-semibold text-aqua-deep">
             <span className="group-open:hidden">+ Add a staff member</span>
             <span className="hidden group-open:inline">New staff member</span>
@@ -64,7 +69,7 @@ export default async function StaffPage({ searchParams }: Props) {
           <div className="px-4 pb-4">
             <StaffForm companies={companies} />
           </div>
-        </details>
+        </details>}
 
         <ul className="mt-4 divide-y divide-black/5">
           {listed.map((s) => (
@@ -89,12 +94,12 @@ export default async function StaffPage({ searchParams }: Props) {
                     )}
                     {Object.keys(s.roles).length === 0 && <span className="text-amber-800">No role in either company</span>}
                   </p>
-                  <p className="mt-1 text-xs text-slate">
+                  {owner && <p className="mt-1 text-xs text-slate">
                     Cost {money(s.cost_rate)}/h · charge-out {money(s.charge_out_rate)}/h · Smartly{" "}
                     {s.smartly_employee_code ?? <span className="text-amber-800">no code</span>}
                     {s.smartly_pay_rate ? ` · Rate ${s.smartly_pay_rate}` : ""} · {s.login ? "has a login" : "no login yet"}
                     {s.works_on_jobs ? " · in the diary" : ""}
-                  </p>
+                  </p>}
                   {s.licences.length > 0 && (
                     <ul className="mt-1 space-y-0.5 text-xs">
                       {s.licences.map((l) => (
@@ -107,15 +112,15 @@ export default async function StaffPage({ searchParams }: Props) {
                     </ul>
                   )}
                 </div>
-                <form action={staffActiveAction}>
+                {owner && <form action={staffActiveAction}>
                   <input type="hidden" name="staffId" value={s.id} />
                   <input type="hidden" name="name" value={s.full_name} />
                   <input type="hidden" name="on" value={s.active ? "false" : "true"} />
                   <button className={quietBtn}>{s.active ? "Deactivate" : "Make active"}</button>
-                </form>
+                </form>}
               </div>
 
-              <details className="mt-2">
+              {owner && <details className="mt-2">
                 <summary className="cursor-pointer text-sm font-semibold text-aqua-deep">Edit {s.full_name.split(" ")[0]}</summary>
                 <div className="mt-3 space-y-4 rounded-2xl bg-mist/40 p-4">
                   <StaffForm companies={companies} staff={s} />
@@ -133,7 +138,7 @@ export default async function StaffPage({ searchParams }: Props) {
                     </ul>
                   </div>
                 </div>
-              </details>
+              </details>}
             </li>
           ))}
           {listed.length === 0 && <li className="py-4 text-sm text-slate">No staff yet. Add the first one above.</li>}

@@ -3,12 +3,14 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { plumberBackAction, plumberOffAction } from "@/app/dashboard/automation-actions";
 import { loadPlumbersOff, type PlumberOff } from "@/lib/automation";
 import { aucklandToday, loadPlumbers, officeEnabled, shiftDate, type PlumbersInfo } from "@/lib/office";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Plumbers" };
 
 type Props = { searchParams: Promise<{ ok?: string; err?: string }> };
 
 export default async function PlumbersPage({ searchParams }: Props) {
+  await requireOffice("bookings");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let info: PlumbersInfo;

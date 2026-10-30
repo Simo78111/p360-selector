@@ -3,7 +3,7 @@
 // results (or throw) instead of redirecting. Each one checks the owner login.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { assertOffice, type Area } from "@/lib/auth";
 import {
   priceBookBegin,
   priceBookFinish,
@@ -17,9 +17,9 @@ import {
 } from "@/lib/office";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
-async function attempt<T>(work: () => Promise<T>): Promise<Result<T>> {
-  await requireOwner();
+async function attempt<T>(work: () => Promise<T>, area: Area = "pricing"): Promise<Result<T>> {
   try {
+    await assertOffice(area);
     return { ok: true, data: await work() };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -44,18 +44,18 @@ export async function finishUploadAction(uploadId: string) {
 export async function searchMaterialsAction(q: string): Promise<Result<Material[]>> {
   const query = q.trim().slice(0, 100);
   if (query.length < 2) return { ok: true, data: [] };
-  return attempt(() => searchMaterials(query, 30));
+  return attempt(() => searchMaterials(query, 30), "bookings");
 }
 
 export async function sendExtraWorkAction(jobId: string, lines: ExtraLine[], note: string) {
-  const r = await attempt(() => proposeExtra(jobId, lines, note.trim() || null));
+  const r = await attempt(() => proposeExtra(jobId, lines, note.trim() || null), "bookings");
   revalidatePath("/dashboard/office", "layout");
   return r;
 }
 
 /** Form action: the default markup (no supplierId) or one supplier's (blank = use the default). */
 export async function markupAction(form: FormData) {
-  await requireOwner();
+  await assertOffice("pricing");
   const supplierId = String(form.get("supplierId") ?? "") || null;
   const raw = String(form.get("markup") ?? "").trim().replace("%", "");
   const pct = raw === "" ? null : Number(raw);

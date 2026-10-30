@@ -3,7 +3,7 @@
 // and area pages on/off. Each checks the owner login and returns with ?ok= or ?err=.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { assertOffice } from "@/lib/auth";
 import {
   approveDraft,
   askAgent,
@@ -27,9 +27,9 @@ const num = (form: FormData, k: string) => {
 };
 
 async function run(work: () => Promise<string>, hash = "") {
-  await requireOwner();
   let target: string;
   try {
+    await assertOffice("bookings");
     target = `${PAGE}?ok=${encodeURIComponent(await work())}${hash}`;
   } catch (err) {
     target = `${PAGE}?err=${encodeURIComponent(err instanceof Error ? err.message : String(err))}${hash}`;

@@ -5,12 +5,14 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { area, input, label, primaryBtn, quietBtn } from "@/components/office/jm";
 import { CUSTOMER_KINDS, loadCustomer, type Contact, type Customer, type Site } from "@/lib/jm";
 import { officeEnabled } from "@/lib/office";
+import { can, canEditCompany, requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Customer" };
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; err?: string }> };
 
 export default async function CustomerPage({ params, searchParams }: Props) {
+  const session = await requireOffice("customers");
   if (!officeEnabled()) return <NotConnected />;
   const { id } = await params;
   const { ok, err } = await searchParams;
@@ -21,7 +23,8 @@ export default async function CustomerPage({ params, searchParams }: Props) {
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
-  if (!c) notFound();
+  if (!c || !can(session, "customers", c.company_id)) notFound();
+  const editable = canEditCompany(session, c.company_id);
   const name = c.business_name ?? c.full_name;
 
   return (
@@ -35,6 +38,18 @@ export default async function CustomerPage({ params, searchParams }: Props) {
         </p>
       </div>
       <Flash ok={ok} err={err} />
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {can(session, "jobs", c.company_id) && (
+          <Link href={`/dashboard/office/all-jobs?view=all&q=${encodeURIComponent(c.phone ?? c.email ?? name)}`} className={quietBtn}>
+            This customer&apos;s jobs
+          </Link>
+        )}
+        {editable && (
+          <Link href={`/dashboard/office/all-jobs/new?customer=${c.id}`} className={primaryBtn}>+ New job</Link>
+        )}
+        {!editable && <span className="text-slate">View only: your role can&apos;t change customers.</span>}
+      </div>
+      <fieldset disabled={!editable} className="contents">
 
       <section className="rounded-2xl bg-white p-5 sm:p-6">
         <h2 className="text-lg font-bold">Details</h2>
@@ -115,6 +130,7 @@ export default async function CustomerPage({ params, searchParams }: Props) {
           <ContactForm customerId={c.id} sites={c.sites} />
         </details>
       </section>
+      </fieldset>
     </div>
   );
 }

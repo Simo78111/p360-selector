@@ -2,15 +2,15 @@
 // Settings → Office screen: make / replace / switch off the TV link, targets and the chime.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { assertOffice } from "@/lib/auth";
 import { saveScreenSettings, setScreenLink } from "@/lib/screen";
 
 const PAGE = "/dashboard/office/settings";
 
 async function run(work: () => Promise<string>) {
-  await requireOwner();
   let target: string;
   try {
+    await assertOffice("owner");
     target = `${PAGE}?ok=${encodeURIComponent(await work())}#screen`;
   } catch (err) {
     target = `${PAGE}?err=${encodeURIComponent(err instanceof Error ? err.message : String(err))}#screen`;

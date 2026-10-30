@@ -7,6 +7,7 @@ import { screenLinkAction, screenSettingsAction } from "@/app/dashboard/screen-a
 import { headers } from "next/headers";
 import { contactCardAction } from "@/app/dashboard/contact-card-actions";
 import { loadContactCardSettings, localNumber, type ContactCardSettings } from "@/lib/contact-card";
+import { requireOffice } from "@/lib/auth";
 
 export const metadata = { title: "Settings" };
 
@@ -27,6 +28,7 @@ function Section({ title, intro, children }: { title: string; intro: string; chi
 }
 
 export default async function SettingsPage({ searchParams }: Props) {
+  await requireOffice("owner");
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let s: Settings;
