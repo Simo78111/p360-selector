@@ -711,7 +711,7 @@ function QuotesTab({ job, quotes, money: m, realPhases, base }: {
                 <th className="py-1 text-right font-semibold">Ex GST</th>
                 <th className="py-1 text-right font-semibold">Incl GST</th>
                 {quotes.can.costs && <th className="py-1 text-right font-semibold">Margin</th>}
-                <th className="py-1 font-semibold">Valid until / sent</th>
+                <th className="py-1 pl-4 font-semibold">Valid until / sent</th>
               </tr>
             </thead>
             <tbody>
@@ -725,7 +725,7 @@ function QuotesTab({ job, quotes, money: m, realPhases, base }: {
                   <td className="py-1.5 text-right tabular-nums">{money(v.net)}</td>
                   <td className="py-1.5 text-right tabular-nums">{money(v.total)}</td>
                   {quotes.can.costs && <td className="py-1.5 text-right tabular-nums">{v.margin_pct === null || v.margin_pct === undefined ? "—" : `${v.margin_pct}%`}</td>}
-                  <td className="py-1.5 text-xs text-slate">
+                  <td className="py-1.5 pl-4 text-xs text-slate">
                     {v.valid_until ? `${v.expired ? "expired" : "valid until"} ${nzDate(v.valid_until)}` : v.deadline ? `due out ${nzDate(v.deadline)}` : "draft"}
                     {v.sent_at ? ` · sent ${nzDateTime(v.sent_at)}` : v.status === "published" ? " · not sent" : ""}
                   </td>

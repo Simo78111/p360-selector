@@ -12,7 +12,7 @@ type Props = { params: Promise<{ token: string }>; searchParams: Promise<{ accep
 
 const money = (n: number | null | undefined) => `$${Number(n ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (d: string | null) =>
-  d ? new Date(d.length === 10 ? `${d}T12:00:00Z` : d).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: "Pacific/Auckland" }) : "";
+  d ? new Date(d.length === 10 ? `${d}T12:00:00Z` : d).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric", timeZone: d.length === 10 ? "UTC" : "Pacific/Auckland" }) : "";
 const qty = (n: number) => String(Number(n));
 
 export default async function CustomerQuote({ params, searchParams }: Props) {

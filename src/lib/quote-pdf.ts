@@ -23,7 +23,7 @@ const nzMoney = (n: number | null | undefined) =>
 const nzDay = (d: string | null | undefined) => {
   if (!d) return "";
   const x = new Date(d.length === 10 ? `${d}T12:00:00Z` : d);
-  return x.toLocaleDateString("en-NZ", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Pacific/Auckland" });
+  return x.toLocaleDateString("en-NZ", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: d.length === 10 ? "UTC" : "Pacific/Auckland" });
 };
 const qty = (n: number) => (Number.isInteger(Number(n)) ? String(Number(n)) : Number(n).toFixed(2).replace(/0$/, ""));
 

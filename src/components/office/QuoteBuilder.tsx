@@ -14,8 +14,9 @@ import type { FavouriteLibrary, OfficeQuote, QuoteLine, QuoteSection } from "@/l
 const money = (n: number | null | undefined) =>
   n === null || n === undefined ? "—" : `$${Number(n).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const num = (n: number | null | undefined, dp = 2) => (n === null || n === undefined ? "" : String(Number(Number(n).toFixed(dp))));
+// A plain date ("2026-11-29") is shown as that date; a timestamp is shown in New Zealand time.
 const nzDay = (d: string | null) =>
-  d ? new Date(d.length === 10 ? `${d}T12:00:00Z` : d).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: "Pacific/Auckland" }) : "";
+  d ? new Date(d.length === 10 ? `${d}T12:00:00Z` : d).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: d.length === 10 ? "UTC" : "Pacific/Auckland" }) : "";
 const nzTime = (d: string) => new Date(d).toLocaleString("en-NZ", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Pacific/Auckland" });
 const field = "w-full rounded-lg border border-black/10 bg-white px-2 py-1 text-sm disabled:border-transparent disabled:bg-transparent";
 const cell = "rounded-md border border-black/10 bg-white px-1.5 py-1 text-right text-sm tabular-nums disabled:border-transparent disabled:bg-transparent";
@@ -393,8 +394,12 @@ function Line({ q, s, l, first, last, run }: { q: OfficeQuote; s: QuoteSection; 
   return (
     <tr className="border-t border-black/5 align-top" data-testid="quote-line">
       <td className="py-1 pr-2">
-        <input key={`ld-${l.description}`} disabled={!edit} defaultValue={l.description} aria-label="Line name"
-          onBlur={(e) => e.target.value !== l.description && save({ description: e.target.value })} className={field} />
+        {edit ? (
+          <input key={`ld-${l.description}`} defaultValue={l.description} aria-label="Line name"
+            onBlur={(e) => e.target.value !== l.description && save({ description: e.target.value })} className={field} />
+        ) : (
+          <span className="block px-2 py-1">{l.description}</span>
+        )}
         <span className="ml-1 text-[11px] text-slate" title="Where the price came from">
           {l.code && `${l.code} · `}{l.source === "typed" ? "typed" : l.source === "favourite" ? "favourite" : "price book"} · {PRICE_SOURCE[l.price_source] ?? l.price_source}
         </span>
@@ -639,9 +644,9 @@ function SendPanel({ q, run }: { q: OfficeQuote; run: Run }) {
         <h2 className="font-bold">{q.sent_at ? "Send again" : "Send to the customer"}</h2>
         {q.recipients.length === 0 && <p className="text-amber-900">Nobody gets quotes yet: tick &quot;Gets quotes&quot; on a contact with an email on the customer&apos;s page.</p>}
         {q.recipients.map((r) => (
-          <label key={r.email} className="flex items-center gap-2">
+          <label key={r.email} className="flex items-start gap-2">
             <input type="checkbox" checked={to.includes(r.email)} onChange={(e) => setTo((x) => (e.target.checked ? [...x, r.email] : x.filter((y) => y !== r.email)))} />
-            {r.name} <span className="text-xs text-slate">{r.email}</span>
+            <span className="min-w-0">{r.name} <span className="block break-all text-xs text-slate">{r.email}</span></span>
           </label>
         ))}
         <textarea name="message" rows={3} placeholder="Message (optional)" aria-label="Message" className={`${field} text-xs`} />
