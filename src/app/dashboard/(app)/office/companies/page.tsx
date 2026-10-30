@@ -2,6 +2,7 @@ import { saveCompanyAction } from "@/app/dashboard/jm-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { input, label, primaryBtn } from "@/components/office/jm";
 import { loadCompanies, type Company } from "@/lib/jm";
+import { quoteDefaultsAction } from "@/app/dashboard/quote-actions";
 import { officeEnabled } from "@/lib/office";
 import { requireOffice } from "@/lib/auth";
 
@@ -58,6 +59,26 @@ export default async function CompaniesPage({ searchParams }: Props) {
               <div className="sm:col-span-2">
                 <button className={primaryBtn}>Save {c.name}</button>
               </div>
+            </form>
+            <form action={quoteDefaultsAction} className="mt-6 grid gap-3 border-t border-black/5 pt-4" data-testid={`quote-defaults-${c.code}`}>
+              <h3 className="text-sm font-bold">Quote defaults (new quotes start with these)</h3>
+              <input type="hidden" name="companyId" value={c.id} />
+              <div>
+                <label className="block text-xs font-semibold text-slate" htmlFor={`qv-${c.id}`}>Quotes are valid for (days)</label>
+                <input id={`qv-${c.id}`} name="quote_valid_days" type="number" min={1} max={365} defaultValue={c.quote_valid_days ?? 30}
+                  className="w-32 rounded-full border border-black/10 bg-white px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate" htmlFor={`qx-${c.id}`}>No allowance has been made for (one per line)</label>
+                <textarea id={`qx-${c.id}`} name="quote_exclusions" rows={8} defaultValue={c.quote_exclusions ?? ""}
+                  className="w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate" htmlFor={`qt-${c.id}`}>Terms (printed at the end of the quote)</label>
+                <textarea id={`qt-${c.id}`} name="quote_terms" rows={6} defaultValue={c.quote_terms ?? ""}
+                  className="w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm" />
+              </div>
+              <div><button className={primaryBtn}>Save quote defaults</button></div>
             </form>
           </section>
         ))}

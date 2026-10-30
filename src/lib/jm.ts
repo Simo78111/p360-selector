@@ -18,6 +18,7 @@ export type Company = {
   gst_number: string | null; job_prefix: string | null; next_job_number: number | null; default_markup_pct: number;
   logo_url: string | null; brand_colour: string | null; xero_tracking_option: string | null; active: boolean;
   customers: number; jobs: number; staff: number;
+  quote_valid_days: number; quote_exclusions: string | null; quote_terms: string | null;   // Phase 2b
 };
 export const loadCompanies = () => rpc<Company[]>("office_companies", {});
 export const saveCompany = (id: string, changes: Record<string, unknown>) =>

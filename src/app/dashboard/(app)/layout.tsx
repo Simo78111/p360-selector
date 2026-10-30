@@ -14,6 +14,7 @@ const MENU: (NavItem & { area: Area })[] = [
   { href: "/dashboard/office", label: "Today", exact: true, area: "bookings" },
   { href: "/dashboard/office/attention", label: "Needs attention", area: "bookings" },
   { href: "/dashboard/office/all-jobs", label: "All jobs", area: "jobs" },
+  { href: "/dashboard/office/favourites", label: "Favourites", area: "jobs" },
   { href: "/dashboard/office/jobs", label: "Bookings", area: "bookings" },
   { href: "/dashboard/office/customers", label: "Customers", area: "customers" },
   { href: "/dashboard/office/plumbers", label: "Plumbers", area: "bookings" },

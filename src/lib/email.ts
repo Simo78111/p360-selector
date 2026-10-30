@@ -204,3 +204,40 @@ export async function sendJobPhotos(p: {
     attachments: p.photos.map((ph) => ({ filename: ph.filename, content: ph.data.toString("base64") })),
   });
 }
+
+/** A quote, to one of the customer's "gets quotes" contacts: the PDF attached and the Accept link.
+ *  Sent from the company's name (Project 360 or Plumbing 360); replies go to the staff member who sent it. */
+export async function sendQuoteEmail(p: {
+  to: string;
+  toName: string;
+  companyName: string;
+  number: string;
+  heading: string;
+  total: string;
+  validUntil: string;
+  acceptUrl: string;
+  message: string;
+  sender: string;
+  replyTo: string | null;
+  pdf: { filename: string; data: Uint8Array };
+}) {
+  if (!emailEnabled()) throw new Error("Email isn't set up yet: add RESEND_API_KEY (and EMAIL_FROM) in Vercel.");
+  const first = p.toName.split(" ")[0] || "there";
+  const note = p.message.trim();
+  const text =
+    `Hi ${first},\n\n${note ? `${note}\n\n` : ""}Please find attached our quote ${p.number} for ${p.heading}: ${p.total} incl GST, ` +
+    `valid until ${p.validUntil}.\n\nTo accept it online: ${p.acceptUrl}\n\nThanks,\n${p.sender}\n${p.companyName}`;
+  const html =
+    `<p>Hi ${esc(first)},</p>${note ? `<p>${esc(note).replace(/\n/g, "<br>")}</p>` : ""}` +
+    `<p>Please find attached our quote <strong>${esc(p.number)}</strong> for ${esc(p.heading)}: <strong>${esc(p.total)} incl GST</strong>, valid until ${esc(p.validUntil)}.</p>` +
+    `<p><a href="${esc(p.acceptUrl)}" style="display:inline-block;background:#219e54;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">View and accept the quote</a></p>` +
+    `<p>Thanks,<br>${esc(p.sender)}<br>${esc(p.companyName)}</p>`;
+  return send({
+    to: `${p.toName.replace(/[<>"]/g, "")} <${p.to}>`,
+    replyTo: p.replyTo ?? officeTo(),
+    subject: `Quote ${p.number} — ${p.heading} — ${p.companyName}`,
+    text,
+    html,
+    attachments: [{ filename: p.pdf.filename, content: Buffer.from(p.pdf.data).toString("base64") }],
+  });
+}

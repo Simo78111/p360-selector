@@ -1,4 +1,6 @@
 import { saveLicenceAction, saveStaffAction, staffActiveAction } from "@/app/dashboard/jm-actions";
+import { staffPermissionsAction } from "@/app/dashboard/quote-actions";
+import { loadStaffPermissions, PERM_LABEL, type Perm, type StaffPerms } from "@/lib/quotes";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { area, input, label, money, nzDate, primaryBtn, quietBtn } from "@/components/office/jm";
 import { LICENCE_KINDS, loadCompanies, loadStaff, ROLE_LABEL, ROLES, TRADES, type Company, type Staff } from "@/lib/jm";
@@ -15,8 +17,9 @@ export default async function StaffPage({ searchParams }: Props) {
   const { ok, err, show } = await searchParams;
   let staff: Staff[];
   let companies: Company[];
+  let perms: Record<string, StaffPerms>;
   try {
-    [staff, companies] = await Promise.all([loadStaff(), loadCompanies()]);
+    [staff, companies, perms] = await Promise.all([loadStaff(), loadCompanies(), loadStaffPermissions()]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -100,6 +103,16 @@ export default async function StaffPage({ searchParams }: Props) {
                     {s.smartly_pay_rate ? ` · Rate ${s.smartly_pay_rate}` : ""} · {s.login ? "has a login" : "no login yet"}
                     {s.works_on_jobs ? " · in the diary" : ""}
                   </p>}
+                  {perms[s.id]?.office && (
+                    <p className="mt-1 flex flex-wrap gap-1 text-xs" data-testid="staff-perms">
+                      {(Object.keys(PERM_LABEL) as Perm[]).map((k) => (
+                        <span key={k} className={`rounded-full px-2 py-0.5 ${perms[s.id][k].on ? "bg-emerald-50 text-emerald-900" : "bg-mist text-slate line-through"}`}
+                          title={perms[s.id][k].set === null ? "From their role" : "Set for this person"}>
+                          {PERM_LABEL[k].replace("Can ", "")}{perms[s.id][k].set !== null ? " *" : ""}
+                        </span>
+                      ))}
+                    </p>
+                  )}
                   {s.licences.length > 0 && (
                     <ul className="mt-1 space-y-0.5 text-xs">
                       {s.licences.map((l) => (
@@ -124,6 +137,7 @@ export default async function StaffPage({ searchParams }: Props) {
                 <summary className="cursor-pointer text-sm font-semibold text-aqua-deep">Edit {s.full_name.split(" ")[0]}</summary>
                 <div className="mt-3 space-y-4 rounded-2xl bg-mist/40 p-4">
                   <StaffForm companies={companies} staff={s} />
+                  {perms[s.id]?.office && <PermForm s={s} p={perms[s.id]} />}
                   <div>
                     <h3 className="text-sm font-bold">Licences</h3>
                     <ul className="mt-2 space-y-2">
@@ -249,5 +263,33 @@ function LicenceForm({ staffId, licence }: { staffId: string; licence?: Staff["l
         </form>
       )}
     </div>
+  );
+}
+
+/** Permissions for one person: what their role gives them, or switched on/off just for them. */
+function PermForm({ s, p }: { s: Staff; p: StaffPerms }) {
+  return (
+    <form action={staffPermissionsAction} className="space-y-2" data-testid="perm-form">
+      <h3 className="text-sm font-bold">Permissions</h3>
+      <input type="hidden" name="staffId" value={s.id} />
+      <input type="hidden" name="name" value={s.full_name} />
+      <div className="grid gap-2 sm:grid-cols-3">
+        {(Object.keys(PERM_LABEL) as Perm[]).map((k) => (
+          <div key={k}>
+            <label className={label} htmlFor={`perm-${k}-${s.id}`}>{PERM_LABEL[k]}</label>
+            <select id={`perm-${k}-${s.id}`} name={k} defaultValue={p[k].set === null ? "default" : p[k].set ? "on" : "off"} className={input}>
+              <option value="default">Role default ({p[k].role_default ? "yes" : "no"})</option>
+              <option value="on">Yes, for {s.full_name.split(" ")[0]}</option>
+              <option value="off">No, for {s.full_name.split(" ")[0]}</option>
+            </select>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-slate">
+        Anyone with an office role can build draft quotes on jobs they can work on. Publishing and sending, seeing cost prices and margins, and
+        changing the favourites library follow these settings (role default: owner/admin and office manager yes, supervisor no).
+      </p>
+      <button className={quietBtn}>Save permissions</button>
+    </form>
   );
 }
