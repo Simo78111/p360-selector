@@ -161,7 +161,7 @@ function DocCard({ d, self }: { d: Doc; self: string }) {
             <form action={approveDocAction} className="mt-2">
               <input type="hidden" name="id" value={d.id} />
               <input type="hidden" name="back" value={self} />
-              <button className={primaryBtn} disabled={needsJob} title={needsJob ? "Pick the job first, or mark it overhead" : undefined}>Approve</button>
+              <button className={`${primaryBtn} disabled:opacity-40`} disabled={needsJob} title={needsJob ? "Pick the job first, or mark it overhead" : undefined}>Approve</button>
             </form>
           )}
           {!open && d.xero_status !== "sent" && (
