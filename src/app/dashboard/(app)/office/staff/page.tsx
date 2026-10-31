@@ -1,5 +1,7 @@
 import { saveLicenceAction, saveStaffAction, staffActiveAction } from "@/app/dashboard/jm-actions";
 import { staffPermissionsAction } from "@/app/dashboard/quote-actions";
+import { saveStaffPayAction } from "@/app/dashboard/timesheet-actions";
+import { loadStaffPay, type StaffPay } from "@/lib/timesheets";
 import { loadStaffPermissions, PERM_LABEL, type Perm, type StaffPerms } from "@/lib/quotes";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { area, input, label, money, nzDate, primaryBtn, quietBtn } from "@/components/office/jm";
@@ -18,8 +20,9 @@ export default async function StaffPage({ searchParams }: Props) {
   let staff: Staff[];
   let companies: Company[];
   let perms: Record<string, StaffPerms>;
+  let pay: Record<string, StaffPay>;
   try {
-    [staff, companies, perms] = await Promise.all([loadStaff(), loadCompanies(), loadStaffPermissions()]);
+    [staff, companies, perms, pay] = await Promise.all([loadStaff(), loadCompanies(), loadStaffPermissions(), loadStaffPay()]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -98,7 +101,8 @@ export default async function StaffPage({ searchParams }: Props) {
                     {Object.keys(s.roles).length === 0 && <span className="text-amber-800">No role in either company</span>}
                   </p>
                   {owner && <p className="mt-1 text-xs text-slate">
-                    Cost {money(s.cost_rate)}/h · charge-out {money(s.charge_out_rate)}/h · Smartly{" "}
+                    Pay {money(pay[s.id]?.pay_rate ?? null)}/h · cost {money(s.cost_rate)}/h · charge-out {money(s.charge_out_rate)}/h
+                    {pay[s.id]?.order_initials ? ` · orders ${pay[s.id].order_initials}` : ""} · Smartly{" "}
                     {s.smartly_employee_code ?? <span className="text-amber-800">no code</span>}
                     {s.smartly_pay_rate ? ` · Rate ${s.smartly_pay_rate}` : ""} · {s.login ? "has a login" : "no login yet"}
                     {s.works_on_jobs ? " · in the diary" : ""}
@@ -137,6 +141,7 @@ export default async function StaffPage({ searchParams }: Props) {
                 <summary className="cursor-pointer text-sm font-semibold text-aqua-deep">Edit {s.full_name.split(" ")[0]}</summary>
                 <div className="mt-3 space-y-4 rounded-2xl bg-mist/40 p-4">
                   <StaffForm companies={companies} staff={s} />
+                  {pay[s.id] && <PayForm s={s} p={pay[s.id]} />}
                   {perms[s.id]?.office && <PermForm s={s} p={perms[s.id]} />}
                   <div>
                     <h3 className="text-sm font-bold">Licences</h3>
@@ -187,20 +192,22 @@ function StaffForm({ companies, staff }: { companies: Company[]; staff?: Staff }
           {Object.entries(TRADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </div>
+{!s && (<>
       <div>
         <label className={label} htmlFor={f("cost")}>Cost rate ($/h excl GST)</label>
-        <input id={f("cost")} name="cost_rate" inputMode="decimal" defaultValue={s?.cost_rate ?? ""} className={input} />
+        <input id={f("cost")} name="cost_rate" inputMode="decimal" className={input} />
       </div>
       <div>
         <label className={label} htmlFor={f("charge")}>Charge-out rate ($/h excl GST)</label>
-        <input id={f("charge")} name="charge_out_rate" inputMode="decimal" defaultValue={s?.charge_out_rate ?? ""} className={input} />
+        <input id={f("charge")} name="charge_out_rate" inputMode="decimal" className={input} />
       </div>
+</>)}
       <div>
         <label className={label} htmlFor={f("smartly")}>Smartly employee code</label>
         <input id={f("smartly")} name="smartly_employee_code" defaultValue={s?.smartly_employee_code ?? ""} className={input} />
       </div>
       <div>
-        <label className={label} htmlFor={f("payrate")}>Smartly pay rate</label>
+        <label className={label} htmlFor={f("payrate")}>Smartly rate for ordinary time</label>
         <select id={f("payrate")} name="smartly_pay_rate" defaultValue={s?.smartly_pay_rate?.toString() ?? ""} className={input}>
           <option value="">—</option>
           <option value="1">Rate 1</option>
@@ -291,6 +298,47 @@ function PermForm({ s, p }: { s: Staff; p: StaffPerms }) {
         office manager yes, supervisor no).
       </p>
       <button className={quietBtn}>Save permissions</button>
+    </form>
+  );
+}
+
+/** Pay and rates (Phase 3a): what we pay them, what an hour costs a job, what we charge, initials on supplier orders. */
+function PayForm({ s, p }: { s: Staff; p: StaffPay }) {
+  const f = (k: string) => `pay-${k}-${s.id}`;
+  return (
+    <form action={saveStaffPayAction} className="grid gap-3 rounded-xl bg-white p-3 sm:grid-cols-5" data-testid="pay-form">
+      <input type="hidden" name="staffId" value={s.id} />
+      <input type="hidden" name="name" value={s.full_name} />
+      <h3 className="text-sm font-bold sm:col-span-5">Pay and rates</h3>
+      <div>
+        <label className={label} htmlFor={f("pay")}>Pay rate — their wage ($/h)</label>
+        <input id={f("pay")} name="pay_rate" inputMode="decimal" defaultValue={p.pay_rate ?? ""} className={input} />
+      </div>
+      <div>
+        <label className={label} htmlFor={f("cost")}>Cost rate — what a job is charged ($/h)</label>
+        <input id={f("cost")} name="cost_rate" inputMode="decimal" defaultValue={p.cost_rate ?? ""} className={input} />
+      </div>
+      <div>
+        <label className={label} htmlFor={f("charge")}>Charge-out rate ($/h excl GST)</label>
+        <input id={f("charge")} name="charge_out_rate" inputMode="decimal" defaultValue={p.charge_out_rate ?? ""} className={input} />
+      </div>
+      <div>
+        <label className={label} htmlFor={f("init")}>Initials on supplier orders</label>
+        <input id={f("init")} name="order_initials" maxLength={4} placeholder="e.g. JH" defaultValue={p.order_initials ?? ""} className={`${input} uppercase`} />
+      </div>
+      <div>
+        <label className={label} htmlFor={f("tool")}>Tool allowance</label>
+        <select id={f("tool")} name="tool_allowance" defaultValue={p.tool_allowance_set === null ? "default" : p.tool_allowance_set ? "on" : "off"} className={input}>
+          <option value="default">{s.is_apprentice ? "Yes (apprentice)" : "No (not an apprentice)"}</option>
+          <option value="on">Yes</option>
+          <option value="off">No</option>
+        </select>
+      </div>
+      <p className="text-xs text-slate sm:col-span-4">
+        The cost rate is what a job is charged for an hour of their time (wage plus ACC, KiwiSaver, holiday pay, van…), used for job
+        profit. The charge-out rate is what charge-up invoices use. The pay rate is for reference; Smartly works out pay from the hours.
+      </p>
+      <div className="flex items-end"><button className={primaryBtn}>Save pay and rates</button></div>
     </form>
   );
 }

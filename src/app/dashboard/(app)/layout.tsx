@@ -20,7 +20,7 @@ const MENU: (NavItem & { area: Area })[] = [
   { href: "/dashboard/office/customers", label: "Customers", area: "customers" },
   { href: "/dashboard/office/plumbers", label: "Plumbers", area: "bookings" },
   { href: "/dashboard/office/staff", label: "Staff", area: "staff" },
-  { href: "/dashboard/office/timesheets", label: "Timesheets", area: "bookings" },
+  { href: "/dashboard/office/timesheets", label: "Timesheets", area: "staff" },
   { href: "/dashboard/office/orders", label: "Orders", area: "bookings" },
   { href: "/dashboard/office/certificates", label: "Gas certs", area: "bookings" },
   { href: "/dashboard/office/price-books", label: "Price books", area: "pricing" },
