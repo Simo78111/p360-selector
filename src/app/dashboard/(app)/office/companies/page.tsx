@@ -3,6 +3,8 @@ import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { input, label, primaryBtn } from "@/components/office/jm";
 import { loadCompanies, type Company } from "@/lib/jm";
 import { quoteDefaultsAction } from "@/app/dashboard/quote-actions";
+import { saveCompanyMoneyAction } from "@/app/dashboard/supplier-actions";
+import { loadCompanyMoney, type CompanyMoney } from "@/lib/supplier-docs";
 import { officeEnabled } from "@/lib/office";
 import { requireOffice } from "@/lib/auth";
 
@@ -15,8 +17,9 @@ export default async function CompaniesPage({ searchParams }: Props) {
   if (!officeEnabled()) return <NotConnected />;
   const { ok, err } = await searchParams;
   let companies: Company[];
+  let money: Record<string, CompanyMoney>;
   try {
-    companies = await loadCompanies();
+    [companies, money] = await Promise.all([loadCompanies(), loadCompanyMoney()]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -55,11 +58,11 @@ export default async function CompaniesPage({ searchParams }: Props) {
               {c.job_prefix && <Field c={c} name="next_job_number" text="Next job number" />}
               <Field c={c} name="brand_colour" text="Brand colour (#rrggbb)" />
               <Field c={c} name="logo_url" text="Logo web address" />
-              <Field c={c} name="xero_tracking_option" text="Xero tracking option" />
               <div className="sm:col-span-2">
                 <button className={primaryBtn}>Save {c.name}</button>
               </div>
             </form>
+            {money[c.id] && <XeroForm id={c.id} m={money[c.id]} />}
             <form action={quoteDefaultsAction} className="mt-6 grid gap-3 border-t border-black/5 pt-4" data-testid={`quote-defaults-${c.code}`}>
               <h3 className="text-sm font-bold">Quote defaults (new quotes start with these)</h3>
               <input type="hidden" name="companyId" value={c.id} />
@@ -94,5 +97,49 @@ function Field({ c, name, text, type = "text" }: { c: Company; name: keyof Compa
       <label className={label} htmlFor={id}>{text}</label>
       <input id={id} name={name} type={type} defaultValue={(c[name] ?? "") as string | number} className={input} />
     </div>
+  );
+}
+
+const ACCOUNTS: [keyof CompanyMoney, string][] = [
+  ["acct_labour", "Labour (invoices)"], ["acct_sales", "Materials & other sales"], ["acct_vehicle", "Vehicle charge"],
+  ["acct_materials", "Materials (supplier bills)"], ["acct_hire", "Plant hire (bills)"], ["acct_subcontract", "Subcontractors (bills)"],
+  ["acct_retentions", "Retentions held"],
+];
+
+/** Phase 3b: Xero tracking, Draft/Authorised, supplier bills on/off and account codes for this company. */
+function XeroForm({ id, m }: { id: string; m: CompanyMoney }) {
+  const f = (k: string) => `${m.code}-x-${k}`;
+  return (
+    <form action={saveCompanyMoneyAction} className="mt-6 grid gap-3 border-t border-black/5 pt-4 sm:grid-cols-2" data-testid={`xero-${m.code}`}>
+      <input type="hidden" name="companyId" value={id} />
+      <input type="hidden" name="back" value="/dashboard/office/companies" />
+      <h3 className="font-bold sm:col-span-2">Xero</h3>
+      <div>
+        <label className={label} htmlFor={f("cat")}>Tracking category (blank until decided)</label>
+        <input id={f("cat")} name="xero_tracking_category" defaultValue={m.xero_tracking_category ?? ""} placeholder="e.g. Company" className={input} />
+      </div>
+      <div>
+        <label className={label} htmlFor={f("opt")}>Tracking option</label>
+        <input id={f("opt")} name="xero_tracking_option" defaultValue={m.xero_tracking_option ?? ""} placeholder={`e.g. ${m.name}`} className={input} />
+      </div>
+      <div>
+        <label className={label} htmlFor={f("st")}>Send to Xero as</label>
+        <select id={f("st")} name="xero_send_status" defaultValue={m.xero_send_status} className={input}>
+          <option value="DRAFT">Draft (check in Xero first)</option>
+          <option value="AUTHORISED">Authorised</option>
+        </select>
+      </div>
+      <label className="flex items-end gap-2 pb-2 text-sm">
+        <input type="checkbox" name="xero_send_bills" defaultChecked={m.xero_send_bills} />
+        Send approved supplier bills to Xero (leave off while Fergus still sends them)
+      </label>
+      {ACCOUNTS.map(([k, t]) => (
+        <div key={k}>
+          <label className={label} htmlFor={f(k)}>{t}</label>
+          <input id={f(k)} name={k} defaultValue={String(m[k] ?? "")} className={input} />
+        </div>
+      ))}
+      <div className="sm:col-span-2"><button className={primaryBtn}>Save Xero settings</button></div>
+    </form>
   );
 }

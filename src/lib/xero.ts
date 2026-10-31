@@ -432,3 +432,68 @@ export async function trackingCategories() {
     .filter((t) => t.Status === "ACTIVE")
     .map((t) => ({ name: t.Name, options: t.Options.filter((o) => o.Status === "ACTIVE").map((o) => o.Name) }));
 }
+
+// ── Phase 3b: supplier bills approved on the Supplier invoices screen ────────
+
+export type BillToSend = {
+  doc_id: string; supplier: string; number: string; date: string; type: "invoice" | "credit"; reference: string;
+  status: "DRAFT" | "AUTHORISED"; tracking_name: string | null; tracking_option: string | null;
+  lines: { description: string; quantity: number; unit_cost: number; total: number; account_code: string }[];
+};
+
+async function supplierContact(name: string): Promise<string> {
+  const found = await xero<{ Contacts: Contact[] }>("GET", `/Contacts?where=${encodeURIComponent(`Name=="${name.replaceAll('"', "")}"`)}`);
+  if (found.Contacts?.[0]) return found.Contacts[0].ContactID;
+  const made = await xero<{ Contacts: Contact[] }>("POST", "/Contacts", { Contacts: [{ Name: name, IsSupplier: true }] });
+  return made.Contacts[0].ContactID;
+}
+
+/** Sends approved supplier bills to Xero (as Draft or Authorised, per company). On the test site nothing is sent:
+ *  each one is marked "Test site: not sent to Xero". */
+export async function sendSupplierBills(): Promise<{ sent: number; failed: { number: string; error: string }[]; test: number }> {
+  const bills = await rpc<BillToSend[]>("xero_bills_to_send", { p_limit: 25 });
+  const out = { sent: 0, failed: [] as { number: string; error: string }[], test: 0 };
+  if (!bills.length) return out;
+  if (!xeroConfigured()) {
+    for (const b of bills) await rpc("xero_bill_result", { p_doc_id: b.doc_id, p_status: "test", p_xero_id: null, p_error: null });
+    out.test = bills.length;
+    return out;
+  }
+  for (const b of bills) {
+    try {
+      const contact = await supplierContact(b.supplier);
+      const tracking = b.tracking_name && b.tracking_option ? [{ Name: b.tracking_name, Option: b.tracking_option }] : undefined;
+      const credit = b.type === "credit";
+      const made = await xero<{ Invoices?: { InvoiceID: string }[]; CreditNotes?: { CreditNoteID: string }[] }>(
+        credit ? "PUT" : "POST",
+        credit ? "/CreditNotes" : "/Invoices",
+        {
+          [credit ? "CreditNotes" : "Invoices"]: [{
+            Type: credit ? "ACCPAYCREDIT" : "ACCPAY",
+            Contact: { ContactID: contact },
+            [credit ? "CreditNoteNumber" : "InvoiceNumber"]: b.number,
+            Reference: b.reference,
+            Date: b.date,
+            DueDate: credit ? undefined : b.date,
+            LineAmountTypes: "Exclusive",
+            Status: b.status,
+            LineItems: b.lines.map((l) => ({
+              Description: l.description, Quantity: Math.abs(Number(l.quantity)), UnitAmount: Math.abs(Number(l.unit_cost)),
+              AccountCode: l.account_code, Tracking: tracking,
+            })),
+          }],
+        },
+        { "Idempotency-Key": `bill-${b.doc_id}` },
+      );
+      const id = made.Invoices?.[0]?.InvoiceID ?? made.CreditNotes?.[0]?.CreditNoteID ?? null;
+      await rpc("xero_bill_result", { p_doc_id: b.doc_id, p_status: "sent", p_xero_id: id, p_error: null });
+      out.sent++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await rpc("xero_bill_result", { p_doc_id: b.doc_id, p_status: "failed", p_xero_id: null, p_error: message });
+      out.failed.push({ number: b.number, error: message });
+      if (err instanceof XeroError && [401, 403, 429].includes(err.status)) break;
+    }
+  }
+  return out;
+}
