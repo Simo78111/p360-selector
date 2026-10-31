@@ -26,7 +26,8 @@ export function CompanyTabs({ companies, current, path }: { companies: Company[]
 }
 
 export const money = (n: number | null | undefined) =>
-  n === null || n === undefined ? "—" : `$${Number(n).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  n === null || n === undefined ? "—"
+    : `${Number(n) < 0 ? "−" : ""}$${Math.abs(Number(n)).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export const nzDate = (d: string | null) =>
   d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "";
