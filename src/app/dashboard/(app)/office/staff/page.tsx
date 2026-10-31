@@ -207,7 +207,7 @@ function StaffForm({ companies, staff }: { companies: Company[]; staff?: Staff }
         <input id={f("smartly")} name="smartly_employee_code" defaultValue={s?.smartly_employee_code ?? ""} className={input} />
       </div>
       <div>
-        <label className={label} htmlFor={f("payrate")}>Smartly rate for ordinary time</label>
+        <label className={label} htmlFor={f("payrate")}>Smartly pay rate</label>
         <select id={f("payrate")} name="smartly_pay_rate" defaultValue={s?.smartly_pay_rate?.toString() ?? ""} className={input}>
           <option value="">—</option>
           <option value="1">Rate 1</option>
