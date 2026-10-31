@@ -125,17 +125,19 @@ export async function saveLeaveAction(form: FormData) {
   });
 }
 
-export async function decideLeaveAction(form: FormData) {
+async function decide(form: FormData, approve: boolean) {
   await run(form, async () => {
     const s = await assertOffice("staff");
     const id = text(form, "id", 40);
     if (!isId(id)) throw new Error("Leave not found.");
-    const approve = text(form, "decision", 10) === "approve";
-    const r = await decideLeave(s, id, approve, text(form, "reason", 300) || null);
+    const r = await decideLeave(s, id, approve, approve ? null : text(form, "reason", 300) || null);
     return approve ? `${r.type} approved for ${r.staff} (${r.dates_label}). They're marked off in the diary.`
                    : `${r.type} for ${r.staff} declined.`;
   });
 }
+// One action per button: a shared action reading the clicked button's value declined everything on the preview.
+export async function approveLeaveAction(form: FormData) { await decide(form, true); }
+export async function declineLeaveAction(form: FormData) { await decide(form, false); }
 
 export async function savePayRuleAction(form: FormData) {
   await run(form, async () => {

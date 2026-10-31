@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  approveAction, decideLeaveAction, reopenAction, removeLineAction, saveLeaveAction, saveLineAction,
+  approveAction, approveLeaveAction, declineLeaveAction, reopenAction, removeLineAction, saveLeaveAction, saveLineAction,
 } from "@/app/dashboard/timesheet-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { input, label, primaryBtn, quietBtn } from "@/components/office/jm";
@@ -98,12 +98,12 @@ export default async function TimesheetsPage({ searchParams }: Props) {
               <li key={r.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
                 <span className="font-semibold">{r.staff}</span>
                 <span>{r.type} · {r.dates_label} · {r.hours} h{r.note ? ` · “${r.note}”` : ""}</span>
-                <form action={decideLeaveAction} className="ml-auto flex flex-wrap items-center gap-2">
+                <form action={approveLeaveAction} className="ml-auto flex flex-wrap items-center gap-2">
                   <input type="hidden" name="id" value={r.id} />
                   <input type="hidden" name="back" value={self} />
                   <input name="reason" placeholder="Reason if declining" aria-label="Reason if declining" className={`${field} w-44`} />
-                  <button name="decision" value="approve" className={primaryBtn}>Approve</button>
-                  <button name="decision" value="decline" className={quietBtn}>Decline</button>
+                  <button className={primaryBtn}>Approve</button>
+                  <button formAction={declineLeaveAction} className={quietBtn}>Decline</button>
                 </form>
               </li>
             ))}
