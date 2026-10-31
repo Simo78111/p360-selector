@@ -172,11 +172,16 @@ export const searchItems = (s: OfficeSession, q: string) =>
 export type Money = {
   jobs: number; job_refs: string[]; phases: number; quoted_ex_gst: number | null; quoted_cost?: number | null;
   quotes_accepted: number; quotes_open: number; invoiced_ex_gst: number; draft_invoices_ex_gst: number; paid: number;
-  costs: { labour: number; supplier_documents: number; purchase_orders: number; stock_other: number };
+  costs: {
+    labour?: number; supplier_documents?: number; purchase_orders?: number; stock_other?: number; total?: number;
+    pending_labour?: number; pending_supplier?: number; lines_without_rate?: number;
+    labour_hours: number; labour_charge: number; materials_sell: number; charge_value: number;
+  };
+  costs_ready?: boolean;
 };
 export type JobMoney = {
   job: Money; project: Money; job_level_quoted: number | null;
-  phases: Record<string, { quoted: number | null; quotes_open: number }>; can_costs: boolean;
+  phases: Record<string, { quoted: number | null; quotes_open: number }>; can_costs: boolean; markup_pct?: number;
 };
 export const loadJobMoney = (s: OfficeSession, jobId: string) => rpc<JobMoney>("office_job_money", { p_staff_id: who(s), p_job_id: jobId });
 

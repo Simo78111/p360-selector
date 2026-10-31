@@ -21,6 +21,7 @@ import { requireOffice } from "@/lib/auth";
 import { fmtBytes, loadJobPage, nzDateTime, STAGES, type JobPage, type Phase } from "@/lib/jobs";
 import { officeEnabled } from "@/lib/office";
 import { newQuoteAction } from "@/app/dashboard/quote-actions";
+import { KIND_LABEL, loadJobCosts, STATUS_LABEL as COST_STATUS, type JobCosts } from "@/lib/job-costs";
 import { loadJobMoney, loadJobQuotes, STATUS_LABEL, type JobMoney, type JobQuotes, type Money as MoneyT } from "@/lib/quotes";
 
 export const metadata = { title: "Job" };
@@ -31,6 +32,7 @@ const TABS = [
   ["summary", "Job Summary"],
   ["quotes", "Quotes"],
   ["money", "Financial Summary"],
+  ["costs", "Cost Report"],
   ["log", "Notes & History"],
   ["files", "Files & Photos"],
   ["tasks", "Tasks"],
@@ -55,10 +57,13 @@ export default async function JobPageView({ params, searchParams }: Props) {
   if (!job) notFound();
   let jobMoney: JobMoney | null = null;
   let quotes: JobQuotes | null = null;
+  let costs: JobCosts | null = null;
+  const costScope: "job" | "project" = scopeParam === "job" ? "job" : "project";
   try {
-    [jobMoney, quotes] = await Promise.all([
+    [jobMoney, quotes, costs] = await Promise.all([
       loadJobMoney(session, job.job_id),
       tab === "quotes" && job.kind === "managed" ? loadJobQuotes(session, job.job_id) : Promise.resolve(null),
+      tab === "costs" ? loadJobCosts(session, job.job_id, costScope) : Promise.resolve(null),
     ]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
@@ -312,6 +317,7 @@ export default async function JobPageView({ params, searchParams }: Props) {
           )}
           {tab === "quotes" && <QuotesTab job={job} quotes={quotes} money={jobMoney} realPhases={realPhases} base={base} />}
           {tab === "money" && jobMoney && <Money job={job} money={jobMoney} scope={scope} base={base} />}
+          {tab === "costs" && costs && <CostReport job={job} costs={costs} money={jobMoney} scope={costScope} base={base} />}
           {tab === "log" && (
             <>
               {/* ── Notes and history ────────────────────────────────────────────── */}
@@ -534,6 +540,7 @@ function Money({ job, money: m, scope, base }: { job: JobPage; money: JobMoney; 
   const project = managed && m.project.jobs > 1;
   const t: MoneyT = scope === "job" || !project ? m.job : m.project;
   const quoted = t.quoted_ex_gst;
+  const c = t.costs;
   const rows: [string, string][] = [["Accepted quotes (ex GST)", quoted === null ? "—" : money(quoted)]];
   if (t.quoted_cost !== undefined && t.quoted_cost !== null) rows.push(["Quoted cost", money(t.quoted_cost)]);
   rows.push(["Quotes accepted", String(t.quotes_accepted)], ["Quotes still open", String(t.quotes_open)]);
@@ -556,20 +563,155 @@ function Money({ job, money: m, scope, base }: { job: JobPage; money: JobMoney; 
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Box title="Quoted (the budget)" rows={rows}
           note={managed ? (quoted === null ? "Nothing accepted yet. An accepted quote sets the budget." : undefined) : "The booking's quoted price"} />
-        <Box title="Costs" rows={[
-          ["Labour", money(t.costs.labour)],
-          ["Supplier documents", money(t.costs.supplier_documents)],
-          ["Purchase orders", money(t.costs.purchase_orders)],
-          ["Stock / other", money(t.costs.stock_other)],
-        ]} note="Filled in Phase 3 (timesheets, supplier invoices, POs)" />
+        {m.can_costs ? (
+          <Box title="Costs (ex GST)" rows={[
+            ["Labour" + (c.labour_hours ? ` (${hrs(c.labour_hours)})` : ""), money(c.labour ?? 0)],
+            ["Supplier invoices", money(c.supplier_documents ?? 0)],
+            ["Total cost", money(c.total ?? 0)],
+          ]} note={pendingNote(c)} />
+        ) : (
+          <Box title="Work done (charge value)" rows={[
+            ["Labour" + (c.labour_hours ? ` (${hrs(c.labour_hours)})` : ""), money(c.labour_charge)],
+            ["Materials at sell", money(c.materials_sell)],
+          ]} note="Costs are hidden for you" />
+        )}
         <Box title="Invoiced" rows={[
           ["Invoiced (ex GST)", money(t.invoiced_ex_gst)],
           ["Draft invoices", money(t.draft_invoices_ex_gst)],
           ["Paid", money(t.paid)],
         ]} />
-        <Box title="Profit" rows={[["Left to invoice", quoted === null ? "—" : money(Math.max(0, quoted - t.invoiced_ex_gst))], ["Potential profit", "—"]]}
-          note="Profit needs costs (Phase 3)" />
+        <Box title="Profit" rows={profitRows(t, m.can_costs)}
+          note={m.can_costs ? (quoted === null ? "No accepted quote: charge-up value = labour at charge-out + materials at sell" : "Against the accepted quotes") : undefined} />
       </div>
+      {m.can_costs && <ProfitBar t={t} />}
+      <p className="mt-3 text-sm">
+        <Link href={`${base}?tab=costs${scope === "job" ? "&scope=job" : ""}`} className="font-semibold text-aqua-deep">Cost Report →</Link>
+        <a href={`/api/office/job-costs?job=${job.job_id}&scope=${scope}&ref=${encodeURIComponent(job.job_ref)}`} className="ml-4 text-slate underline">Download CSV</a>
+      </p>
+    </section>
+  );
+}
+
+const hrs = (h: number) => `${Number(h).toFixed(h % 1 ? 2 : 0).replace(/0$/, "")} h`;
+
+function pendingNote(c: MoneyT["costs"]): string | undefined {
+  const p = (c.pending_labour ?? 0) + (c.pending_supplier ?? 0);
+  const bits: string[] = [];
+  if (p > 0) bits.push(`${money(p)} not approved yet (timesheets or supplier invoices still to approve)`);
+  if (c.lines_without_rate) bits.push(`${c.lines_without_rate} labour line${c.lines_without_rate === 1 ? "" : "s"} with no cost rate (Staff → Pay and rates)`);
+  return bits.join(". ") || undefined;
+}
+
+/** Budget = accepted quotes, or for charge-up work the charge value. Potential profit = budget − cost so far. */
+function profitNumbers(t: MoneyT) {
+  const cost = t.costs.total ?? 0;
+  const budget = t.quoted_ex_gst ?? t.costs.charge_value;
+  const potential = budget - cost;
+  const actual = t.invoiced_ex_gst - cost;
+  return { cost, budget, potential, margin: budget > 0 ? (potential / budget) * 100 : null, actual };
+}
+
+function profitRows(t: MoneyT, canCosts: boolean): [string, string][] {
+  const quoted = t.quoted_ex_gst;
+  const left = (quoted ?? t.costs.charge_value) - t.invoiced_ex_gst;
+  const rows: [string, string][] = [[quoted === null ? "Left to charge up" : "Left to invoice", money(Math.max(0, left))]];
+  if (!canCosts) return rows;
+  const p = profitNumbers(t);
+  rows.push([quoted === null ? "Charge-up value" : "Budget (quoted)", money(p.budget)],
+            ["Potential profit", `${money(p.potential)}${p.margin === null ? "" : ` · ${p.margin.toFixed(0)}%`}`],
+            ["Profit on invoiced so far", money(p.actual)]);
+  return rows;
+}
+
+function ProfitBar({ t }: { t: MoneyT }) {
+  const p = profitNumbers(t);
+  const top = Math.max(p.budget, p.cost, t.invoiced_ex_gst, 1);
+  const bars: [string, number, string][] = [
+    [t.quoted_ex_gst === null ? "Charge-up value" : "Quoted", p.budget, "bg-aqua"],
+    ["Invoiced", t.invoiced_ex_gst, "bg-aqua-deep"],
+    ["Cost so far", p.cost, p.cost > p.budget ? "bg-red-500" : "bg-amber-400"],
+  ];
+  return (
+    <div className="mt-4 space-y-1.5 text-sm" data-testid="profit-bars">
+      {bars.map(([k, v, cls]) => (
+        <div key={k} className="grid grid-cols-[8rem_1fr_6rem] items-center gap-2">
+          <span className="text-slate">{k}</span>
+          <span className="h-3 rounded-full bg-mist"><span className={`block h-3 rounded-full ${cls}`} style={{ width: `${Math.min(100, (v / top) * 100)}%` }} /></span>
+          <span className="text-right font-semibold tabular-nums">{money(v)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CostReport({ job, costs, money: m, scope, base }: { job: JobPage; costs: JobCosts; money: JobMoney | null; scope: "job" | "project"; base: string }) {
+  const project = job.kind === "managed" && (m?.project.jobs ?? 1) > 1;
+  const t = costs.totals;
+  const csv = `/api/office/job-costs?job=${job.job_id}&scope=${scope}&ref=${encodeURIComponent(job.job_ref)}`;
+  const kinds = ["labour", "materials", "hire", "freight"] as const;
+  const sum = (k: string, f: "cost" | "sell") => costs.lines.filter((l) => l.kind === k).reduce((a, l) => a + Number(l[f] ?? 0), 0);
+  return (
+    <section className="rounded-2xl bg-white p-5 sm:p-6" data-testid="cost-report">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-bold">Cost Report</h2>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {project && ([["project", "Entire project"], ["job", `${job.job_ref} only`]] as const).map(([k, v]) => (
+            <Link key={k} href={`${base}?tab=costs&scope=${k}`} aria-current={scope === k ? "page" : undefined}
+              className={`rounded-full px-3 py-1 ${scope === k ? "bg-aqua-pale font-semibold text-aqua-deep" : "text-slate"}`}>{v}</Link>
+          ))}
+          <a href={csv} className={quietBtn}>Download CSV</a>
+        </div>
+      </div>
+      <p className="mt-1 text-sm text-slate">
+        Labour from timesheets (cost rate; Rate 2 costs ×1.5, Rate 3 ×2) and supplier invoice lines. Charge / sell = charge-out rate, and materials
+        at cost + {Number(costs.markup_pct)}% (the customer&apos;s pricing tier). Invoices still on the reconciliation screen are shown but marked.
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {kinds.filter((k) => k === "labour" || k === "materials" || costs.lines.some((l) => l.kind === k)).map((k) => (
+          <Box key={k} title={KIND_LABEL[k] + (k === "labour" ? ` · ${hrs(t.labour_hours)}` : "")} rows={[
+            ...(costs.can_costs ? [["Cost", money(sum(k, "cost"))] as [string, string]] : []),
+            ["Charge / sell", money(sum(k, "sell"))],
+          ]} />
+        ))}
+      </div>
+      {costs.lines.length === 0 ? (
+        <p className="mt-4 rounded-xl bg-mist/60 p-4 text-sm text-slate">No costs on this job yet. Timesheet hours and approved supplier invoices show here.</p>
+      ) : (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[46rem] text-sm">
+            <thead className="text-left text-xs text-slate">
+              <tr>
+                <th className="py-1 pr-2">Date</th><th className="pr-2">Type</th><th className="pr-2">Phase</th><th className="pr-2">Description</th>
+                <th className="pr-2">Who / supplier</th><th className="pr-2 text-right">Qty</th>
+                {costs.can_costs && <th className="pr-2 text-right">Cost</th>}<th className="pr-2 text-right">Charge / sell</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costs.lines.map((l) => (
+                <tr key={l.id} className={`border-t border-mist ${l.status === "approved" ? "" : "text-slate"}`}>
+                  <td className="whitespace-nowrap py-1.5 pr-2">{nzDate(l.date)}</td>
+                  <td className="pr-2">{KIND_LABEL[l.kind]}</td>
+                  <td className="whitespace-nowrap pr-2">{l.phase_ref ? l.phase_ref.slice(job.job_ref.length) || l.phase_ref : l.job_ref !== job.job_ref ? l.job_ref : "—"}
+                    {l.phase_name && <span className="text-slate"> {l.phase_name}</span>}</td>
+                  <td className="pr-2">{l.description}<span className="block text-xs text-slate">{l.ref}</span></td>
+                  <td className="pr-2">{l.who ?? "—"}</td>
+                  <td className="whitespace-nowrap pr-2 text-right tabular-nums">{Number(l.qty)}{l.unit ? ` ${l.unit}` : ""}</td>
+                  {costs.can_costs && <td className="pr-2 text-right tabular-nums">{money(Number(l.cost ?? 0))}{l.no_rate && <span className="block text-xs text-amber-700">no cost rate</span>}</td>}
+                  <td className="pr-2 text-right tabular-nums">{money(Number(l.sell))}</td>
+                  <td className="text-xs">{COST_STATUS[l.status]}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-ink/20 font-semibold">
+                <td colSpan={5} className="py-1.5">Total</td><td />
+                {costs.can_costs && <td className="pr-2 text-right tabular-nums">{money(Number(t.total ?? 0))}</td>}
+                <td className="pr-2 text-right tabular-nums">{money(Number(t.charge_value))}</td><td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
