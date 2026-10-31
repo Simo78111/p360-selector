@@ -98,13 +98,19 @@ export default async function TimesheetsPage({ searchParams }: Props) {
               <li key={r.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
                 <span className="font-semibold">{r.staff}</span>
                 <span>{r.type} · {r.dates_label} · {r.hours} h{r.note ? ` · “${r.note}”` : ""}</span>
-                <form action={approveLeaveAction} className="ml-auto flex flex-wrap items-center gap-2">
-                  <input type="hidden" name="id" value={r.id} />
-                  <input type="hidden" name="back" value={self} />
-                  <input name="reason" placeholder="Reason if declining" aria-label="Reason if declining" className={`${field} w-44`} />
-                  <button className={primaryBtn}>Approve</button>
-                  <button formAction={declineLeaveAction} className={quietBtn}>Decline</button>
-                </form>
+                <span className="ml-auto flex flex-wrap items-center gap-2">
+                  <form action={declineLeaveAction} className="flex items-center gap-2">
+                    <input type="hidden" name="id" value={r.id} />
+                    <input type="hidden" name="back" value={self} />
+                    <input name="reason" placeholder="Reason if declining" aria-label="Reason if declining" className={`${field} w-44`} />
+                    <button className={quietBtn}>Decline</button>
+                  </form>
+                  <form action={approveLeaveAction}>
+                    <input type="hidden" name="id" value={r.id} />
+                    <input type="hidden" name="back" value={self} />
+                    <button className={primaryBtn}>Approve</button>
+                  </form>
+                </span>
               </li>
             ))}
           </ul>
@@ -305,6 +311,7 @@ function DayBlock({ x, day, self, rateOptions }: { x: TsPerson; day: TsDay; self
             {day.lines.map((l) => (
               <tr key={l.id} data-testid="ts-line">
                 <td colSpan={8} className="py-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
                   <form action={saveLineAction} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="id" value={l.id} />
                     <input type="hidden" name="plumberId" value={x.plumber_id} />
@@ -329,8 +336,15 @@ function DayBlock({ x, day, self, rateOptions }: { x: TsPerson; day: TsDay; self
                     <input name="note" aria-label="Note" defaultValue={l.note ?? ""} disabled={locked} maxLength={300} className={`${field} w-40`} />
                     <span className="w-16 text-xs text-slate">{SOURCE[l.source]}{l.kind === "travel" && l.signed_off_by ? " ✓" : ""}</span>
                     {!locked && <button className={quietBtn}>Save</button>}
-                    {!locked && <button formAction={removeLineAction} className="text-xs text-red-700 underline">Remove</button>}
                   </form>
+                  {!locked && (
+                    <form action={removeLineAction} className="inline">
+                      <input type="hidden" name="id" value={l.id} />
+                      <input type="hidden" name="back" value={self} />
+                      <button className="text-xs text-red-700 underline">Remove</button>
+                    </form>
+                  )}
+                  </div>
                 </td>
               </tr>
             ))}
