@@ -40,7 +40,8 @@ export const STATE_LABEL: Record<JobState, string> = {
 };
 
 // ── Lists ──────────────────────────────────────────────────────────────────
-export type ListView = "open" | "all" | "on_hold" | "cancelled" | "closed" | `stage:${Stage}`;
+export type Health = "red" | "amber" | "green";
+export type ListView = "open" | "all" | "on_hold" | "cancelled" | "closed" | `stage:${Stage}` | `stage:${Stage}:${Health}`;
 export type JobRow = {
   kind: "managed" | "booking";
   job_id: string; job_ref: string; ref: string; company: string; title: string; customer: string; site: string;
@@ -53,6 +54,7 @@ export type PhaseRow = {
   job_id: string; job_ref: string; ref: string; phase_name: string | null; company: string; title: string;
   customer: string; site: string; stage: Stage; status?: string; since: string; is_variation: boolean;
   order_number: string | null; manager: string | null;
+  health?: Health; why?: string | null; value?: number;
 };
 export type PipelineCounts = { stages: { id: Stage; label: string; count: number }[]; on_hold: number };
 
@@ -60,6 +62,12 @@ export const loadJobList = (s: OfficeSession, view: ListView, search: string, co
   rpc<(JobRow | PhaseRow)[]>("office_job_list", {
     p_staff_id: who(s), p_search: search || null, p_company_id: companyId, p_view: view, p_limit: 300,
   });
+// The Fergus-style status board on All jobs: per stage, how many phases/bookings are red / amber / green, and $.
+export type BoardColumn = { id: Stage; label: string; red: number; amber: number; green: number; value: number };
+export type PipelineBoard = { columns: BoardColumn[]; on_hold: number };
+export const loadPipelineBoard = (s: OfficeSession, companyId: string | null) =>
+  rpc<PipelineBoard>("office_pipeline_board", { p_staff_id: who(s), p_company_id: companyId });
+
 export const loadPipelineCounts = (s: OfficeSession, companyId: string | null) =>
   rpc<PipelineCounts>("office_pipeline_counts", { p_staff_id: who(s), p_company_id: companyId });
 

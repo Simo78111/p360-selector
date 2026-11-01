@@ -2,20 +2,22 @@ import Link from "next/link";
 import { ClickableRow } from "@/components/office/ClickableRow";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { CompanyBadge, StageChip, StateBadge } from "@/components/office/jobs-ui";
-import { input, primaryBtn } from "@/components/office/jm";
+import { input, money, primaryBtn } from "@/components/office/jm";
+import { HealthDot, PipelineBoard } from "@/components/office/PipelineBoard";
 import { can, canEditCompany, requireOffice } from "@/lib/auth";
 import { loadCompanies, type Company } from "@/lib/jm";
 import {
   daysSince,
   isStage,
   loadJobList,
-  loadPipelineCounts,
+  loadPipelineBoard,
   nzDateTime,
-  STAGES,
+  stageLabel,
+  type Health,
   type JobRow,
   type ListView,
   type PhaseRow,
-  type PipelineCounts,
+  type PipelineBoard as Board,
 } from "@/lib/jobs";
 import { officeEnabled } from "@/lib/office";
 
@@ -24,6 +26,7 @@ export const metadata = { title: "All jobs" };
 type Props = { searchParams: Promise<{ ok?: string; err?: string; view?: string; q?: string; co?: string }> };
 
 const OTHER_VIEWS: { id: ListView; label: string }[] = [
+  { id: "open", label: "Open" },
   { id: "on_hold", label: "On hold" },
   { id: "closed", label: "Closed" },
   { id: "cancelled", label: "Cancelled" },
@@ -32,7 +35,8 @@ const OTHER_VIEWS: { id: ListView; label: string }[] = [
 
 function parseView(v: string | undefined): ListView {
   if (!v) return "open";
-  if (v.startsWith("stage:") && isStage(v.slice(6))) return v as ListView;
+  const m = v.match(/^stage:([a-z_]+)(?::(red|amber|green))?$/);
+  if (m && isStage(m[1])) return v as ListView;
   return (["open", "all", "on_hold", "closed", "cancelled"] as const).includes(v as "open") ? (v as ListView) : "open";
 }
 
@@ -43,22 +47,23 @@ export default async function AllJobsPage({ searchParams }: Props) {
   const view = parseView((await searchParams).view);
   let companies: Company[];
   let rows: (JobRow | PhaseRow)[];
-  let counts: PipelineCounts;
+  let board: Board;
   try {
     companies = (await loadCompanies()).filter((c) => can(session, "jobs", c.id));
     const company = companies.find((c) => c.code === co) ?? null;
-    [rows, counts] = await Promise.all([
+    [rows, board] = await Promise.all([
       loadJobList(session, view, q.trim(), company?.id ?? null),
-      loadPipelineCounts(session, company?.id ?? null),
+      loadPipelineBoard(session, company?.id ?? null),
     ]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
   const company = companies.find((c) => c.code === co) ?? null;
   const canCreate = companies.some((c) => canEditCompany(session, c.id));
-  const link = (v: ListView, c: string | null = company?.code ?? null) =>
+  const link = (v: string, c: string | null = company?.code ?? null) =>
     `/dashboard/office/all-jobs?view=${v}${c ? `&co=${c}` : ""}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
   const stageView = view.startsWith("stage:");
+  const [, selStage, selHealth] = stageView ? view.split(":") : [];
 
   return (
     <div className="space-y-5">
@@ -66,8 +71,8 @@ export default async function AllJobsPage({ searchParams }: Props) {
         <div>
           <h1 className="text-2xl font-bold">All jobs</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate">
-            Project 360 jobs and Plumbing 360 bookings together, showing the companies your role covers. Pick a stage to see
-            what&apos;s waiting there, oldest first.
+            Project 360 jobs (one count per phase) and Plumbing 360 bookings together, for the companies your role covers.
+            Click a stage or a colour on the board to see what&apos;s there, worst first.
           </p>
         </div>
         {canCreate && (
@@ -95,19 +100,20 @@ export default async function AllJobsPage({ searchParams }: Props) {
         </nav>
       )}
 
-      <nav className="flex flex-wrap gap-1 rounded-2xl bg-white p-2" aria-label="Job lists" data-testid="pipeline-tabs">
-        <Tab href={link("open")} on={view === "open"} label="Open" />
-        {STAGES.map((s) => (
-          <Tab
-            key={s.id}
-            href={link(`stage:${s.id}`)}
-            on={view === `stage:${s.id}`}
-            label={s.list}
-            count={counts.stages.find((c) => c.id === s.id)?.count}
-          />
-        ))}
+      <PipelineBoard
+        columns={board.columns}
+        selected={stageView ? { stage: selStage, health: (selHealth as Health) ?? null } : null}
+        href={(v) => link(v)}
+      />
+
+      <nav className="flex flex-wrap items-center gap-1" aria-label="Job lists" data-testid="pipeline-tabs">
+        {stageView && (
+          <span className="mr-2 rounded-full bg-ink px-3 py-1.5 text-sm font-semibold text-white">
+            {stageLabel(selStage)}{selHealth ? ` · ${selHealth}` : ""}
+          </span>
+        )}
         {OTHER_VIEWS.map((v) => (
-          <Tab key={v.id} href={link(v.id)} on={view === v.id} label={v.label} count={v.id === "on_hold" ? counts.on_hold : undefined} />
+          <Tab key={v.id} href={link(v.id)} on={view === v.id} label={v.label} count={v.id === "on_hold" ? board.on_hold : undefined} />
         ))}
       </nav>
 
@@ -139,7 +145,7 @@ function Tab({ href, on, label, count }: { href: string; on: boolean; label: str
     <Link
       href={href}
       aria-current={on ? "page" : undefined}
-      className={`rounded-full px-3 py-1.5 text-sm font-medium ${on ? "bg-aqua-pale text-aqua-deep" : "text-slate hover:text-ink"}`}
+      className={`rounded-full px-3 py-1.5 text-sm font-medium ${on ? "bg-aqua-pale text-aqua-deep" : "bg-white text-slate hover:text-ink"}`}
     >
       {label}
       {count !== undefined && count > 0 && <span className="ml-1 rounded-full bg-ink/10 px-1.5 text-xs font-bold">{count}</span>}
@@ -211,6 +217,7 @@ function PhaseTable({ rows }: { rows: PhaseRow[] }) {
           <th className="px-4 py-2">Customer and site</th>
           <th className="px-4 py-2">Stage</th>
           <th className="px-4 py-2">Manager</th>
+          <th className="px-4 py-2 text-right">Value</th>
           <th className="px-4 py-2 text-right">Waiting</th>
         </tr>
       </thead>
@@ -233,8 +240,12 @@ function PhaseTable({ rows }: { rows: PhaseRow[] }) {
               <p>{r.customer}</p>
               <p className="text-xs text-slate">{r.site}</p>
             </td>
-            <td className="px-4 py-3"><StageChip stage={r.stage} /></td>
+            <td className="px-4 py-3">
+              <div className="flex items-center gap-2"><HealthDot health={r.health} why={r.why} /><StageChip stage={r.stage} /></div>
+              {r.why && <p className={`mt-1 text-xs ${r.health === "red" ? "font-semibold text-red-700" : "text-amber-800"}`}>{r.why}</p>}
+            </td>
             <td className="px-4 py-3 text-slate">{r.manager ?? ""}</td>
+            <td className="px-4 py-3 text-right tabular-nums">{r.value ? money(r.value) : "—"}</td>
             <td className="px-4 py-3 text-right text-xs text-slate">
               {daysSince(r.since) === 0 ? "today" : `${daysSince(r.since)} day${daysSince(r.since) === 1 ? "" : "s"}`}
             </td>
