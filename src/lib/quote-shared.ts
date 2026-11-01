@@ -39,3 +39,6 @@ export const STATUS_LABEL: Record<string, string> = {
   declined: "Declined",
   closed: "Closed",
 };
+
+/** A labour rate from the price book (Plumber, Gas Fitter, Apprentice) for the Labour part of a quote section. */
+export type LabourRate = { id: string; code: string; description: string; unit: string | null; cost: number; sell: number };

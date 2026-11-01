@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { builderAction, favouriteLibraryAction, type BuilderOp } from "@/app/dashboard/quote-actions";
 import { ItemSearch } from "@/components/office/ItemSearch";
-import { APPEARS_AS, PRICE_SOURCE, STATUS_LABEL, type AppearsAs } from "@/lib/quote-shared";
+import { APPEARS_AS, PRICE_SOURCE, STATUS_LABEL, type AppearsAs, type LabourRate } from "@/lib/quote-shared";
 import type { FavouriteLibrary, OfficeQuote, QuoteLine, QuoteSection } from "@/lib/quotes";
 
 const money = (n: number | null | undefined) =>
@@ -22,7 +22,7 @@ const field = "w-full rounded-lg border border-black/10 bg-white px-2 py-1 text-
 const cell = "rounded-md border border-black/10 bg-white px-1.5 py-1 text-right text-sm tabular-nums disabled:border-transparent disabled:bg-transparent";
 const pill = "rounded-full px-3 py-1.5 text-xs font-semibold";
 
-export function QuoteBuilder({ initial, jobPath }: { initial: OfficeQuote; jobPath: string }) {
+export function QuoteBuilder({ initial, jobPath, labour = [] }: { initial: OfficeQuote; jobPath: string; labour?: LabourRate[] }) {
   const [q, setQ] = useState(initial);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -220,7 +220,7 @@ export function QuoteBuilder({ initial, jobPath }: { initial: OfficeQuote; jobPa
 
           {/* ── Sections ────────────────────────────────────────────────── */}
           {q.sections.map((s, i) => (
-            <Section key={s.id} q={q} s={s} first={i === 0} last={i === q.sections.length - 1} run={run} />
+            <Section key={s.id} q={q} s={s} first={i === 0} last={i === q.sections.length - 1} run={run} labour={labour} />
           ))}
           {edit && <AddSection run={run} />}
 
@@ -283,9 +283,16 @@ function Row({ k, v, bold = false }: { k: string; v: string; bold?: boolean }) {
   );
 }
 
-function Section({ q, s, first, last, run }: { q: OfficeQuote; s: QuoteSection; first: boolean; last: boolean; run: Run }) {
+function Section({ q, s, first, last, run, labour }: {
+  q: OfficeQuote; s: QuoteSection; first: boolean; last: boolean; run: Run; labour: LabourRate[];
+}) {
   const edit = q.can.edit;
   const costs = q.can.costs;
+  // Labour lines (linked to a labour rate in the price book) sit in their own part above the materials.
+  const labourIds = new Set(labour.map((r) => r.id));
+  const labourLines = s.lines.filter((l) => l.price_book_item_id && labourIds.has(l.price_book_item_id));
+  const itemLines = s.lines.filter((l) => !(l.price_book_item_id && labourIds.has(l.price_book_item_id)));
+  const cols = costs ? 9 : 7;
   const [adding, setAdding] = useState<"none" | "typed" | "fav">("none");
   const [saveFav, setSaveFav] = useState(false);
   const save = (changes: Record<string, unknown>) => run({ op: "section", sectionId: s.id, changes });
@@ -342,12 +349,25 @@ function Section({ q, s, first, last, run }: { q: OfficeQuote; s: QuoteSection; 
               <th className="w-16" />
             </tr>
           </thead>
-          <tbody>
-            {s.lines.map((l, i) => (
-              <Line key={l.id} q={q} s={s} l={l} first={i === 0} last={i === s.lines.length - 1} run={run} />
+          {labour.length > 0 && (
+            <tbody data-testid="quote-labour">
+              <tr><td colSpan={cols} className="pt-2 pb-1 text-xs font-bold tracking-wide text-slate uppercase">Labour</td></tr>
+              {labourLines.map((l, i) => (
+                <Line key={l.id} q={q} s={s} l={l} first={i === 0} last={i === labourLines.length - 1} run={run} />
+              ))}
+              {labourLines.length === 0 && !edit && <tr><td colSpan={cols} className="py-1 text-sm text-slate">No labour.</td></tr>}
+              {edit && <AddLabour s={s} labour={labour} cols={cols} costs={costs} run={run} />}
+            </tbody>
+          )}
+          <tbody data-testid="quote-materials">
+            {labour.length > 0 && (
+              <tr><td colSpan={cols} className="border-t border-black/10 pt-3 pb-1 text-xs font-bold tracking-wide text-slate uppercase">Materials</td></tr>
+            )}
+            {itemLines.map((l, i) => (
+              <Line key={l.id} q={q} s={s} l={l} first={i === 0} last={i === itemLines.length - 1} run={run} />
             ))}
             {s.lines.length === 0 && (
-              <tr><td colSpan={9} className="py-2 text-sm text-slate">{s.fixed_price !== null ? "No lines: the fixed price is the section's price." : "No lines yet."}</td></tr>
+              <tr><td colSpan={cols} className="py-2 text-sm text-slate">{s.fixed_price !== null ? "No lines: the fixed price is the section's price." : "No lines yet."}</td></tr>
             )}
           </tbody>
           <tfoot>
@@ -367,6 +387,7 @@ function Section({ q, s, first, last, run }: { q: OfficeQuote; s: QuoteSection; 
       {edit && (
         <div className="mt-2 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-slate">Add materials:</span>
             <ItemSearch id={`search-${s.id}`} onPick={(it) => run({ op: "addLine", sectionId: s.id, line: { price_book_item_id: it.id, quantity: 1 } })} />
             <button type="button" onClick={() => setAdding(adding === "typed" ? "none" : "typed")} className={`${pill} bg-mist`}>+ Type a line</button>
             <button type="button" onClick={() => setAdding(adding === "fav" ? "none" : "fav")} className={`${pill} bg-mist`}>Add from favourites</button>
@@ -383,6 +404,41 @@ function Section({ q, s, first, last, run }: { q: OfficeQuote; s: QuoteSection; 
         </div>
       )}
     </section>
+  );
+}
+
+/** The Labour part's add row: Plumber / Gas fitter / Apprentice, hours, Add (priced from the labour rates and the
+ *  customer's pricing tier, like any price book line). */
+function AddLabour({ s, labour, cols, costs, run }: { s: QuoteSection; labour: LabourRate[]; cols: number; costs: boolean; run: Run }) {
+  const [rate, setRate] = useState(labour[0]?.id ?? "");
+  const [hours, setHours] = useState("1");
+  const h = Number(hours.replace(/[^0-9.]/g, ""));
+  const add = () => {
+    if (!rate || !(h > 0)) return;
+    run({ op: "addLine", sectionId: s.id, line: { price_book_item_id: rate, quantity: h } }, () => setHours("1"));
+  };
+  const name = (r: LabourRate) => (r.code === "GF" ? "Gas fitter" : r.description);
+  return (
+    <tr data-testid="add-labour">
+      <td colSpan={cols} className="py-1.5">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-mist/70 px-2 py-1.5">
+          <label className="text-xs font-semibold text-slate" htmlFor={`lr-${s.id}`}>Add labour</label>
+          <select id={`lr-${s.id}`} value={rate} onChange={(e) => setRate(e.target.value)}
+            className="rounded-full border border-black/10 bg-white px-2 py-1 text-sm" aria-label="Who">
+            {labour.map((r) => (
+              <option key={r.id} value={r.id}>
+                {name(r)} · ${Number(r.sell)}/{r.unit === "hour" || !r.unit ? "h" : r.unit}{costs ? ` (cost $${Number(r.cost)})` : ""}
+              </option>
+            ))}
+          </select>
+          <input value={hours} onChange={(e) => setHours(e.target.value)} inputMode="decimal" aria-label="Hours"
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())}
+            className={`${cell} w-20`} />
+          <span className="text-xs text-slate">hours</span>
+          <button type="button" onClick={add} disabled={!(h > 0)} className={`${pill} bg-ink text-white disabled:opacity-40`}>Add labour</button>
+        </div>
+      </td>
+    </tr>
   );
 }
 

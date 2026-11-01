@@ -93,6 +93,8 @@ export type JobQuotes = { can: { edit: boolean; send: boolean; costs: boolean };
 
 export const loadJobQuotes = (s: OfficeSession, jobId: string) =>
   rpc<JobQuotes>("office_job_quotes", { p_staff_id: who(s), p_job_id: jobId });
+/** The labour rates for the quote screen's Labour part (Plumber, Gas Fitter, Apprentice). */
+export const loadLabourRates = () => rpc<import("./quote-shared").LabourRate[]>("office_labour_rates", {}).catch(() => []);
 export const loadQuote = (s: OfficeSession, versionId: string) =>
   rpc<OfficeQuote>("office_quote", { p_staff_id: who(s), p_version_id: versionId });
 export const newQuote = (s: OfficeSession, jobId: string, phaseId: string | null, name: string | null) =>
