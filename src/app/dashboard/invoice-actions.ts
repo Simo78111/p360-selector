@@ -173,7 +173,7 @@ export async function invoiceStatusAction(form: FormData) {
       const ref = text(form, "job_ref", 40);
       return { go: `/dashboard/office/job/${encodeURIComponent(ref)}?tab=invoices`, message: "Draft thrown away." };
     }
-    if (action === "approve" || action === "resend_xero") return (r.message ?? "Done.") + (await pushToXero());
+    if (action === "approve" || action === "resend_xero") return `${(r.message ?? "Done").replace(/\.?$/, ".")}${await pushToXero()}`;
     return r.message ?? "Done.";
   });
 }
