@@ -25,6 +25,9 @@ export type TodayActions = {
   timesheet_days: number; leave_waiting: number; leave_names: string[]; quotes_accepted_7d: number;
   can_approve_invoices: boolean; can_approve_timesheets: boolean;
 };
+/** The red count on "Supplier invoices" in the top bar: waiting to be reconciled (0 if it can't be read). */
+export const loadSupplierToApprove = (s: OfficeSession) =>
+  rpc<number>("office_supplier_to_approve", { p_staff_id: who(s) }).catch(() => 0);
 export const loadTodayActions = (s: OfficeSession) => rpc<TodayActions>("office_today_actions", { p_staff_id: who(s) });
 
 // ── Sales ────────────────────────────────────────────────────────────────────

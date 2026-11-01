@@ -9,6 +9,8 @@ export const TOP_MENU: MenuLink[] = [
   { href: "/dashboard/office", label: "Today", exact: true, area: "staff" },
   { href: "/dashboard/office/all-jobs", label: "Jobs", area: "jobs", also: ["/dashboard/office/job"] },
   { href: "/dashboard/office/diary", label: "Calendar", area: "jobs" },
+  // the layout adds a red count of invoices waiting to be reconciled
+  { href: "/dashboard/office/supplier-invoices", label: "Supplier invoices", area: "staff" },
 ];
 
 export const REPORTS: MenuLink[] = [
@@ -29,7 +31,6 @@ export const SETTINGS: SettingsGroup[] = [
     title: "Office work",
     items: [
       { href: "/dashboard/office/invoices", label: "Invoices", area: "staff", note: "To invoice, to be approved, invoiced, void." },
-      { href: "/dashboard/office/supplier-invoices", label: "Supplier invoices", area: "staff", note: "Bring in the day's files and approve them onto jobs." },
       { href: "/dashboard/office/timesheets", label: "Timesheets & leave", area: "staff", note: "Approve the week, leave, the Smartly file." },
       { href: "/dashboard/office/customers", label: "Customers", area: "customers", note: "Customers, sites and contacts." },
     ],

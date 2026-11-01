@@ -29,6 +29,7 @@ async function run(form: FormData, fn: () => Promise<string>, fallback = PAGE) {
     target = withMsg(target, "err", e instanceof Error ? e.message : String(e));
   }
   revalidatePath(PAGE);
+  revalidatePath("/dashboard", "layout"); // the red count on "Supplier invoices" in the top bar
   redirect(target);
 }
 

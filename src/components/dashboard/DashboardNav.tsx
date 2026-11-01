@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export type NavLinkItem = { href: string; label: string; exact?: boolean; also?: string[] };
-export type NavItem = NavLinkItem & { children?: NavLinkItem[] };
+export type NavItem = NavLinkItem & { children?: NavLinkItem[]; badge?: number; badgeLabel?: string };
 
 const isActive = (pathname: string, item: NavLinkItem) =>
   item.exact ? pathname === item.href : [item.href, ...(item.also ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -22,8 +22,16 @@ export function DashboardNav({ items }: { items: NavItem[] }) {
         item.children?.length ? (
           <NavMenu key={item.href} item={item} pathname={pathname} />
         ) : (
-          <Link key={item.href} href={item.href} aria-current={isActive(pathname, item) ? "page" : undefined} className={pill(isActive(pathname, item))}>
+          <Link key={item.href} href={item.href} aria-current={isActive(pathname, item) ? "page" : undefined}
+            className={`${pill(isActive(pathname, item))} inline-flex items-center gap-1.5`}>
             {item.label}
+            {!!item.badge && (
+              <span className="min-w-5 rounded-full bg-red-600 px-1.5 text-center text-xs leading-5 font-bold text-white"
+                data-testid={`badge-${item.href.split("/").pop()}`}>
+                {item.badge > 99 ? "99+" : item.badge}
+                <span className="sr-only"> {item.badgeLabel}</span>
+              </span>
+            )}
           </Link>
         ),
       )}

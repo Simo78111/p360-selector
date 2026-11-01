@@ -5,6 +5,7 @@ import { Logo } from "@/components/Logo";
 import { can, devBypass, requireOffice, ROLE_NAMES } from "@/lib/auth";
 import { usingSampleData } from "@/lib/dashboard-data";
 import { REPORTS, SETTINGS_PATHS, TOP_MENU } from "@/lib/office-menu";
+import { loadSupplierToApprove } from "@/lib/reports";
 import { logout } from "../actions";
 
 export const metadata: Metadata = { title: "Dashboard", robots: { index: false } };
@@ -14,6 +15,11 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
   const session = await requireOffice();
   // Top bar: Today · Jobs · Calendar · Reports ▾ — everything else is on the Settings page.
   const items: NavItem[] = TOP_MENU.filter((m) => can(session, m.area)).map(({ href, label, exact, also }) => ({ href, label, exact, also }));
+  const supplier = items.find((i) => i.href.endsWith("/supplier-invoices"));
+  if (supplier) {
+    supplier.badge = await loadSupplierToApprove(session);
+    supplier.badgeLabel = "waiting to be reconciled";
+  }
   const reports = REPORTS.filter((r) => can(session, r.area)).map(({ href, label }) => ({ href, label }));
   if (reports.length) items.push({ href: "/dashboard/office/reports", label: "Reports", children: reports });
   const canCreateJob = can(session, "staff"); // owner/admin and office managers
