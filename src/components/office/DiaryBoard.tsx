@@ -102,6 +102,16 @@ const minutesOptions = (from = 0, to = 24 * 60) => {
   return out;
 };
 
+/** Which company a card belongs to: navy PTSL (Project 360), green P360 (Plumbing 360) — same as the Jobs page. */
+function CoBadge({ code }: { code?: string | null }) {
+  if (!code) return null;
+  const tone = code === "PTSL" ? "bg-blue-900 text-white" : "bg-teal-700 text-white";
+  return (
+    <span className={`mr-1 inline-block shrink-0 rounded px-1 align-[1px] text-[9px] font-bold leading-[14px] tracking-wide ${tone}`}
+      data-testid="company-badge">{code}</span>
+  );
+}
+
 export function DiaryBoard({ diary, phases, date, view, orientation, companyCode, personFilter, today }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -362,7 +372,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
           title={`Booking engine job #${a.job_ref} (read-only here): ${a.start_label}, ${a.length_label}. ${a.customer}, ${a.site}`}
           data-testid="appointment"
         >
-          <div className="font-semibold text-ink">#{a.job_ref} {a.description}</div>
+          <div className="truncate font-semibold text-ink"><CoBadge code={a.company_code} />#{a.job_ref} {a.description}</div>
           {!compact && <div className="truncate">{a.customer}</div>}
           <div className="truncate">{compact ? `${a.start_label} · ${a.site}` : a.site}</div>
           {!compact && <div className="text-[10px] uppercase tracking-wide">Booking engine · {a.start_label}</div>}
@@ -431,7 +441,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
             {b.started_at && <span className="rounded bg-emerald-200 px-1 text-[10px] font-bold text-emerald-900">{b.finished_at ? "Done" : "On site"}</span>}
           </div>
         )}
-        <div className="truncate font-bold">{label}</div>
+        <div className="truncate font-bold">{!holder && <CoBadge code={b.company_code} />}{label}</div>
         {!b.busy && holder && b.note && <div className="truncate">{b.note}</div>}
         {!b.busy && !holder && (
           <>
@@ -788,7 +798,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
                     data-testid="phase-to-schedule"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-bold">{p.phase_ref} {p.phase_name}</span>
+                      <span className="truncate font-bold"><CoBadge code={p.company_code} />{p.phase_ref} {p.phase_name}</span>
                       <button
                         type="button"
                         className="shrink-0 rounded bg-white/70 px-1.5 text-[11px] font-semibold hover:bg-white"
