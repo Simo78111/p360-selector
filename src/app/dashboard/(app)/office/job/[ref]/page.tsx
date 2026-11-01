@@ -23,6 +23,8 @@ import { officeEnabled } from "@/lib/office";
 import { newQuoteAction } from "@/app/dashboard/quote-actions";
 import { KIND_LABEL, loadJobCosts, STATUS_LABEL as COST_STATUS, type JobCosts } from "@/lib/job-costs";
 import { loadJobMoney, loadJobQuotes, STATUS_LABEL, type JobMoney, type JobQuotes, type Money as MoneyT } from "@/lib/quotes";
+import { loadJobInvoices, type JobInvoices } from "@/lib/invoices";
+import { InvoicesTab } from "@/components/office/invoices-ui";
 
 export const metadata = { title: "Job" };
 
@@ -33,6 +35,7 @@ const TABS = [
   ["quotes", "Quotes"],
   ["money", "Financial Summary"],
   ["costs", "Cost Report"],
+  ["invoices", "Invoices"],
   ["log", "Notes & History"],
   ["files", "Files & Photos"],
   ["tasks", "Tasks"],
@@ -58,12 +61,14 @@ export default async function JobPageView({ params, searchParams }: Props) {
   let jobMoney: JobMoney | null = null;
   let quotes: JobQuotes | null = null;
   let costs: JobCosts | null = null;
+  let invoices: JobInvoices | null = null;
   const costScope: "job" | "project" = scopeParam === "job" ? "job" : "project";
   try {
-    [jobMoney, quotes, costs] = await Promise.all([
+    [jobMoney, quotes, costs, invoices] = await Promise.all([
       loadJobMoney(session, job.job_id),
       tab === "quotes" && job.kind === "managed" ? loadJobQuotes(session, job.job_id) : Promise.resolve(null),
       tab === "costs" ? loadJobCosts(session, job.job_id, costScope) : Promise.resolve(null),
+      tab === "invoices" && job.kind === "managed" && job.can.edit ? loadJobInvoices(session, job.job_id) : Promise.resolve(null),
     ]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
@@ -318,6 +323,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
           {tab === "quotes" && <QuotesTab job={job} quotes={quotes} money={jobMoney} realPhases={realPhases} base={base} />}
           {tab === "money" && jobMoney && <Money job={job} money={jobMoney} scope={scope} base={base} />}
           {tab === "costs" && costs && <CostReport job={job} costs={costs} money={jobMoney} scope={costScope} base={base} />}
+          {tab === "invoices" && (invoices ? <InvoicesTab job={job} inv={invoices} phases={realPhases} base={base} />
+            : <p className="rounded-2xl bg-white p-5 text-sm text-slate">{managed ? "Invoices are for the owner/admin and office managers." : "Bookings are invoiced on the booking screen."}</p>)}
           {tab === "log" && (
             <>
               {/* ── Notes and history ────────────────────────────────────────────── */}
@@ -579,7 +586,8 @@ function Money({ job, money: m, scope, base }: { job: JobPage; money: JobMoney; 
           ["Invoiced (ex GST)", money(t.invoiced_ex_gst)],
           ["Draft invoices", money(t.draft_invoices_ex_gst)],
           ["Paid", money(t.paid)],
-        ]} />
+          ...(Number(t.retention_held ?? 0) > 0 ? [["Retentions held", money(t.retention_held)] as [string, string]] : []),
+        ]} note={managed && job.can.edit ? "Invoices tab: charge-ups, progress and payment claims" : undefined} />
         <Box title="Profit" rows={profitRows(t, m.can_costs)}
           note={m.can_costs ? (quoted === null ? "No accepted quote: charge-up value = labour at charge-out + materials at sell" : "Against the accepted quotes") : undefined} />
       </div>
@@ -743,7 +751,7 @@ function JobMenu({ job, base, tab, money: m, canEdit }: { job: JobPage; base: st
       <nav className="rounded-2xl bg-white p-2" aria-label="Job">
         <p className="px-3 pt-1 pb-2 text-xs font-bold tracking-wide text-slate">JOB OVERVIEW</p>
         <ul className="space-y-0.5 text-sm">
-          {TABS.filter(([k]) => managed || k !== "quotes").map(([k, v]) => (
+          {TABS.filter(([k]) => (managed || (k !== "quotes" && k !== "invoices")) && (k !== "invoices" || canEdit)).map(([k, v]) => (
             <li key={k}>
               <Link href={`${base}?tab=${k}`} aria-current={tab === k ? "page" : undefined}
                 className={`flex items-center justify-between rounded-xl px-3 py-2 ${tab === k ? "bg-ink font-semibold text-white" : "hover:bg-mist"}`}>

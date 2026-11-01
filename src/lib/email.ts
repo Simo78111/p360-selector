@@ -241,3 +241,40 @@ export async function sendQuoteEmail(p: {
     attachments: [{ filename: p.pdf.filename, content: Buffer.from(p.pdf.data).toString("base64") }],
   });
 }
+
+/** An invoice or payment claim, to the customer's "gets invoices" contacts: the PDF attached (Phase 3d).
+ *  No Pay button or payment link yet: the footer on the PDF has the bank details. */
+export async function sendInvoiceEmail(p: {
+  to: string;
+  toName: string;
+  companyName: string;
+  title: string;
+  heading: string | null;
+  total: string;
+  dueDate: string;
+  message: string;
+  sender: string;
+  replyTo: string | null;
+  pdf: { filename: string; data: Uint8Array };
+}) {
+  if (!emailEnabled()) throw new Error("Email isn't set up yet: add RESEND_API_KEY (and EMAIL_FROM) in Vercel.");
+  const first = p.toName.split(" ")[0] || "there";
+  const note = p.message.trim();
+  const what = `${p.title}${p.heading ? ` for ${p.heading}` : ""}`;
+  const text =
+    `Hi ${first},\n\n${note ? `${note}\n\n` : ""}Please find attached ${what}: ${p.total} incl GST, due ${p.dueDate}.\n\n` +
+    `Payment details are on the invoice. Any questions, just reply to this email.\n\nThanks,\n${p.sender}\n${p.companyName}`;
+  const html =
+    `<p>Hi ${esc(first)},</p>${note ? `<p>${esc(note).replace(/\n/g, "<br>")}</p>` : ""}` +
+    `<p>Please find attached ${esc(what)}: <strong>${esc(p.total)} incl GST</strong>, due ${esc(p.dueDate)}.</p>` +
+    `<p>Payment details are on the invoice. Any questions, just reply to this email.</p>` +
+    `<p>Thanks,<br>${esc(p.sender)}<br>${esc(p.companyName)}</p>`;
+  return send({
+    to: `${p.toName.replace(/[<>"]/g, "")} <${p.to}>`,
+    replyTo: p.replyTo ?? officeTo(),
+    subject: `${p.title} — ${p.companyName}`,
+    text,
+    html,
+    attachments: [{ filename: p.pdf.filename, content: Buffer.from(p.pdf.data).toString("base64") }],
+  });
+}

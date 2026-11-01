@@ -2,6 +2,7 @@
 // The customer's Accept button on /q/<token>. The token in the link is the key (no sign-in); the database checks the
 // quote is the current published version, not expired, and still open.
 import { redirect } from "next/navigation";
+import { sendAutoInvoices } from "@/lib/invoice-mail";
 import { publicAccept } from "@/lib/quotes";
 
 export async function publicAcceptAction(form: FormData) {
@@ -13,6 +14,7 @@ export async function publicAcceptAction(form: FormData) {
     const r = await publicAccept(token, String(form.get("name") ?? "").slice(0, 120), String(form.get("order") ?? "").slice(0, 60) || null,
       form.get("terms") === "on");
     target = `${path}?accepted=${r.already ? "already" : "1"}`;
+    if (!r.already) await sendAutoInvoices();   // Phase 3d: the deposit invoice, when the quote asks for one
   } catch (e) {
     target = `${path}?err=${encodeURIComponent(e instanceof Error ? e.message : String(e))}`;
   }

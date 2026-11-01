@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { assertOffice, type OfficeSession } from "@/lib/auth";
 import { emailEnabled, sendQuoteEmail } from "@/lib/email";
+import { sendAutoInvoices } from "@/lib/invoice-mail";
 import { quoteFileName, quotePdf } from "@/lib/quote-pdf";
 import {
   acceptQuote,
@@ -132,7 +133,8 @@ export async function builderAction(versionId: string, o: BuilderOp): Promise<Bu
         break;
       case "accept": {
         const q = await acceptQuote(s, versionId, o.name, o.order);
-        r = { ok: true, quote: q, message: `${q.number} marked as accepted. It's now the job's budget.` };
+        const deposits = await sendAutoInvoices();     // Phase 3d: a quote with a deposit makes and sends the deposit invoice
+        r = { ok: true, quote: q, message: `${q.number} marked as accepted. It's now the job's budget.${deposits ? " The deposit invoice has been emailed." : ""}` };
         break;
       }
       case "decline":
@@ -305,7 +307,7 @@ export async function staffPermissionsAction(form: FormData) {
     const id = text(form, "staffId", 40);
     if (!isId(id)) throw new Error("Staff member not found.");
     const perms: Partial<Record<Perm, "default" | "on" | "off">> = {};
-    for (const k of ["send_quotes", "see_costs", "edit_favourites", "book_diary", "approve_timesheets"] as Perm[]) {
+    for (const k of ["send_quotes", "see_costs", "edit_favourites", "book_diary", "approve_timesheets", "approve_invoices"] as Perm[]) {
       const v = text(form, k, 10);
       if (v === "default" || v === "on" || v === "off") perms[k] = v;
     }

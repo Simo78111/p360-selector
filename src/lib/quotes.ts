@@ -18,13 +18,14 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 const who = (s: OfficeSession) => s.staffId; // null = owner backup password
 
 // ── Permissions per person ─────────────────────────────────────────────────
-export type Perm = "send_quotes" | "see_costs" | "edit_favourites" | "book_diary" | "approve_timesheets";
+export type Perm = "send_quotes" | "see_costs" | "edit_favourites" | "book_diary" | "approve_timesheets" | "approve_invoices";
 export const PERM_LABEL: Record<Perm, string> = {
   send_quotes: "Can publish and send quotes",
   see_costs: "Can see costs and margins",
   edit_favourites: "Can edit favourites",
   book_diary: "Can book the diary",   // Phase 2c
   approve_timesheets: "Can approve timesheets and leave",   // Phase 3a
+  approve_invoices: "Can approve invoices",   // Phase 3d
 };
 export type PermState = { on: boolean; set: boolean | null; role_default: boolean | null };
 export type StaffPerms = Record<Perm, PermState> & { office: boolean };
@@ -172,6 +173,7 @@ export const searchItems = (s: OfficeSession, q: string) =>
 export type Money = {
   jobs: number; job_refs: string[]; phases: number; quoted_ex_gst: number | null; quoted_cost?: number | null;
   quotes_accepted: number; quotes_open: number; invoiced_ex_gst: number; draft_invoices_ex_gst: number; paid: number;
+  retention_held?: number; invoices?: number;   // Phase 3d
   costs: {
     labour?: number; supplier_documents?: number; purchase_orders?: number; stock_other?: number; total?: number;
     pending_labour?: number; pending_supplier?: number; lines_without_rate?: number;

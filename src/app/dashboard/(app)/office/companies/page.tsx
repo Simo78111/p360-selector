@@ -1,10 +1,12 @@
 import { saveCompanyAction } from "@/app/dashboard/jm-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
-import { input, label, primaryBtn } from "@/components/office/jm";
+import { area, input, label, primaryBtn } from "@/components/office/jm";
 import { loadCompanies, type Company } from "@/lib/jm";
 import { quoteDefaultsAction } from "@/app/dashboard/quote-actions";
 import { saveCompanyMoneyAction } from "@/app/dashboard/supplier-actions";
 import { loadCompanyMoney, type CompanyMoney } from "@/lib/supplier-docs";
+import { saveCompanyInvoiceAction, saveInvoiceNumberingAction } from "@/app/dashboard/invoice-actions";
+import { loadInvoiceSettings, type InvoiceSettings } from "@/lib/invoices";
 import { officeEnabled } from "@/lib/office";
 import { requireOffice } from "@/lib/auth";
 
@@ -18,8 +20,9 @@ export default async function CompaniesPage({ searchParams }: Props) {
   const { ok, err } = await searchParams;
   let companies: Company[];
   let money: Record<string, CompanyMoney>;
+  let numbering: InvoiceSettings;
   try {
-    [companies, money] = await Promise.all([loadCompanies(), loadCompanyMoney()]);
+    [companies, money, numbering] = await Promise.all([loadCompanies(), loadCompanyMoney(), loadInvoiceSettings()]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -34,6 +37,18 @@ export default async function CompaniesPage({ searchParams }: Props) {
         </p>
       </div>
       <Flash ok={ok} err={err} />
+      <form action={saveInvoiceNumberingAction} className="flex flex-wrap items-end gap-3 rounded-2xl bg-white p-5" data-testid="invoice-numbering">
+        <input type="hidden" name="back" value="/dashboard/office/companies" />
+        <div className="max-w-md">
+          <h2 className="font-bold">Invoice numbers (both companies)</h2>
+          <p className="text-xs text-slate">One series, because both companies invoice into the one Xero organisation. Numbers are given when an
+            invoice is approved. Last given: {numbering.last_number ?? "none yet"}. Re-check against Fergus and Xero just before go-live.</p>
+        </div>
+        <label className="text-sm"><span className={label}>Prefix</span><input name="prefix" defaultValue={numbering.prefix} className={`${input} w-24`} /></label>
+        <label className="text-sm"><span className={label}>Next number</span><input name="next_no" defaultValue={numbering.next_no} className={`${input} w-32`} inputMode="numeric" /></label>
+        <button className={primaryBtn}>Save numbering</button>
+        <span className="text-sm text-slate">Next invoice: <strong>{numbering.next_number}</strong></span>
+      </form>
       <div className="grid gap-6 lg:grid-cols-2">
         {companies.map((c) => (
           <section key={c.id} className="rounded-2xl bg-white p-5 sm:p-6" style={{ borderTop: `6px solid ${c.brand_colour ?? "#0f766e"}` }}>
@@ -63,6 +78,7 @@ export default async function CompaniesPage({ searchParams }: Props) {
               </div>
             </form>
             {money[c.id] && <XeroForm id={c.id} m={money[c.id]} />}
+            {money[c.id] && <InvoiceForm id={c.id} m={money[c.id]} />}
             <form action={quoteDefaultsAction} className="mt-6 grid gap-3 border-t border-black/5 pt-4" data-testid={`quote-defaults-${c.code}`}>
               <h3 className="text-sm font-bold">Quote defaults (new quotes start with these)</h3>
               <input type="hidden" name="companyId" value={c.id} />
@@ -140,6 +156,28 @@ function XeroForm({ id, m }: { id: string; m: CompanyMoney }) {
         </div>
       ))}
       <div className="sm:col-span-2"><button className={primaryBtn}>Save Xero settings</button></div>
+    </form>
+  );
+}
+
+/** Phase 3d: the invoice footer (payment terms, bank account, licence line) and when invoices fall due. */
+function InvoiceForm({ id, m }: { id: string; m: CompanyMoney }) {
+  return (
+    <form action={saveCompanyInvoiceAction} className="mt-6 grid gap-3 border-t border-black/5 pt-4 sm:grid-cols-2" data-testid={`invoice-settings-${m.code}`}>
+      <input type="hidden" name="company_id" value={id} />
+      <input type="hidden" name="back" value="/dashboard/office/companies" />
+      <h3 className="font-bold sm:col-span-2">Invoices</h3>
+      <label className="text-sm"><span className={label}>Standard invoices are due</span>
+        <select name="invoice_due_kind" defaultValue={m.invoice_due_kind ?? "days"} className={input}>
+          <option value="days">A number of days after the invoice date</option>
+          <option value="next_month_20th">On the 20th of the next month</option>
+        </select></label>
+      <label className="text-sm"><span className={label}>Days (when it&apos;s a number of days)</span>
+        <input name="invoice_due_days" defaultValue={m.invoice_due_days ?? 7} className={input} inputMode="numeric" /></label>
+      <p className="text-xs text-slate sm:col-span-2">A customer&apos;s own payment terms (on the customer) win over this. Payment claims use the job&apos;s claim settings.</p>
+      <label className="text-sm sm:col-span-2"><span className={label}>Footer on every invoice (payment terms, bank account, licence line)</span>
+        <textarea name="invoice_footer" defaultValue={m.invoice_footer ?? ""} rows={7} className={area} /></label>
+      <div className="sm:col-span-2"><button className={primaryBtn}>Save invoice settings</button></div>
     </form>
   );
 }

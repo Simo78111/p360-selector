@@ -1,0 +1,7 @@
+{"lines": [
+ {"id": "1", "date": "2026-10-21", "kind": "labour", "job_ref": "PTSL-3004", "phase_ref": "PTSL-3004a", "phase_name": "Drainage", "description": "Labour · Laid drains", "who": "TEST Jo Invoice", "qty": 3, "unit": "h", "sell": 285, "status": "approved", "ref": "07:00–10:30"},
+ {"id": "2", "date": "2026-10-21", "kind": "labour", "job_ref": "PTSL-3005", "phase_ref": null, "phase_name": null, "description": "Travel (yard)", "who": "TEST Jo Invoice", "qty": 0.5, "unit": "h", "sell": 47.5, "status": "approved", "ref": "10:30–11:00"},
+ {"id": "3", "date": "2026-10-22", "kind": "materials", "job_ref": "PTSL-3004", "phase_ref": "PTSL-3004a", "phase_name": "Drainage", "description": "P1 PVC pipe 100mm", "who": "Reece", "qty": 10, "unit": "EA", "sell": 140, "status": "approved", "ref": "Reece TEST-3D-1"}
+],
+ "people": [{"who": "TEST Jo Invoice", "hours": 3.5, "charge": 332.5}],
+ "labour_hours": 3.5, "labour_charge": 332.5, "materials_sell": 140, "period_from": "2026-10-01", "period_to": "2026-10-31"}

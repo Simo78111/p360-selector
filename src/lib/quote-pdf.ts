@@ -9,30 +9,30 @@ import { PDFDocument, PDFFont, PDFName, PDFPage, PDFString, rgb, StandardFonts }
 import { PLUMBING360_LOGO_PNG, PROJECT360_LOGO_PNG } from "./quote-logos";
 import { lines as splitLines, textBlocks, type QuoteDoc } from "./quotes";
 
-const A4: [number, number] = [595.28, 841.89];
-const M = 40;                       // margin
-const W = A4[0] - 2 * M;
-const INK = rgb(0.1, 0.1, 0.12);
-const GREY = rgb(0.42, 0.44, 0.48);
-const BOX = rgb(0.95, 0.95, 0.96);
-const GREEN = rgb(0.13, 0.62, 0.33);
-const RULE = rgb(0.85, 0.86, 0.88);
+export const A4: [number, number] = [595.28, 841.89];
+export const M = 40;                       // margin
+export const W = A4[0] - 2 * M;
+export const INK = rgb(0.1, 0.1, 0.12);
+export const GREY = rgb(0.42, 0.44, 0.48);
+export const BOX = rgb(0.95, 0.95, 0.96);
+export const GREEN = rgb(0.13, 0.62, 0.33);
+export const RULE = rgb(0.85, 0.86, 0.88);
 
-const nzMoney = (n: number | null | undefined) =>
+export const nzMoney = (n: number | null | undefined) =>
   `$${Number(n ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const nzDay = (d: string | null | undefined) => {
+export const nzDay = (d: string | null | undefined) => {
   if (!d) return "";
   const x = new Date(d.length === 10 ? `${d}T12:00:00Z` : d);
   return x.toLocaleDateString("en-NZ", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: d.length === 10 ? "UTC" : "Pacific/Auckland" });
 };
-const qty = (n: number) => (Number.isInteger(Number(n)) ? String(Number(n)) : Number(n).toFixed(2).replace(/0$/, ""));
+export const qty = (n: number) => (Number.isInteger(Number(n)) ? String(Number(n)) : Number(n).toFixed(2).replace(/0$/, ""));
 
 // Helvetica only has Western characters: swap the common ones out (macrons, arrows, odd dashes) and drop the rest.
 const SWAP: Record<string, string> = {
   "ā": "a", "ē": "e", "ī": "i", "ō": "o", "ū": "u", "Ā": "A", "Ē": "E", "Ī": "I", "Ō": "O", "Ū": "U",
   "→": "->", "←": "<-", "≤": "<=", "≥": ">=", "‑": "-", " ": " ", "\t": " ",
 };
-function clean(font: PDFFont, s: string) {
+export function clean(font: PDFFont, s: string) {
   let out = "";
   for (const ch of s.replace(/[̀-ͯ]/g, "")) {
     const c = SWAP[ch] ?? ch;
@@ -46,9 +46,9 @@ function clean(font: PDFFont, s: string) {
   return out;
 }
 
-type Fonts = { reg: PDFFont; bold: PDFFont; ital: PDFFont };
+export type Fonts = { reg: PDFFont; bold: PDFFont; ital: PDFFont };
 
-class Writer {
+export class Writer {
   doc: PDFDocument;
   f: Fonts;
   page!: PDFPage;

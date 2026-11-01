@@ -356,6 +356,15 @@ export async function runXeroSync(opts: { push?: boolean; poll?: boolean } = {})
     }
   }
 
+  // Phase 3d: approved job management invoices (sent whenever there are any, whatever the booking engine's queue says)
+  try {
+    const j = await sendJobInvoices();
+    result.sent.push(...Array(j.sent).fill("job invoice"));
+    result.failed.push(...j.failed.map((f) => ({ invoice: f.number, error: f.error })));
+  } catch (err) {
+    console.error("[xero] job invoices", err);
+  }
+
   if (opts.poll ?? due.poll) {
     const unpaid = await rpc<{ invoice_id: string; xero_invoice_id: string; amount_paid: number }[]>("xero_unpaid_invoices");
     for (let i = 0; i < unpaid.length; i += 50) {
@@ -375,6 +384,11 @@ export async function runXeroSync(opts: { push?: boolean; poll?: boolean } = {})
       }
     }
     await rpc("xero_mark_polled");
+    try {
+      result.paid += await pollJobInvoicePayments();       // Phase 3d: job management invoices
+    } catch (err) {
+      console.error("[xero] job invoice payments", err);
+    }
     // supplier bills changed in the last week → matched to jobs by PO number (job costs)
     try {
       result.bills = await syncSupplierBills();
@@ -496,4 +510,98 @@ export async function sendSupplierBills(): Promise<{ sent: number; failed: { num
     }
   }
   return out;
+}
+
+// ── Job management invoices (Phase 3d) ────────────────────────────────────────────────────────────────
+
+export type JobInvoiceToSend = {
+  invoice_id: string; invoice_number: string; date: string; due_date: string; reference: string; total: number;
+  status: "DRAFT" | "AUTHORISED"; tracking_name: string | null; tracking_option: string | null;
+  customer: { id: string; name: string; email: string | null; phone: string | null; xero_contact_id: string | null; address: string | null };
+  lines: { description: string; quantity: number; unit_price: number; account_code: string }[];
+};
+
+/** A business customer's Xero contact: saved id, else found by our customer id (ContactNumber), else made. Phone optional. */
+async function jobCustomerContact(c: JobInvoiceToSend["customer"]): Promise<string> {
+  if (c.xero_contact_id) return c.xero_contact_id;
+  const found = await xero<{ Contacts: Contact[] }>("GET", `/Contacts?where=${encodeURIComponent(`ContactNumber=="${c.id}"`)}`);
+  if (found.Contacts?.[0]) return found.Contacts[0].ContactID;
+  const body = (name: string) => ({
+    Name: name, ContactNumber: c.id, EmailAddress: c.email || undefined,
+    Phones: c.phone ? [{ PhoneType: "DEFAULT", PhoneNumber: localPhone(c.phone) }] : undefined,
+    Addresses: c.address ? [{ AddressType: "POBOX", AddressLine1: c.address.split(/\r?\n/)[0], Country: "New Zealand" }] : undefined,
+  });
+  try {
+    const made = await xero<{ Contacts: Contact[] }>("POST", "/Contacts", { Contacts: [body(c.name)] });
+    return made.Contacts[0].ContactID;
+  } catch (err) {
+    // A contact with that name already exists in Xero (e.g. from Fergus): use it rather than make a second one
+    if (err instanceof XeroError && /already (been )?assigned|already exists/i.test(err.message)) {
+      const byName = await xero<{ Contacts: Contact[] }>("GET", `/Contacts?where=${encodeURIComponent(`Name=="${c.name.replace(/"/g, "")}"`)}`);
+      if (byName.Contacts?.[0]) return byName.Contacts[0].ContactID;
+    }
+    throw err;
+  }
+}
+
+/** Approved job invoices waiting for Xero: sent as Draft or Authorised (per company), with account codes per line and
+ *  the company's tracking option. The test site never calls Xero: they're marked "test". */
+export async function sendJobInvoices(): Promise<{ sent: number; failed: { number: string; error: string }[]; test: number }> {
+  const list = await rpc<JobInvoiceToSend[]>("xero_job_invoices_to_send", { p_limit: 25 });
+  const out = { sent: 0, failed: [] as { number: string; error: string }[], test: 0 };
+  if (!list.length) return out;
+  if (!xeroConfigured()) {
+    for (const i of list) await rpc("xero_job_invoice_result", { p_invoice_id: i.invoice_id, p_status: "test", p_xero_id: null, p_contact_id: null, p_error: null });
+    out.test = list.length;
+    return out;
+  }
+  for (const i of list) {
+    try {
+      const contact = await jobCustomerContact(i.customer);
+      const existing = await xero<{ Invoices: XeroInvoice[] }>("GET",
+        `/Invoices?InvoiceNumbers=${encodeURIComponent(i.invoice_number)}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID`);
+      let id = existing.Invoices?.[0]?.InvoiceID ?? null;
+      if (!id) {
+        const tracking = i.tracking_name && i.tracking_option ? [{ Name: i.tracking_name, Option: i.tracking_option }] : undefined;
+        const made = await xero<{ Invoices: XeroInvoice[] }>("POST", "/Invoices", {
+          Invoices: [{
+            Type: "ACCREC", Contact: { ContactID: contact }, InvoiceNumber: i.invoice_number, Reference: i.reference,
+            Date: i.date, DueDate: i.due_date, LineAmountTypes: "Exclusive", Status: i.status,
+            LineItems: i.lines.map((l) => ({
+              Description: l.description, Quantity: Number(l.quantity), UnitAmount: Number(l.unit_price),
+              AccountCode: l.account_code, Tracking: tracking,
+            })),
+          }],
+        }, { "Idempotency-Key": `job-invoice-${i.invoice_id}` });
+        id = made.Invoices[0].InvoiceID;
+      }
+      await rpc("xero_job_invoice_result", { p_invoice_id: i.invoice_id, p_status: "sent", p_xero_id: id, p_contact_id: contact, p_error: null });
+      out.sent++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await rpc("xero_job_invoice_result", { p_invoice_id: i.invoice_id, p_status: "failed", p_xero_id: null, p_contact_id: null, p_error: message });
+      out.failed.push({ number: i.invoice_number, error: message });
+      if (err instanceof XeroError && [401, 403, 429].includes(err.status)) break;
+    }
+  }
+  return out;
+}
+
+/** Payments made in Xero against job invoices come back onto the job (Financial Summary → Paid). */
+export async function pollJobInvoicePayments(): Promise<number> {
+  if (!xeroConfigured()) return 0;
+  const unpaid = await rpc<{ invoice_id: string; xero_invoice_id: string }[]>("xero_job_invoices_unpaid");
+  let paid = 0;
+  for (let n = 0; n < unpaid.length; n += 50) {
+    const batch = unpaid.slice(n, n + 50);
+    const r = await xero<{ Invoices: XeroInvoice[] }>("GET", `/Invoices?IDs=${batch.map((b) => b.xero_invoice_id).join(",")}`);
+    for (const xi of r.Invoices ?? []) {
+      const ours = batch.find((b) => b.xero_invoice_id === xi.InvoiceID);
+      if (ours && Number(xi.AmountPaid) > 0) {
+        await rpc("xero_job_invoice_paid", { p_invoice_id: ours.invoice_id, p_amount_paid: Number(xi.AmountPaid) });
+        paid++;
+      }
+    }
+  }
+  return paid;
 }

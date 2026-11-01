@@ -42,6 +42,7 @@ export type CompanyMoney = {
   xero_send_status: "DRAFT" | "AUTHORISED"; xero_send_bills: boolean;
   acct_labour: string; acct_sales: string; acct_vehicle: string; acct_materials: string; acct_hire: string;
   acct_subcontract: string; acct_retentions: string;
+  invoice_footer?: string | null; invoice_due_kind?: "days" | "next_month_20th"; invoice_due_days?: number;   // Phase 3d
 };
 
 export const loadDocs = (s: OfficeSession, status: string, search: string | null) =>
