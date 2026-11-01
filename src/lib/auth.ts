@@ -202,7 +202,8 @@ export const canEditCompany = (s: OfficeSession, companyId: string) => {
 
 /** The page someone lands on after signing in. */
 export function homeFor(s: OfficeSession) {
-  return can(s, "bookings") ? "/dashboard/office" : "/dashboard/office/all-jobs";
+  // Owner/admin and office managers land on Today (their to-do list); supervisors on Jobs.
+  return can(s, "staff") ? "/dashboard/office" : "/dashboard/office/all-jobs";
 }
 
 /** Pages: signed in (and allowed into this area), or off to the login / their home page. */

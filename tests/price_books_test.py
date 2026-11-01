@@ -15,6 +15,7 @@ with sync_playwright() as p:
     page.fill("input[type=password]", "local-test")
     page.keyboard.press("Enter")
     page.wait_for_url("**/dashboard/office")
+    page.get_by_role("link", name="Settings").click()  # Price books live on the Settings page (Phase 3e)
     page.get_by_role("link", name="Price books").click()
     page.wait_for_url("**/price-books")
     expect(page.get_by_text("No price books yet")).to_be_visible()

@@ -2,16 +2,38 @@ import Link from "next/link";
 import { bookNowAction, moveJobAction, planRouteAction } from "@/app/dashboard/office-actions";
 import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, shortDate, TierLabel } from "@/components/office/bits";
 import { aucklandToday, loadDay, loadJobs, officeEnabled, shiftDate, validDate, type OfficeDay, type PlumberDay } from "@/lib/office";
-import { requireOffice } from "@/lib/auth";
+import { can, requireOffice } from "@/lib/auth";
+import { loadTodayActions, type TodayActions } from "@/lib/reports";
 
 export const metadata = { title: "Today" };
 
 type Props = { searchParams: Promise<{ date?: string; ok?: string; err?: string }> };
 
 export default async function TodayPage({ searchParams }: Props) {
-  await requireOffice("bookings");
+  const session = await requireOffice("staff");
   if (!officeEnabled()) return <NotConnected />;
   const { date: dateParam, ok, err } = await searchParams;
+  let actions: TodayActions | null = null;
+  let actionsError: string | null = null;
+  try {
+    actions = await loadTodayActions(session);
+  } catch (e) {
+    actionsError = e instanceof Error ? e.message : String(e);
+  }
+
+  // Project 360-only office managers: the to-do cards (the booking engine's day board is Plumbing 360's).
+  if (!can(session, "bookings")) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <p className="text-sm text-slate">Today</p>
+          <h1 className="text-2xl font-bold">What&apos;s waiting</h1>
+        </div>
+        <Flash ok={ok} err={err} />
+        <ActionCards actions={actions} error={actionsError} />
+      </div>
+    );
+  }
   const today = aucklandToday();
   const date = validDate(dateParam) ?? today;
   const here = `/dashboard/office?date=${date}`;
@@ -59,6 +81,8 @@ export default async function TodayPage({ searchParams }: Props) {
       </div>
 
       <Flash ok={ok} err={err} />
+
+      {date === today && <ActionCards actions={actions} error={actionsError} />}
 
       {overdue > 0 && (
         <Link
@@ -184,6 +208,76 @@ export default async function TodayPage({ searchParams }: Props) {
         )}
       </section>
     </div>
+  );
+}
+
+// ── What's waiting for the office (Phase 3e) ────────────────────────────────
+type Card = { key: string; count: number; title: string; detail?: string; href: string; tone?: "red" | "amber" };
+
+function ActionCards({ actions: a, error }: { actions: TodayActions | null; error: string | null }) {
+  if (!a) {
+    return error ? <p className="rounded-2xl bg-white p-4 text-sm text-slate">The to-do list didn&apos;t load: {error}</p> : null;
+  }
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const cards: Card[] = [
+    { key: "to_invoice", count: a.to_invoice, title: plural(a.to_invoice, "phase to invoice", "phases to invoice"),
+      detail: a.labour_complete ? `${a.labour_complete} more at Labour Complete` : undefined,
+      href: "/dashboard/office/invoices?tab=to_invoice" },
+    { key: "approve", count: a.can_approve_invoices ? a.invoices_to_approve : a.invoices_draft,
+      title: a.can_approve_invoices ? plural(a.invoices_to_approve, "invoice to approve", "invoices to approve")
+                                    : plural(a.invoices_draft, "draft invoice", "draft invoices"),
+      href: "/dashboard/office/invoices?tab=draft" },
+    { key: "supplier", count: a.supplier_to_approve, title: plural(a.supplier_to_approve, "supplier invoice to approve", "supplier invoices to approve"),
+      detail: a.supplier_no_job ? `${a.supplier_no_job} with no job found` : undefined,
+      href: "/dashboard/office/supplier-invoices", tone: a.supplier_no_job ? "amber" : undefined },
+    ...(a.can_approve_timesheets ? [
+      { key: "timesheets", count: a.timesheet_days, title: plural(a.timesheet_days, "timesheet day to approve", "timesheet days to approve"),
+        detail: "Confirmed by the plumber", href: "/dashboard/office/timesheets" },
+      { key: "leave", count: a.leave_waiting, title: plural(a.leave_waiting, "leave request waiting", "leave requests waiting"),
+        detail: a.leave_names.length ? a.leave_names.join(", ") : undefined, href: "/dashboard/office/timesheets", tone: "amber" as const },
+    ] : []),
+    { key: "schedule", count: a.to_schedule, title: plural(a.to_schedule, "phase to schedule", "phases to schedule"),
+      href: "/dashboard/office/diary" },
+  ];
+  const xero = a.invoices_xero_failed + a.supplier_xero_failed;
+  const waiting = cards.filter((c) => c.count > 0);
+  const clear = cards.filter((c) => c.count === 0);
+
+  return (
+    <section aria-labelledby="todo-heading" className="space-y-3" data-testid="today-actions">
+      <h2 id="todo-heading" className="sr-only">Waiting for the office</h2>
+      {xero > 0 && (
+        <Link href={a.invoices_xero_failed ? "/dashboard/office/invoices?tab=approved" : "/dashboard/office/supplier-invoices"}
+          className="flex items-center justify-between gap-4 rounded-2xl border-2 border-red-200 bg-red-50 p-4 hover:bg-red-100" role="alert">
+          <strong>{plural(xero, "invoice", "invoices")} didn&apos;t go to Xero.</strong>
+          <span className="text-sm font-semibold whitespace-nowrap">Fix →</span>
+        </Link>
+      )}
+      {waiting.length > 0 ? (
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {waiting.map((c) => (
+            <li key={c.key}>
+              <Link href={c.href} data-testid={`todo-${c.key}`}
+                className={`flex h-full items-center justify-between gap-4 rounded-2xl border-2 bg-white p-4 hover:border-ink ${c.tone === "amber" ? "border-amber-300" : "border-transparent"}`}>
+                <span className="min-w-0">
+                  <span className="block font-semibold">{c.title}</span>
+                  {c.detail && <span className="block truncate text-sm text-slate">{c.detail}</span>}
+                </span>
+                <span aria-hidden="true" className="text-lg">→</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900"><strong>All clear.</strong> Nothing waiting for the office.</p>
+      )}
+      {waiting.length > 0 && clear.length > 0 && (
+        <p className="text-xs text-slate">Nothing waiting: {clear.map((c) => c.title.replace(/^0 /, "")).join(" · ")}</p>
+      )}
+      {a.quotes_accepted_7d > 0 && (
+        <p className="text-sm text-slate">{plural(a.quotes_accepted_7d, "quote", "quotes")} accepted in the last 7 days.</p>
+      )}
+    </section>
   );
 }
 

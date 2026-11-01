@@ -21,7 +21,9 @@ with sync_playwright() as p:
     page.wait_for_url("**/dashboard/office")
 
     # 1. Settings
-    page.get_by_role("link", name="Settings").click()
+    page.get_by_role("link", name="Settings").click()  # the Settings page (Phase 3e) → the booking engine's settings
+    page.get_by_role("link", name="Booking engine settings").click()
+    page.wait_for_url("**/dashboard/office/settings")
     expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
     expect(page.get_by_label("Your email")).to_have_value("simon@test.nz")
     page.get_by_label("Your Google review link").fill("https://g.page/r/TEST/review")
@@ -59,6 +61,7 @@ with sync_playwright() as p:
     print("2. quote priced and sent from Needs attention; job shows the quote and the order")
 
     # 3. Orders
+    page.get_by_role("link", name="Settings").click()
     page.get_by_role("link", name="Orders").click()
     expect(page.get_by_text("PO-00001 · Mico")).to_be_visible()
     expect(page.locator("li", has_text="PO-00001")).to_contain_text("2 x IV15 Isolating valve 15mm")

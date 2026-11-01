@@ -1,45 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { DashboardNav, type NavItem } from "@/components/dashboard/DashboardNav";
+import { DashboardNav, SettingsLink, type NavItem } from "@/components/dashboard/DashboardNav";
 import { Logo } from "@/components/Logo";
-import { can, devBypass, requireOffice, ROLE_NAMES, type Area } from "@/lib/auth";
+import { can, devBypass, requireOffice, ROLE_NAMES } from "@/lib/auth";
 import { usingSampleData } from "@/lib/dashboard-data";
+import { REPORTS, SETTINGS_PATHS, TOP_MENU } from "@/lib/office-menu";
 import { logout } from "../actions";
 
 export const metadata: Metadata = { title: "Dashboard", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-// The menu, and which part of the console each item belongs to (see lib/auth.ts for who can open what).
-const MENU: (NavItem & { area: Area })[] = [
-  { href: "/dashboard/office", label: "Today", exact: true, area: "bookings" },
-  { href: "/dashboard/office/attention", label: "Needs attention", area: "bookings" },
-  { href: "/dashboard/office/all-jobs", label: "All jobs", area: "jobs" },
-  { href: "/dashboard/office/diary", label: "Diary", area: "jobs" },
-  { href: "/dashboard/office/favourites", label: "Favourites", area: "jobs" },
-  { href: "/dashboard/office/jobs", label: "Bookings", area: "bookings" },
-  { href: "/dashboard/office/customers", label: "Customers", area: "customers" },
-  { href: "/dashboard/office/plumbers", label: "Plumbers", area: "bookings" },
-  { href: "/dashboard/office/staff", label: "Staff", area: "staff" },
-  { href: "/dashboard/office/timesheets", label: "Timesheets", area: "staff" },
-  { href: "/dashboard/office/invoices", label: "Invoices", area: "staff" },
-  { href: "/dashboard/office/supplier-invoices", label: "Supplier invoices", area: "staff" },
-  { href: "/dashboard/office/orders", label: "Orders", area: "bookings" },
-  { href: "/dashboard/office/certificates", label: "Gas certs", area: "bookings" },
-  { href: "/dashboard/office/price-books", label: "Price books", area: "pricing" },
-  { href: "/dashboard/office/pricing", label: "Pricing tiers", area: "pricing" },
-  { href: "/dashboard/office/marketing", label: "Marketing", area: "bookings" },
-  { href: "/dashboard/office/settings", label: "Settings", area: "owner" },
-  { href: "/dashboard/office/companies", label: "Companies", area: "owner" },
-  { href: "/dashboard/office/import", label: "Fergus import", area: "owner" },
-  { href: "/dashboard/office/xero", label: "Xero", area: "owner" },
-  { href: "/dashboard", label: "Website", exact: true, area: "bookings" },
-  { href: "/dashboard/bookings", label: "Web bookings", area: "bookings" },
-  { href: "/dashboard/status", label: "Status", area: "owner" },
-];
-
 export default async function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await requireOffice();
-  const items = MENU.filter((m) => can(session, m.area)).map(({ href, label, exact }) => ({ href, label, exact }));
+  // Top bar: Today · Jobs · Calendar · Reports ▾ — everything else is on the Settings page.
+  const items: NavItem[] = TOP_MENU.filter((m) => can(session, m.area)).map(({ href, label, exact, also }) => ({ href, label, exact, also }));
+  const reports = REPORTS.filter((r) => can(session, r.area)).map(({ href, label }) => ({ href, label }));
+  if (reports.length) items.push({ href: "/dashboard/office/reports", label: "Reports", children: reports });
+  const canCreateJob = can(session, "staff"); // owner/admin and office managers
   const who =
     session.kind === "staff"
       ? `${session.name} · ${session.companies.map((c) => `${c.code} ${ROLE_NAMES[c.role].toLowerCase()}`).join(", ")}`
@@ -53,7 +30,16 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
             <Logo className="h-9" />
             <DashboardNav items={items} />
           </div>
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            {canCreateJob && (
+              <Link
+                href="/dashboard/office/all-jobs/new"
+                className="inline-flex items-center gap-1 rounded-full bg-aqua px-4 py-1.5 text-sm font-semibold text-ink hover:bg-[#35b9df]"
+                data-testid="new-job-button"
+              >
+                <span aria-hidden="true" className="text-base leading-none">+</span> Create new job
+              </Link>
+            )}
             <form action="/dashboard/office/all-jobs" role="search" className="flex">
               <input type="hidden" name="view" value="all" />
               <label htmlFor="global-search" className="sr-only">Find a job</label>
@@ -67,9 +53,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
             <span className="hidden max-w-xs truncate text-xs text-slate lg:inline" data-testid="signed-in-as" title={who}>
               {who}
             </span>
-            <Link href="/" className="hidden text-slate hover:text-ink sm:inline">
-              View site
-            </Link>
+            <SettingsLink paths={SETTINGS_PATHS} />
             {session.kind !== "dev" && (
               <form action={logout}>
                 <button type="submit" className="font-medium text-slate hover:text-ink">
