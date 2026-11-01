@@ -23,6 +23,43 @@ export async function loadJobCosts(s: OfficeSession, jobId: string, scope: "job"
   return data as JobCosts;
 }
 
+const isoDate = (d?: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)) ? d : null);
+
+/** A date range from the URL (either end can be blank); null when neither is set. */
+export function costRange(from?: string | null, to?: string | null): { from: string | null; to: string | null } | null {
+  const f = isoDate(from), t = isoDate(to);
+  if (!f && !t) return null;
+  return f && t && f > t ? { from: t, to: f } : { from: f, to: t };
+}
+
+/** The Cost Report narrowed to lines dated in a range (and optionally to some phases), totals worked out again. */
+export function filterCosts(c: JobCosts, range: { from: string | null; to: string | null } | null, phaseRefs?: string[] | null): JobCosts {
+  const lines = c.lines.filter((l) =>
+    (!range?.from || l.date >= range.from) && (!range?.to || l.date <= range.to) &&
+    (!phaseRefs?.length || (l.phase_ref !== null && phaseRefs.includes(l.phase_ref))));
+  if (lines.length === c.lines.length) return c;
+  const sum = (f: (l: CostLine) => number, keep: (l: CostLine) => boolean = () => true) =>
+    Math.round(lines.filter(keep).reduce((a, l) => a + f(l), 0) * 100) / 100;
+  const lab = (l: CostLine) => l.kind === "labour";
+  const mat = (l: CostLine) => l.kind !== "labour";
+  const pending = (l: CostLine) => l.status !== "approved";
+  const totals: CostTotals = {
+    labour_hours: sum((l) => Number(l.qty), lab),
+    labour_charge: sum((l) => Number(l.sell), lab),
+    materials_sell: sum((l) => Number(l.sell), mat),
+    charge_value: sum((l) => Number(l.sell)),
+    ...(c.can_costs ? {
+      labour: sum((l) => Number(l.cost ?? 0), lab),
+      supplier_documents: sum((l) => Number(l.cost ?? 0), mat),
+      total: sum((l) => Number(l.cost ?? 0)),
+      pending_labour: sum((l) => Number(l.cost ?? 0), (l) => lab(l) && pending(l)),
+      pending_supplier: sum((l) => Number(l.cost ?? 0), (l) => mat(l) && pending(l)),
+      lines_without_rate: lines.filter((l) => l.no_rate).length,
+    } : {}),
+  };
+  return { ...c, lines, totals };
+}
+
 export const KIND_LABEL: Record<CostKind, string> = { labour: "Labour", materials: "Materials", hire: "Hire", freight: "Freight" };
 export const STATUS_LABEL: Record<CostLine["status"], string> = {
   approved: "Approved", confirmed: "Confirmed by plumber", draft: "Draft timesheet", to_approve: "Invoice to approve",

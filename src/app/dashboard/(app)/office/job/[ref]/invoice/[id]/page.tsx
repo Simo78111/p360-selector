@@ -15,9 +15,11 @@ import { requireOffice } from "@/lib/auth";
 import { groupLines, invoiceSendInfo, invoiceTitle, KIND_LABEL, loadInvoice, type InvoiceLine, type OfficeInvoice } from "@/lib/invoices";
 import type { Stage } from "@/lib/jobs";
 import { officeEnabled } from "@/lib/office";
+import { CostRangeForm, CostSummaryTable } from "@/components/office/CostSummary";
+import { costRange, filterCosts, loadJobCosts, type JobCosts } from "@/lib/job-costs";
 
 export const metadata = { title: "Invoice" };
-type Props = { params: Promise<{ ref: string; id: string }>; searchParams: Promise<{ ok?: string; err?: string }> };
+type Props = { params: Promise<{ ref: string; id: string }>; searchParams: Promise<{ ok?: string; err?: string; cf?: string; ct?: string }> };
 
 const pct = (n: number | null) => (n === null || n === undefined ? "—" : `${Number(n).toFixed(1).replace(/\.0$/, "")}%`);
 const num = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(Number(n)));
@@ -26,7 +28,7 @@ export default async function InvoicePage({ params, searchParams }: Props) {
   const session = await requireOffice("staff");
   if (!officeEnabled()) return <NotConnected />;
   const { ref, id } = await params;
-  const { ok, err } = await searchParams;
+  const { ok, err, cf, ct } = await searchParams;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   let i: OfficeInvoice;
   let send: Awaited<ReturnType<typeof invoiceSendInfo>> | null = null;
@@ -47,6 +49,20 @@ export default async function InvoicePage({ params, searchParams }: Props) {
   const Id = () => (<><input type="hidden" name="id" value={i.id} /><Back /></>);
   const groups = groupLines(i.lines);
   void jobRef;
+
+  // Cost summary at the top: costs on what this invoice covers, dated in the range (default: the invoice date's month).
+  // A payment claim covers the whole project; a phase invoice just that phase.
+  const [iy, im] = i.invoice_date.split("-").map(Number);
+  const monthStart = `${i.invoice_date.slice(0, 7)}-01`;
+  const monthEnd = new Date(Date.UTC(iy, im, 0)).toISOString().slice(0, 10);
+  const range = costRange(cf, ct) ?? { from: monthStart, to: monthEnd };
+  let costs: JobCosts | null = null;
+  try {
+    const all = i.kind === "claim" ? await loadJobCosts(session, i.top_job_id, "project") : await loadJobCosts(session, i.job_id, "job");
+    costs = filterCosts(all, range, i.phase_ref ? [i.phase_ref] : null);
+  } catch {
+    costs = null;
+  }
 
   return (
     <div className="space-y-6" data-testid="invoice-page">
@@ -93,6 +109,25 @@ export default async function InvoicePage({ params, searchParams }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 space-y-6">
+          {/* ── Cost summary ────────────────────────────────────────────── */}
+          {costs && (
+            <section className="rounded-2xl bg-white p-5 sm:p-6" data-testid="invoice-cost-summary">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-bold">Cost report</h2>
+                  <p className="text-sm text-slate">
+                    Costs on {i.kind === "claim" ? `${i.top_job_ref} and its variations` : i.phase_ref ?? i.job_ref} dated{" "}
+                    {range.from ? nzDate(range.from) : "the start"} – {range.to ? nzDate(range.to) : "now"}.{" "}
+                    <Link href={`${jobPath}?tab=costs${range.from ? `&cf=${range.from}` : ""}${range.to ? `&ct=${range.to}` : ""}${i.kind === "claim" ? "" : "&scope=job"}`}
+                      className="font-semibold text-aqua-deep">Lines →</Link>
+                  </p>
+                </div>
+                <CostRangeForm action={path} from={range.from} to={range.to} keep={{}} />
+              </div>
+              <div className="mt-3"><CostSummaryTable costs={costs} /></div>
+            </section>
+          )}
+
           {/* ── Details ─────────────────────────────────────────────────── */}
           <section className="rounded-2xl bg-white p-5 sm:p-6" data-testid="invoice-details">
             <h2 className="font-bold">Details</h2>

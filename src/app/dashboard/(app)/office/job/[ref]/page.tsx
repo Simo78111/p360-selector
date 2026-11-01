@@ -21,14 +21,15 @@ import { requireOffice } from "@/lib/auth";
 import { fmtBytes, loadJobPage, nzDateTime, STAGES, type JobPage, type Phase } from "@/lib/jobs";
 import { officeEnabled } from "@/lib/office";
 import { newQuoteAction } from "@/app/dashboard/quote-actions";
-import { KIND_LABEL, loadJobCosts, STATUS_LABEL as COST_STATUS, type JobCosts } from "@/lib/job-costs";
+import { costRange, filterCosts, KIND_LABEL, loadJobCosts, STATUS_LABEL as COST_STATUS, type JobCosts } from "@/lib/job-costs";
+import { CostRangeForm } from "@/components/office/CostSummary";
 import { loadJobMoney, loadJobQuotes, STATUS_LABEL, type JobMoney, type JobQuotes, type Money as MoneyT } from "@/lib/quotes";
 import { loadJobInvoices, type JobInvoices } from "@/lib/invoices";
 import { InvoicesTab } from "@/components/office/invoices-ui";
 
 export const metadata = { title: "Job" };
 
-type Props = { params: Promise<{ ref: string }>; searchParams: Promise<{ ok?: string; err?: string; log?: string; tab?: string; scope?: string }> };
+type Props = { params: Promise<{ ref: string }>; searchParams: Promise<{ ok?: string; err?: string; log?: string; tab?: string; scope?: string; cf?: string; ct?: string }> };
 
 const TABS = [
   ["summary", "Job Summary"],
@@ -48,7 +49,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
   const session = await requireOffice("jobs");
   if (!officeEnabled()) return <NotConnected />;
   const ref = decodeURIComponent((await params).ref).trim();
-  const { ok, err, log = "all", tab: tabParam, scope: scopeParam } = await searchParams;
+  const { ok, err, log = "all", tab: tabParam, scope: scopeParam, cf, ct } = await searchParams;
+  const costDates = costRange(cf, ct); // Cost Report: no date range unless one's picked
   const tab: Tab = (TABS.find(([k]) => k === tabParam)?.[0] ?? (tabParam ? "summary" : "summary")) as Tab;
   if (!/^[A-Za-z0-9-]{1,30}$/.test(ref)) notFound();
   let job: JobPage | null;
@@ -67,7 +69,7 @@ export default async function JobPageView({ params, searchParams }: Props) {
     [jobMoney, quotes, costs, invoices] = await Promise.all([
       loadJobMoney(session, job.job_id),
       tab === "quotes" && job.kind === "managed" ? loadJobQuotes(session, job.job_id) : Promise.resolve(null),
-      tab === "costs" ? loadJobCosts(session, job.job_id, costScope) : Promise.resolve(null),
+      tab === "costs" ? loadJobCosts(session, job.job_id, costScope).then((c) => filterCosts(c, costDates)) : Promise.resolve(null),
       tab === "invoices" && job.kind === "managed" && job.can.edit ? loadJobInvoices(session, job.job_id) : Promise.resolve(null),
     ]);
   } catch (e) {
@@ -322,7 +324,7 @@ export default async function JobPageView({ params, searchParams }: Props) {
           )}
           {tab === "quotes" && <QuotesTab job={job} quotes={quotes} money={jobMoney} realPhases={realPhases} base={base} />}
           {tab === "money" && jobMoney && <Money job={job} money={jobMoney} scope={scope} base={base} />}
-          {tab === "costs" && costs && <CostReport job={job} costs={costs} money={jobMoney} scope={costScope} base={base} />}
+          {tab === "costs" && costs && <CostReport job={job} costs={costs} money={jobMoney} scope={costScope} base={base} dates={costDates} />}
           {tab === "invoices" && (invoices ? <InvoicesTab job={job} inv={invoices} phases={realPhases} base={base} />
             : <p className="rounded-2xl bg-white p-5 text-sm text-slate">{managed ? "Invoices are for the owner/admin and office managers." : "Bookings are invoiced on the booking screen."}</p>)}
           {tab === "log" && (
@@ -652,10 +654,14 @@ function ProfitBar({ t }: { t: MoneyT }) {
   );
 }
 
-function CostReport({ job, costs, money: m, scope, base }: { job: JobPage; costs: JobCosts; money: JobMoney | null; scope: "job" | "project"; base: string }) {
+function CostReport({ job, costs, money: m, scope, base, dates }: {
+  job: JobPage; costs: JobCosts; money: JobMoney | null; scope: "job" | "project"; base: string;
+  dates: { from: string | null; to: string | null } | null;
+}) {
   const project = job.kind === "managed" && (m?.project.jobs ?? 1) > 1;
   const t = costs.totals;
-  const csv = `/api/office/job-costs?job=${job.job_id}&scope=${scope}&ref=${encodeURIComponent(job.job_ref)}`;
+  const dq = `${dates?.from ? `&cf=${dates.from}` : ""}${dates?.to ? `&ct=${dates.to}` : ""}`;
+  const csv = `/api/office/job-costs?job=${job.job_id}&scope=${scope}&ref=${encodeURIComponent(job.job_ref)}${dates?.from ? `&from=${dates.from}` : ""}${dates?.to ? `&to=${dates.to}` : ""}`;
   const kinds = ["labour", "materials", "hire", "freight"] as const;
   const sum = (k: string, f: "cost" | "sell") => costs.lines.filter((l) => l.kind === k).reduce((a, l) => a + Number(l[f] ?? 0), 0);
   return (
@@ -664,11 +670,19 @@ function CostReport({ job, costs, money: m, scope, base }: { job: JobPage; costs
         <h2 className="text-lg font-bold">Cost Report</h2>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {project && ([["project", "Entire project"], ["job", `${job.job_ref} only`]] as const).map(([k, v]) => (
-            <Link key={k} href={`${base}?tab=costs&scope=${k}`} aria-current={scope === k ? "page" : undefined}
+            <Link key={k} href={`${base}?tab=costs&scope=${k}${dq}`} aria-current={scope === k ? "page" : undefined}
               className={`rounded-full px-3 py-1 ${scope === k ? "bg-aqua-pale font-semibold text-aqua-deep" : "text-slate"}`}>{v}</Link>
           ))}
           <a href={csv} className={quietBtn}>Download CSV</a>
         </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-3 rounded-xl bg-mist/60 p-3">
+        <CostRangeForm action={base} from={dates?.from ?? null} to={dates?.to ?? null}
+          keep={{ tab: "costs", ...(scope === "job" ? { scope: "job" } : {}) }}
+          clearHref={dates ? `${base}?tab=costs${scope === "job" ? "&scope=job" : ""}` : undefined} />
+        <p className="text-sm text-slate" data-testid="cost-dates">
+          {dates ? <>Showing costs dated <strong>{dates.from ? nzDate(dates.from) : "the start"} – {dates.to ? nzDate(dates.to) : "now"}</strong></> : "All dates. Pick a range to see what was spent in it."}
+        </p>
       </div>
       <p className="mt-1 text-sm text-slate">
         Labour from timesheets (cost rate; Rate 2 costs ×1.5, Rate 3 ×2) and supplier invoice lines. Charge / sell = charge-out rate, and materials
@@ -683,7 +697,7 @@ function CostReport({ job, costs, money: m, scope, base }: { job: JobPage; costs
         ))}
       </div>
       {costs.lines.length === 0 ? (
-        <p className="mt-4 rounded-xl bg-mist/60 p-4 text-sm text-slate">No costs on this job yet. Timesheet hours and approved supplier invoices show here.</p>
+        <p className="mt-4 rounded-xl bg-mist/60 p-4 text-sm text-slate">{dates ? "No costs dated in this range." : "No costs on this job yet. Timesheet hours and approved supplier invoices show here."}</p>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[46rem] text-sm">
