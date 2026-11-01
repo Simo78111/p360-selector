@@ -23,6 +23,7 @@ import { officeEnabled } from "@/lib/office";
 import { newQuoteAction } from "@/app/dashboard/quote-actions";
 import { costRange, filterCosts, KIND_LABEL, loadJobCosts, STATUS_LABEL as COST_STATUS, type JobCosts } from "@/lib/job-costs";
 import { CostRangeForm } from "@/components/office/CostSummary";
+import { PhaseCostBoxes } from "@/components/office/PhaseCostBoxes";
 import { loadJobMoney, loadJobQuotes, STATUS_LABEL, type JobMoney, type JobQuotes, type Money as MoneyT } from "@/lib/quotes";
 import { loadJobInvoices, type JobInvoices } from "@/lib/invoices";
 import { InvoicesTab } from "@/components/office/invoices-ui";
@@ -69,7 +70,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
     [jobMoney, quotes, costs, invoices] = await Promise.all([
       loadJobMoney(session, job.job_id),
       tab === "quotes" && job.kind === "managed" ? loadJobQuotes(session, job.job_id) : Promise.resolve(null),
-      tab === "costs" ? loadJobCosts(session, job.job_id, costScope).then((c) => filterCosts(c, costDates)) : Promise.resolve(null),
+      tab === "costs" ? loadJobCosts(session, job.job_id, costScope).then((c) => filterCosts(c, costDates))
+        : tab === "summary" && job.kind === "managed" ? loadJobCosts(session, job.job_id, "job") : Promise.resolve(null),
       tab === "invoices" && job.kind === "managed" && job.can.edit ? loadJobInvoices(session, job.job_id) : Promise.resolve(null),
     ]);
   } catch (e) {
@@ -307,7 +309,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
                 </div>
                 {job.phases.length === 0 && <p className="rounded-2xl bg-white p-5 text-sm text-slate">This booking was cancelled.</p>}
                 {job.phases.map((p) => (
-                  <PhaseCard key={p.ref} job={job} phase={p} path={path} focus={p.id !== null && p.id === job.focus_phase_id} canMove={managed && canEdit && active} />
+                  <PhaseCard key={p.ref} job={job} phase={p} path={path} focus={p.id !== null && p.id === job.focus_phase_id} canMove={managed && canEdit && active}
+                    costs={costs ? phaseCosts(costs, p.ref, job.phases.length === 1) : null} />
                 ))}
               </section>
 
@@ -917,7 +920,14 @@ function Box({ title, rows, note }: { title: string; rows: [string, string][]; n
   );
 }
 
-function PhaseCard({ job, phase, path, focus, canMove }: { job: JobPage; phase: Phase; path: string; focus: boolean; canMove: boolean }) {
+/** This phase's costs from the job's Cost Report (a one-phase job also gets the costs with no phase). */
+function phaseCosts(c: JobCosts, ref: string, onlyPhase: boolean): JobCosts {
+  return { ...c, lines: c.lines.filter((l) => l.phase_ref === ref || (onlyPhase && !l.phase_ref)) };
+}
+
+function PhaseCard({ job, phase, path, focus, canMove, costs }: {
+  job: JobPage; phase: Phase; path: string; focus: boolean; canMove: boolean; costs: JobCosts | null;
+}) {
   const i = STAGES.findIndex((s) => s.id === phase.stage);
   const next = STAGES[i + 1];
   const prev = STAGES[i - 1];
@@ -973,17 +983,7 @@ function PhaseCard({ job, phase, path, focus, canMove }: { job: JobPage; phase: 
         </details>
       )}
 
-      {managed && (
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="cost-buckets">
-          {["Labour", "Supplier documents", "Purchase orders", "Stock on hand / other"].map((b) => (
-            <div key={b} className="rounded-xl border border-dashed border-black/10 p-3 text-sm">
-              <p className="font-semibold">{b}</p>
-              <p className="text-xs text-slate">Nothing yet. Costs come in Phase 3.</p>
-              <p className="mt-1 flex justify-between text-xs"><span>Cost $0.00</span><span>Sell $0.00</span></p>
-            </div>
-          ))}
-        </div>
-      )}
+      {managed && <PhaseCostBoxes costs={costs} costsHref={`${path.split("?")[0]}?tab=costs&scope=job`} />}
 
       {notes.length > 0 && (
         <div className="mt-4">
