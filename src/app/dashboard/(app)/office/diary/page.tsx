@@ -1,7 +1,7 @@
 import { EngineError, NotConnected } from "@/components/office/bits";
 import { DiaryBoard } from "@/components/office/DiaryBoard";
 import { requireOffice } from "@/lib/auth";
-import { loadDiary, loadDiaryPhases, mondayOf, todayNz, type Diary, type DiaryPhase } from "@/lib/diary";
+import { loadDiary, loadDiaryPhases, loadDiaryPool, mondayOf, todayNz, type Diary, type DiaryPhase } from "@/lib/diary";
 import { officeEnabled } from "@/lib/office";
 
 export const metadata = { title: "Diary" };
@@ -23,11 +23,13 @@ export default async function DiaryPage({ searchParams }: Props) {
 
   let diary: Diary;
   let phases: DiaryPhase[] = [];
+  let pool: Record<string, string[]> = {};
   try {
     const all = await loadDiary(session, from, days, null);
     const company = all.companies.find((c) => c.code === q.co) ?? null;
     diary = company ? await loadDiary(session, from, days, company.id) : all;
     if (diary.companies.some((c) => c.can_book)) phases = await loadDiaryPhases(session, null, company?.id ?? null);
+    pool = await loadDiaryPool(from, days);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
@@ -37,6 +39,7 @@ export default async function DiaryPage({ searchParams }: Props) {
       key={`${from}-${view}-${q.co ?? ""}`}
       diary={diary}
       phases={phases}
+      pool={pool}
       date={date}
       view={view}
       orientation={orientation}

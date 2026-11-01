@@ -45,6 +45,8 @@ type Orientation = "horizontal" | "vertical";
 type Props = {
   diary: Diary; phases: DiaryPhase[]; date: string; view: View; orientation: Orientation; companyCode: string;
   personFilter: string; today: string;
+  /** Plumbing 360's automatic booking pool: plumber_id → the days in range they can be booked by the system */
+  pool?: Record<string, string[]>;
 };
 type Lane = { id: string; person: DiaryPerson | null };
 type Item =
@@ -112,7 +114,7 @@ function CoBadge({ code }: { code?: string | null }) {
   );
 }
 
-export function DiaryBoard({ diary, phases, date, view, orientation, companyCode, personFilter, today }: Props) {
+export function DiaryBoard({ diary, phases, date, view, orientation, companyCode, personFilter, today, pool = {} }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [toast, setToast] = useState<{ ok: boolean; text: string; warnings?: string[] } | null>(null);
@@ -318,8 +320,13 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
     const removed = p ? Number(diary.removed_unsent[p.plumber_id] ?? 0) : 0;
     const notSent = p ? Number(p.not_sent) + removed : 0;
     const off = p?.off?.filter((d) => days.includes(d)) ?? [];
+    // Blue = Plumbing 360's automatic booking system can book them (day view: that day; week view: any day shown)
+    const poolDays = p ? (pool[p.plumber_id] ?? []).filter((d) => days.includes(d)) : [];
+    const inPool = view === "day" ? poolDays.includes(date) : poolDays.length > 0;
     return (
-      <div className={`flex h-full items-center gap-3 px-3 ${p ? "bg-white" : "bg-[#d6d6dc]"}`}>
+      <div className={`flex h-full items-center gap-3 px-3 ${p ? (inPool ? "bg-[#dbe7ff]" : "bg-white") : "bg-[#d6d6dc]"}`}
+        data-in-pool={inPool ? "yes" : undefined}
+        title={inPool ? `Taking automatic Plumbing 360 bookings${view === "week" ? `: ${poolDays.map((d) => dayLabel(d).split(" ")[0]).join(", ")}` : ""}` : undefined}>
         {p ? (
           <span
             className="grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white"
@@ -337,6 +344,11 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
           <div className="truncate text-sm font-semibold">{p ? p.name : "Unassigned"}</div>
           {p && (
             <div className="mt-0.5 flex flex-wrap gap-1">
+              {inPool && (
+                <span className="rounded-full bg-[#1d3fce] px-2 py-0.5 text-[11px] font-semibold text-white" data-testid="in-pool">
+                  Auto bookings{view === "week" && poolDays.length < days.length ? ` ${poolDays.map((d) => dayLabel(d).split(" ")[0]).join(", ")}` : ""}
+                </span>
+              )}
               {notSent > 0 && (
                 <button
                   type="button"

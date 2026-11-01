@@ -19,6 +19,10 @@ const who = (s: OfficeSession) => s.staffId; // null = owner backup password
 export const loadDiary = (s: OfficeSession, from: string, days: number, companyId: string | null) =>
   rpc<Diary>("office_diary", { p_staff_id: who(s), p_from: from, p_days: days, p_company_id: companyId });
 
+/** Who Plumbing 360's automatic booking system can book on each day of the range: { plumber_id: [dates] }. */
+export const loadDiaryPool = (from: string, days: number) =>
+  rpc<Record<string, string[]>>("office_diary_pool", { p_from: from, p_days: days }).catch(() => ({}) as Record<string, string[]>);
+
 export const loadDiaryPhases = (s: OfficeSession, search: string | null, companyId: string | null) =>
   rpc<DiaryPhase[]>("office_diary_phases", { p_staff_id: who(s), p_search: search, p_company_id: companyId, p_limit: 200 });
 
