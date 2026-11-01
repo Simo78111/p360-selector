@@ -82,6 +82,7 @@ export type InvoiceRow = {
 };
 export type ClaimSettings = {
   top_job_id: string; top_job_ref: string; claim_mode: boolean; contract_ref: string | null; retention_bands: Band[] | null;
+  claim_detail: "sections" | "lines"; claim_detail_locked: boolean;
   retention_cap: number | null; claim_day: number; pay_day: number | null; practical_completion: string | null;
   retention_final_date: string | null; next_claim_no: number; retention_held: number; retention_withheld: number;
 };

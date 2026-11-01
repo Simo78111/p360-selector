@@ -135,9 +135,10 @@ export function InvoicesTab({ job, inv, phases, base }: { job: JobPage; inv: Job
           <form action={newInvoiceAction} className="space-y-2 rounded-xl border border-black/10 p-3" data-testid="new-progress">
             <Hidden /><input type="hidden" name="kind" value="progress" />
             <p className="font-semibold">Progress claim against the quote</p>
-            <p className="text-xs text-slate">A line per section of the accepted quote; claim a % or $ of each. Previously claimed (or
+            <p className="text-xs text-slate">Built from the accepted quote; claim a % or $ of each line. Previously claimed (or
               certified) amounts are carried forward{bands.length ? ", retentions are worked out" : ""} and any deposit is taken off.</p>
             <PhasePick phases={phases} />
+            <DetailPick c={c} />
             <button className={primaryBtn} disabled={!inv.quotes.length}>Start progress claim</button>
           </form>
 
@@ -145,8 +146,9 @@ export function InvoicesTab({ job, inv, phases, base }: { job: JobPage; inv: Job
             <form action={newInvoiceAction} className="space-y-2 rounded-xl border border-black/10 p-3" data-testid="new-claim">
               <Hidden /><input type="hidden" name="kind" value="claim" />
               <p className="font-semibold">Payment claim #{c.next_claim_no} (Construction Contracts Act)</p>
-              <p className="text-xs text-slate">The whole project ({c.top_job_ref} and its variations): contract sections, approved and
+              <p className="text-xs text-slate">The whole project ({c.top_job_ref} and its variations): the quote, approved and
                 unapproved variations, retentions, the claim summary, an hours breakdown and any files you attach. Laid out like PayApps.</p>
+              <DetailPick c={c} />
               <button className={primaryBtn}>Start payment claim #{c.next_claim_no}</button>
             </form>
           ) : null}
@@ -194,6 +196,14 @@ export function InvoicesTab({ job, inv, phases, base }: { job: JobPage; inv: Job
           <label className="flex items-center gap-2 text-sm sm:col-span-2 lg:col-span-4">
             <input type="checkbox" name="claim_mode" defaultChecked={c.claim_mode} /> Construction contract: invoice with payment claims
           </label>
+          <label className="text-sm sm:col-span-2"><span className={label}>Claims bring across the quote&apos;s</span>
+            <select name="claim_detail" defaultValue={c.claim_detail} className={input} disabled={c.claim_detail_locked}>
+              <option value="sections">Sections (one claim line per quote section)</option>
+              <option value="lines">Line items (one claim line per quote line)</option>
+            </select>
+            {c.claim_detail_locked && <input type="hidden" name="claim_detail" value={c.claim_detail} />}
+            {c.claim_detail_locked && <span className="mt-1 block text-xs text-slate">Fixed: a claim on this project is already approved this way.</span>}
+          </label>
           <label className="text-sm"><span className={label}>Contract reference</span>
             <input name="contract_ref" defaultValue={c.contract_ref ?? ""} className={input} /></label>
           <label className="text-sm"><span className={label}>Claims due by (day of month)</span>
@@ -221,5 +231,26 @@ export function InvoicesTab({ job, inv, phases, base }: { job: JobPage; inv: Job
         <p className="mt-2 text-xs text-slate">Held so far: {money(c.retention_withheld)} withheld, {money(c.retention_withheld - c.retention_held)} released.</p>
       </section>
     </div>
+  );
+}
+
+/** What a claim brings across from the quote: its sections or its line items. Chosen on the first claim; once a claim is
+ *  approved, later claims follow it (so "previously claimed" lines up), and the box just says which. */
+function DetailPick({ c }: { c: JobInvoices["claims"] }) {
+  if (c.claim_detail_locked) {
+    return (
+      <p className="text-xs text-slate">
+        <input type="hidden" name="detail" value={c.claim_detail} />
+        Brings across the quote&apos;s <strong>{c.claim_detail === "lines" ? "line items" : "sections"}</strong>, like the claims already approved.
+      </p>
+    );
+  }
+  return (
+    <label className="block text-sm"><span className={label}>What would you like to bring across from the quote?</span>
+      <select name="detail" defaultValue={c.claim_detail} className={input}>
+        <option value="sections">Sections (one line per quote section)</option>
+        <option value="lines">Line items (one line per quote line; fixed-price sections stay one line)</option>
+      </select>
+    </label>
   );
 }

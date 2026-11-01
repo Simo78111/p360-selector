@@ -72,6 +72,7 @@ export async function newInvoiceAction(form: FormData) {
     const phase = text(form, "phase_id", 40);
     if (isId(phase)) opts.phase_id = phase;
     if (kind === "charge_up") opts.pending = form.get("pending") !== "approved";
+    if (kind === "progress" || kind === "claim") opts.detail = text(form, "detail", 10) === "lines" ? "lines" : "sections";
     if (kind === "deposit") {
       const v = text(form, "quote_version_id", 40);
       if (isId(v)) opts.quote_version_id = v;
@@ -238,6 +239,7 @@ export async function saveClaimSettingsAction(form: FormData) {
     }
     await saveClaimSettings(s, jobId, {
       claim_mode: form.get("claim_mode") === "on",
+      ...(form.has("claim_detail") ? { claim_detail: text(form, "claim_detail", 10) === "lines" ? "lines" : "sections" } : {}),
       contract_ref: text(form, "contract_ref", 100),
       retention_bands: bands,
       retention_cap: num(form, "retention_cap") ?? "",
