@@ -52,7 +52,8 @@ export default async function UnbilledPage({ searchParams }: Props) {
         <StatTile label="Phases waiting to invoice" value={String(t.phases)} sub={t.phase_drafts ? `${money(t.phase_drafts)} already in draft invoices` : undefined} />
         <StatTile label="Charge-up costs not invoiced" value={money(t.unbilled)} sub={`on ${t.jobs} job${t.jobs === 1 ? "" : "s"}`} />
         <StatTile label="Older than 30 days" value={money(t.over_30_days)} tone={t.over_30_days > 0 ? "bad" : undefined} />
-        <StatTile label="Next step" value="Invoice it" sub={<Link href="/dashboard/office/invoices?tab=to_invoice" className="underline">Open Invoices → To Invoice</Link>} />
+        <StatTile label="Longest wait" value={rep.phases.length ? `${Math.max(...rep.phases.map((p) => p.days))} days` : "—"}
+          sub={<Link href="/dashboard/office/invoices?tab=to_invoice" className="underline">Invoice them: Invoices → To Invoice</Link>} />
       </div>
 
       <section className="overflow-x-auto rounded-2xl bg-white p-5">

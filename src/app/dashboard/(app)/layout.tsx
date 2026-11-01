@@ -25,7 +25,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
   return (
     <div className="flex min-h-screen flex-col bg-mist">
       <header className="border-b border-black/5 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <Logo className="h-9" />
             <DashboardNav items={items} />
@@ -47,20 +47,18 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
                 id="global-search"
                 name="q"
                 placeholder="Find a job…"
-                className="w-36 rounded-full border border-black/10 bg-mist px-3 py-1.5 text-sm focus:w-56 focus:bg-white sm:w-44"
+                className="w-36 rounded-full border border-black/10 bg-mist px-3 py-1.5 text-sm focus:w-52 focus:bg-white"
               />
             </form>
-            <span className="hidden max-w-xs truncate text-xs text-slate lg:inline" data-testid="signed-in-as" title={who}>
-              {who}
-            </span>
             <SettingsLink paths={SETTINGS_PATHS} />
             {session.kind !== "dev" && (
               <form action={logout}>
-                <button type="submit" className="font-medium text-slate hover:text-ink">
+                <button type="submit" className="font-medium text-slate hover:text-ink" title={`Signed in as ${who}`}>
                   Log out
                 </button>
               </form>
             )}
+            <span className="sr-only" data-testid="signed-in-as">{who}</span>
           </div>
         </div>
       </header>

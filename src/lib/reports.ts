@@ -118,6 +118,13 @@ export function resolveRange(range?: string, from?: string, to?: string): { key:
   if (range === "custom" || (!range && f && t)) {
     if (f && t && f <= t) return { key: "custom", from: f, to: t };
   }
+  const preset = presetRange(range);
+  // dates typed in that differ from the chosen period win (the form sends both)
+  if (f && t && f <= t && (f !== preset.from || t !== preset.to)) return { key: "custom", from: f, to: t };
+  return preset;
+}
+
+function presetRange(range?: string): { key: RangeKey; from: string; to: string } {
   const today = nzToday();
   const [y, m] = today.split("-").map(Number); // m is 1–12
   const fyStart = m >= 4 ? y : y - 1;

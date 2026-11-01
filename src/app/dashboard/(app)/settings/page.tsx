@@ -1,13 +1,16 @@
 // Phase 3e: the Settings page. Everything that isn't day-to-day (Today, Jobs, Calendar, Reports) lives here, in
 // groups. Only what this person's role can open is shown.
 import Link from "next/link";
-import { can, requireOffice } from "@/lib/auth";
+import { can, requireOffice, ROLE_NAMES } from "@/lib/auth";
 import { SETTINGS } from "@/lib/office-menu";
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const session = await requireOffice();
+  const who = session.kind === "staff"
+    ? `${session.name} · ${session.companies.map((c) => `${c.code} ${ROLE_NAMES[c.role].toLowerCase()}`).join(", ")}`
+    : session.name;
   const groups = SETTINGS.map((g) => ({ ...g, items: g.items.filter((i) => can(session, i.area)) })).filter((g) => g.items.length);
 
   return (
@@ -18,6 +21,7 @@ export default async function SettingsPage() {
           Everything that isn&apos;t day-to-day. What&apos;s waiting to be done (invoices, supplier invoices, timesheets,
           leave) also shows on <Link href="/dashboard/office" className="font-semibold text-ink underline">Today</Link>.
         </p>
+        <p className="mt-2 text-xs text-slate" data-testid="settings-signed-in">Signed in as {who}</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((g) => (

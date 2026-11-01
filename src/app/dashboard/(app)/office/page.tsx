@@ -220,9 +220,11 @@ function ActionCards({ actions: a, error }: { actions: TodayActions | null; erro
   }
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const cards: Card[] = [
-    { key: "to_invoice", count: a.to_invoice, title: plural(a.to_invoice, "phase to invoice", "phases to invoice"),
-      detail: a.labour_complete ? `${a.labour_complete} more at Labour Complete` : undefined,
-      href: "/dashboard/office/invoices?tab=to_invoice" },
+    { key: "to_invoice", count: a.to_invoice + a.labour_complete,
+      title: plural(a.to_invoice + a.labour_complete, "phase ready to invoice", "phases ready to invoice"),
+      detail: [a.to_invoice && `${a.to_invoice} To Invoice`, a.labour_complete && `${a.labour_complete} Labour Complete`].filter(Boolean).join(" · ") || undefined,
+      // Labour Complete phases aren't on the Invoices → To Invoice tab yet; the Unbilled work report shows both
+      href: a.labour_complete ? "/dashboard/office/reports/unbilled" : "/dashboard/office/invoices?tab=to_invoice" },
     { key: "approve", count: a.can_approve_invoices ? a.invoices_to_approve : a.invoices_draft,
       title: a.can_approve_invoices ? plural(a.invoices_to_approve, "invoice to approve", "invoices to approve")
                                     : plural(a.invoices_draft, "draft invoice", "draft invoices"),
