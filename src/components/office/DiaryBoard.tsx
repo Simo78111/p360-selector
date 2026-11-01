@@ -326,7 +326,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
     return (
       <div className={`flex h-full items-center gap-3 px-3 ${p ? (inPool ? "bg-[#dbe7ff]" : "bg-white") : "bg-[#d6d6dc]"}`}
         data-in-pool={inPool ? "yes" : undefined}
-        title={inPool ? `Taking automatic Plumbing 360 bookings${view === "week" ? `: ${poolDays.map((d) => dayLabel(d).split(" ")[0]).join(", ")}` : ""}` : undefined}>
+        title={inPool ? `Taking automatic Plumbing 360 bookings${view === "week" ? `: ${poolDays.map((d) => dayLabel(d).split(" ")[0].replace(",", "")).join(" ")}` : ""}` : undefined}>
         {p ? (
           <span
             className="grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white"
@@ -346,7 +346,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
             <div className="mt-0.5 flex flex-wrap gap-1">
               {inPool && (
                 <span className="rounded-full bg-[#1d3fce] px-2 py-0.5 text-[11px] font-semibold text-white" data-testid="in-pool">
-                  Auto bookings{view === "week" && poolDays.length < days.length ? ` ${poolDays.map((d) => dayLabel(d).split(" ")[0]).join(", ")}` : ""}
+                  Auto bookings{view === "week" && poolDays.length < 5 ? ` ${poolDays.map((d) => dayLabel(d).split(" ")[0].replace(",", "")).join(" ")}` : ""}
                 </span>
               )}
               {notSent > 0 && (
@@ -363,7 +363,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
               )}
               {off.length > 0 && (
                 <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800">
-                  Off {view === "week" ? off.map((d) => dayLabel(d).split(" ")[0]).join(", ") : ""}
+                  Off {view === "week" ? off.map((d) => dayLabel(d).split(" ")[0].replace(",", "")).join(", ") : ""}
                 </span>
               )}
             </div>
