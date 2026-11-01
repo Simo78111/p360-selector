@@ -1,12 +1,14 @@
 "use client";
 // The cost boxes on each phase (job page → Job Summary): Labour, Supplier documents, Stock on hand / other. Each shows
-// its cost and sell; click one with costs to see them underneath — labour per person, supplier invoices per document,
-// stock per line item. Cost columns only for people with "Can see costs and margins".
+// its cost and sell; click one to see them underneath — labour per person, supplier invoices per document, stock per
+// line item. Stock on hand (untracked materials from the van or yard) is entered here. Cost columns only for people
+// with "Can see costs and margins".
 import Link from "next/link";
 import { useState } from "react";
+import { addStockAction, removeStockAction } from "@/app/dashboard/job-actions";
 import type { CostLine, JobCosts } from "@/lib/job-costs";
 
-type Row = { key: string; cols: string[]; cost?: number; sell: number; pending: boolean };
+type Row = { key: string; cols: string[]; cost?: number; sell: number; pending: boolean; stockId?: string };
 type Box = { id: "labour" | "supplier" | "stock"; title: string; empty: string; head: string[]; rows: Row[] };
 
 const money = (n: number | null | undefined) =>
@@ -46,26 +48,29 @@ function buildBoxes(lines: CostLine[]): Box[] {
     pending: ls.some((l) => l.status !== "approved"),
   }));
 
-  // Stock on hand / other: every line item (nothing feeds this yet: Project 360 doesn't track stock)
+  // Stock on hand / other: every line item (entered by hand; not tracked as stock)
   const stock: Row[] = lines
     .filter((x) => !["labour", "materials", "hire", "freight"].includes(x.kind))
     .map((l) => ({
-      key: l.id, cols: [l.description, nzDay(l.date), `${Number(l.qty)}${l.unit ? ` ${l.unit}` : ""}`],
-      cost: l.cost, sell: Number(l.sell), pending: l.status !== "approved",
+      key: l.id, cols: [l.description, nzDay(l.date), `${Number(l.qty)}${l.unit ? ` ${l.unit}` : ""}`, l.who ?? "—"],
+      cost: l.cost, sell: Number(l.sell), pending: l.status !== "approved", stockId: l.kind === "stock" ? l.id : undefined,
     }));
 
   return [
     { id: "labour", title: "Labour", empty: "No hours on this phase yet.", head: ["Person", "Days", "Hours"], rows: labour },
     { id: "supplier", title: "Supplier documents", empty: "No supplier invoices on this phase yet.", head: ["Invoice", "Date", "Bought by", "Lines"], rows: supplier },
-    { id: "stock", title: "Stock on hand / other", empty: "Nothing yet.", head: ["Item", "Date", "Qty"], rows: stock },
+    { id: "stock", title: "Stock on hand / other", empty: "Nothing yet.", head: ["Item", "Date", "Qty", "Added by"], rows: stock },
   ];
 }
 
-export function PhaseCostBoxes({ costs, costsHref }: { costs: JobCosts | null; costsHref: string }) {
+export function PhaseCostBoxes({ costs, costsHref, phaseId, back, canAddStock }: {
+  costs: JobCosts | null; costsHref: string; phaseId: string | null; back: string; canAddStock: boolean;
+}) {
   const [open, setOpen] = useState<Box["id"] | null>(null);
   const boxes = buildBoxes(costs?.lines ?? []);
   const canCosts = !!costs?.can_costs;
-  const shown = boxes.find((b) => b.id === open && b.rows.length > 0) ?? null;
+  const opens = (b: Box) => b.rows.length > 0 || (b.id === "stock" && canAddStock);
+  const shown = boxes.find((b) => b.id === open && opens(b)) ?? null;
 
   return (
     <div className="mt-4" data-testid="cost-buckets">
@@ -73,7 +78,7 @@ export function PhaseCostBoxes({ costs, costsHref }: { costs: JobCosts | null; c
         {boxes.map((b) => {
           const cost = b.rows.reduce((a, r) => a + (r.cost ?? 0), 0);
           const sell = b.rows.reduce((a, r) => a + r.sell, 0);
-          const has = b.rows.length > 0;
+          const has = opens(b);
           const on = shown?.id === b.id;
           const sub = b.id === "labour"
             ? `${b.rows.length} ${b.rows.length === 1 ? "person" : "people"}`
@@ -86,7 +91,7 @@ export function PhaseCostBoxes({ costs, costsHref }: { costs: JobCosts | null; c
                 <span className="font-semibold">{b.title}</span>
                 {has && <span aria-hidden className="text-xs text-slate">{on ? "▲" : "▼"}</span>}
               </span>
-              <span className="block text-xs text-slate">{has ? sub : b.empty}</span>
+              <span className="block text-xs text-slate">{b.rows.length ? sub : b.id === "stock" && canAddStock ? "Nothing yet · click to add" : b.empty}</span>
               <span className="mt-1 flex justify-between text-xs tabular-nums">
                 {canCosts ? <span>Cost {money(cost)}</span> : <span />}
                 <span>Sell {money(sell)}</span>
@@ -98,12 +103,13 @@ export function PhaseCostBoxes({ costs, costsHref }: { costs: JobCosts | null; c
 
       {shown && (
         <div className="mt-2 overflow-x-auto rounded-xl bg-mist/60 p-3" data-testid={`cost-detail-${shown.id}`}>
-          <table className="w-full min-w-[30rem] text-sm">
+          {shown.rows.length > 0 && <table className="w-full min-w-[30rem] text-sm">
             <thead className="text-left text-xs text-slate">
               <tr>
                 {shown.head.map((h, i) => <th key={h} className={`py-1 pr-3 font-semibold ${i > 1 && shown.id === "labour" ? "text-right" : ""}`}>{h}</th>)}
                 {canCosts && <th className="py-1 pr-3 text-right font-semibold">Cost</th>}
                 <th className="py-1 text-right font-semibold">Sell</th>
+                {shown.id === "stock" && canAddStock && <th className="w-6" />}
               </tr>
             </thead>
             <tbody>
@@ -116,13 +122,50 @@ export function PhaseCostBoxes({ costs, costsHref }: { costs: JobCosts | null; c
                   ))}
                   {canCosts && <td className="py-1.5 pr-3 text-right tabular-nums">{money(r.cost)}</td>}
                   <td className="py-1.5 text-right tabular-nums">{money(r.sell)}</td>
+                  {shown.id === "stock" && canAddStock && (
+                    <td className="py-1.5 pl-2 text-right">
+                      {r.stockId && (
+                        <form action={removeStockAction}>
+                          <input type="hidden" name="stockLineId" value={r.stockId} />
+                          <input type="hidden" name="back" value={back} />
+                          <button className="px-1 font-bold text-red-700" aria-label={`Remove ${r.cols[0]}`} title="Remove">×</button>
+                        </form>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
-          </table>
-          <Link href={costsHref} className="mt-2 inline-block text-xs font-semibold text-aqua-deep">Every line in the Cost Report →</Link>
+          </table>}
+          {shown.id === "stock" && canAddStock && phaseId && <AddStock phaseId={phaseId} back={back} canCosts={canCosts} />}
+          {shown.rows.length > 0 && (
+            <Link href={costsHref} className="mt-2 inline-block text-xs font-semibold text-aqua-deep">Every line in the Cost Report →</Link>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+/** Enter stock on hand: what it was, how many, unit, cost each (what it cost us), the day and a note. */
+function AddStock({ phaseId, back, canCosts }: { phaseId: string; back: string; canCosts: boolean }) {
+  const f = "rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm";
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Auckland" }).format(new Date());
+  return (
+    <form action={addStockAction} className="mt-3 grid gap-2 sm:grid-cols-[minmax(12rem,2fr)_5rem_5rem_7rem_9rem]" data-testid="add-stock">
+      <input type="hidden" name="phaseId" value={phaseId} />
+      <input type="hidden" name="back" value={back} />
+      <p className="text-xs font-semibold text-slate sm:col-span-5">
+        Add stock on hand — materials from the van or yard (left over from another job, bought elsewhere). Not tracked as stock;
+        it&apos;s a cost on this phase and is charged up at the customer&apos;s markup.
+      </p>
+      <label className="text-xs text-slate">What<input name="description" required maxLength={300} placeholder="e.g. 15mm copper elbows" className={`${f} mt-0.5 w-full`} /></label>
+      <label className="text-xs text-slate">Qty<input name="quantity" defaultValue="1" inputMode="decimal" className={`${f} mt-0.5 w-full text-right`} /></label>
+      <label className="text-xs text-slate">Unit<input name="unit" placeholder="ea, m" maxLength={20} className={`${f} mt-0.5 w-full`} /></label>
+      <label className="text-xs text-slate">{canCosts ? "Cost each $" : "Cost each $ (ex GST)"}<input name="unit_cost" inputMode="decimal" placeholder="0.00" className={`${f} mt-0.5 w-full text-right`} /></label>
+      <label className="text-xs text-slate">Day used<input type="date" name="work_date" defaultValue={today} className={`${f} mt-0.5 w-full`} /></label>
+      <label className="text-xs text-slate sm:col-span-4">Note (optional)<input name="note" maxLength={500} placeholder="e.g. left in Tama's van" className={`${f} mt-0.5 w-full`} /></label>
+      <div className="self-end"><button className="w-full rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">Add stock</button></div>
+    </form>
   );
 }

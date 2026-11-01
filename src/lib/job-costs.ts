@@ -3,14 +3,14 @@ import { engine } from "./engine";
 import type { OfficeSession } from "./auth";
 
 // Phase 3c: the job's Cost Report (labour from timesheets, supplier invoice lines).
-export type CostKind = "labour" | "materials" | "hire" | "freight";
+export type CostKind = "labour" | "materials" | "hire" | "freight" | "stock";
 export type CostLine = {
   id: string; date: string; kind: CostKind; job_ref: string; phase_ref: string | null; phase_name: string | null;
   description: string; who: string | null; qty: number; unit: string | null;
   cost?: number; sell: number; status: "approved" | "confirmed" | "draft" | "to_approve"; ref: string; no_rate?: boolean;
 };
 export type CostTotals = {
-  labour?: number; labour_hours: number; labour_charge: number; supplier_documents?: number; materials_sell: number;
+  labour?: number; labour_hours: number; labour_charge: number; supplier_documents?: number; stock_other?: number; materials_sell: number;
   total?: number; charge_value: number; pending_labour?: number; pending_supplier?: number; lines_without_rate?: number;
 };
 export type JobCosts = { lines: CostLine[]; totals: CostTotals; can_costs: boolean; markup_pct: number };
@@ -42,6 +42,7 @@ export function filterCosts(c: JobCosts, range: { from: string | null; to: strin
     Math.round(lines.filter(keep).reduce((a, l) => a + f(l), 0) * 100) / 100;
   const lab = (l: CostLine) => l.kind === "labour";
   const mat = (l: CostLine) => l.kind !== "labour";
+  const sup = (l: CostLine) => l.kind !== "labour" && l.kind !== "stock";
   const pending = (l: CostLine) => l.status !== "approved";
   const totals: CostTotals = {
     labour_hours: sum((l) => Number(l.qty), lab),
@@ -50,17 +51,20 @@ export function filterCosts(c: JobCosts, range: { from: string | null; to: strin
     charge_value: sum((l) => Number(l.sell)),
     ...(c.can_costs ? {
       labour: sum((l) => Number(l.cost ?? 0), lab),
-      supplier_documents: sum((l) => Number(l.cost ?? 0), mat),
+      supplier_documents: sum((l) => Number(l.cost ?? 0), sup),
+      stock_other: sum((l) => Number(l.cost ?? 0), (l) => l.kind === "stock"),
       total: sum((l) => Number(l.cost ?? 0)),
       pending_labour: sum((l) => Number(l.cost ?? 0), (l) => lab(l) && pending(l)),
-      pending_supplier: sum((l) => Number(l.cost ?? 0), (l) => mat(l) && pending(l)),
+      pending_supplier: sum((l) => Number(l.cost ?? 0), (l) => sup(l) && pending(l)),
       lines_without_rate: lines.filter((l) => l.no_rate).length,
     } : {}),
   };
   return { ...c, lines, totals };
 }
 
-export const KIND_LABEL: Record<CostKind, string> = { labour: "Labour", materials: "Materials", hire: "Hire", freight: "Freight" };
+export const KIND_LABEL: Record<CostKind, string> = {
+  labour: "Labour", materials: "Materials", hire: "Hire", freight: "Freight", stock: "Stock on hand",
+};
 export const STATUS_LABEL: Record<CostLine["status"], string> = {
   approved: "Approved", confirmed: "Confirmed by plumber", draft: "Draft timesheet", to_approve: "Invoice to approve",
 };
@@ -78,4 +82,20 @@ export function costsCsv(c: JobCosts): string {
     ...(c.can_costs ? [l.cost ?? ""] : []), l.sell, STATUS_LABEL[l.status], l.ref,
   ]);
   return [head, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+
+// ── Stock on hand (untracked materials from the van or yard, entered against a phase) ─────────────────
+export async function addStock(s: OfficeSession, phaseId: string, line: Record<string, unknown>) {
+  const db = engine();
+  if (!db) throw new Error("The booking engine isn't connected");
+  const { data, error } = await db.rpc("office_add_stock", { p_staff_id: s.staffId, p_phase_id: phaseId, p_line: line });
+  if (error) throw new Error(error.message);
+  return data as { id: string; message: string };
+}
+export async function removeStock(s: OfficeSession, stockLineId: string) {
+  const db = engine();
+  if (!db) throw new Error("The booking engine isn't connected");
+  const { data, error } = await db.rpc("office_remove_stock", { p_staff_id: s.staffId, p_stock_line_id: stockLineId });
+  if (error) throw new Error(error.message);
+  return data as { message: string };
 }

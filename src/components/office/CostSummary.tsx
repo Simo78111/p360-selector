@@ -23,10 +23,10 @@ export function CostRangeForm({ action, from, to, keep, clearHref }: {
 
 export function CostSummaryTable({ costs }: { costs: JobCosts }) {
   const t = costs.totals;
-  const matCost = Number(t.supplier_documents ?? 0);
+  const matCost = Number(t.supplier_documents ?? 0) + Number(t.stock_other ?? 0);
   const rows: { label: string; sub?: string; cost?: number; charge: number }[] = [
     { label: "Labour", sub: hrs(t.labour_hours), cost: t.labour, charge: t.labour_charge },
-    { label: "Materials", sub: "incl. hire & freight", cost: matCost, charge: t.materials_sell },
+    { label: "Materials", sub: "incl. hire, freight & stock on hand", cost: matCost, charge: t.materials_sell },
   ];
   const pending = Number(t.pending_labour ?? 0) + Number(t.pending_supplier ?? 0);
   return (

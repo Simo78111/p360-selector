@@ -23,6 +23,7 @@ import {
   setJobState,
   taskAction as setTask,
 } from "@/lib/jobs";
+import { addStock, removeStock } from "@/lib/job-costs";
 
 const back = (path: string, key: "ok" | "err", message: string) =>
   `${path}${path.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(message)}`;
@@ -221,5 +222,25 @@ export async function removeFileAction(form: FormData) {
     if (!fileId) throw new Error("Unknown file.");
     const f = await fileAction(s, fileId, "remove");
     return `Removed ${f.file_name}.`;
+  });
+}
+
+// ── Stock on hand (one action per form) ──────────────────────────────────────
+export async function addStockAction(form: FormData) {
+  const phaseId = id(form, "phaseId");
+  await run(backTo(form), async (s) => {
+    if (!phaseId) throw new Error("Pick a phase");
+    return (await addStock(s, phaseId, {
+      description: text(form, "description", 300), quantity: text(form, "quantity", 20), unit: text(form, "unit", 20),
+      unit_cost: text(form, "unit_cost", 20).replace(/[$,\s]/g, ""), work_date: text(form, "work_date", 10), note: text(form, "note", 500),
+    })).message;
+  });
+}
+
+export async function removeStockAction(form: FormData) {
+  const lineId = id(form, "stockLineId");
+  await run(backTo(form), async (s) => {
+    if (!lineId) throw new Error("Which stock line?");
+    return (await removeStock(s, lineId)).message;
   });
 }

@@ -579,6 +579,7 @@ function Money({ job, money: m, scope, base }: { job: JobPage; money: JobMoney; 
           <Box title="Costs (ex GST)" rows={[
             ["Labour" + (c.labour_hours ? ` (${hrs(c.labour_hours)})` : ""), money(c.labour ?? 0)],
             ["Supplier invoices", money(c.supplier_documents ?? 0)],
+            ...(Number(c.stock_other ?? 0) ? [["Stock on hand", money(c.stock_other ?? 0)] as [string, string]] : []),
             ["Total cost", money(c.total ?? 0)],
           ]} note={pendingNote(c)} />
         ) : (
@@ -665,7 +666,7 @@ function CostReport({ job, costs, money: m, scope, base, dates }: {
   const t = costs.totals;
   const dq = `${dates?.from ? `&cf=${dates.from}` : ""}${dates?.to ? `&ct=${dates.to}` : ""}`;
   const csv = `/api/office/job-costs?job=${job.job_id}&scope=${scope}&ref=${encodeURIComponent(job.job_ref)}${dates?.from ? `&from=${dates.from}` : ""}${dates?.to ? `&to=${dates.to}` : ""}`;
-  const kinds = ["labour", "materials", "hire", "freight"] as const;
+  const kinds = ["labour", "materials", "hire", "freight", "stock"] as const;
   const sum = (k: string, f: "cost" | "sell") => costs.lines.filter((l) => l.kind === k).reduce((a, l) => a + Number(l[f] ?? 0), 0);
   return (
     <section className="rounded-2xl bg-white p-5 sm:p-6" data-testid="cost-report">
@@ -983,7 +984,8 @@ function PhaseCard({ job, phase, path, focus, canMove, costs }: {
         </details>
       )}
 
-      {managed && <PhaseCostBoxes costs={costs} costsHref={`${path.split("?")[0]}?tab=costs&scope=job`} />}
+      {managed && <PhaseCostBoxes costs={costs} costsHref={`${path.split("?")[0]}?tab=costs&scope=job`}
+        phaseId={phase.id} back={path} canAddStock={!!phase.id && job.can.work && job.state !== "cancelled"} />}
 
       {notes.length > 0 && (
         <div className="mt-4">
