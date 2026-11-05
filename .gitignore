@@ -42,3 +42,6 @@ next-env.d.ts
 
 # allow the example env file
 !.env.example
+
+# pdf.js worker (copied from node_modules before dev/build)
+/public/pdf.worker.min.mjs

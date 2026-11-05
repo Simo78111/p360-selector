@@ -18,7 +18,7 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 const who = (s: OfficeSession) => s.staffId; // null = owner backup password
 
 // ── Permissions per person ─────────────────────────────────────────────────
-export type Perm = "send_quotes" | "see_costs" | "edit_favourites" | "book_diary" | "approve_timesheets" | "approve_invoices";
+export type Perm = "send_quotes" | "see_costs" | "edit_favourites" | "book_diary" | "approve_timesheets" | "approve_invoices" | "do_takeoffs";
 export const PERM_LABEL: Record<Perm, string> = {
   send_quotes: "Can publish and send quotes",
   see_costs: "Can see costs and margins",
@@ -26,6 +26,7 @@ export const PERM_LABEL: Record<Perm, string> = {
   book_diary: "Can book the diary",   // Phase 2c
   approve_timesheets: "Can approve timesheets and leave",   // Phase 3a
   approve_invoices: "Can approve invoices",   // Phase 3d
+  do_takeoffs: "Can do takeoffs",   // Phase 4 (owner/admin on by default; tick it for the estimator and supervisor)
 };
 export type PermState = { on: boolean; set: boolean | null; role_default: boolean | null };
 export type StaffPerms = Record<Perm, PermState> & { office: boolean };
