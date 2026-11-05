@@ -7,6 +7,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { TakeoffItem, TakeoffMark, TakeoffPage, TakeoffPlan } from "@/lib/takeoff-shared";
 import { renderPage } from "./pdf";
 import { turnPoints } from "./turn";
+import { blank } from "./blank";
 
 type View = { z: number; tx: number; ty: number };
 
@@ -23,6 +24,7 @@ export function ComparePane({ plan, page, current, turn, marks, items, view, set
     if (!page || !canvas.current) return;
     let stop = false;
     let cancel: (() => void) | null = null;
+    blank(canvas.current);   // never leave the last page's drawing under this page's marks while it draws
     (async () => {
       const doc = await getDoc();
       if (stop) return;

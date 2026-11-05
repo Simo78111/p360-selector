@@ -48,6 +48,7 @@ import {
 import type { AiReport, AiReportRow } from "@/lib/takeoff";
 import { startAiCompare } from "./ai-compare";
 import { AiChanges } from "./AiChanges";
+import { blank } from "./blank";
 import { ComparePane } from "./ComparePane";
 import { ItemForm } from "./ItemForm";
 import { PlanUpload } from "./PlanUpload";
@@ -69,6 +70,26 @@ const QUICK_PX = 1400;    // drawn first so the page shows in a second or two (b
 const INK_PX = 1800;      // pages drawn this size to compare two revisions
 const remember = (jobId: string) => `p360.takeoff.${jobId}`;
 const DRAG_PX = 5;        // a press that moves further than this pans the page instead of clicking
+
+// revision pairs found to have no changes, so the AI isn't offered for them again (this browser only)
+const NO_CHANGES_KEY = "p360.takeoff.noChanges";
+function readNoChanges(): Set<string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(NO_CHANGES_KEY) ?? "[]");
+    return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+function rememberNoChanges(fromId: string, toId: string) {
+  try {
+    const s = readNoChanges();
+    s.add(`${fromId}>${toId}`);
+    localStorage.setItem(NO_CHANGES_KEY, JSON.stringify([...s].slice(-200)));
+  } catch {
+    /* storage blocked: only remembered until the page is reloaded */
+  }
+}
 
 export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   initial: Takeoff; jobPath: string; testSite: boolean; startPlan?: string;
@@ -106,6 +127,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   const [compareId, setCompareId] = useState<string | null>(null);
   // AI list of what changed between two revisions
   const [aiOpen, setAiOpen] = useState(false);
+  const [noChanges, setNoChanges] = useState<Set<string>>(() => readNoChanges());
   const [ai, setAi] = useState<AiReport | null>(null);
   const [aiStep, setAiStep] = useState<string | null>(null);
   const [aiRows, setAiRows] = useState<AiReportRow[]>([]);
@@ -268,6 +290,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     let stop = false;
     setRendering(true);
     setHints({ ratios: [], sheet: null });
+    blank(canvas.current);   // never leave the last page's drawing under this page's marks while it draws
     (async () => {
       const p = await d.doc.getPage(page.page_no);
       if (stop) return;
@@ -828,6 +851,8 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       const docFrom = await docFor(from);
       const r = await startAiCompare(t.job.id, from, to, docFrom, docTo, setAiStep);
       if ("nothing" in r) {
+        rememberNoChanges(from.id, to.id);
+        setNoChanges((x) => new Set(x).add(`${from.id}>${to.id}`));
         setAiStep(null);
         setNotice({ kind: "info", text: `No changes found between Rev ${from.revision} and Rev ${to.revision}.` });
         setAiOpen(false);
@@ -862,7 +887,9 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   }
   // the latest report into this revision, and an older revision the AI hasn't looked at yet
   const aiLatest = plan ? aiRows.find((r) => r.to_plan === plan.id) : undefined;
-  const aiOlder = plan && !replaced ? revisionsOf(plan).find((o) => o.revision < plan.revision) : undefined;
+  const aiOlderAny = plan && !replaced ? revisionsOf(plan).find((o) => o.revision < plan.revision) : undefined;
+  // nothing to ask the AI about when the drawings were found to be the same
+  const aiOlder = aiOlderAny && plan && !noChanges.has(`${aiOlderAny.id}>${plan.id}`) ? aiOlderAny : undefined;
 
   // ── Drawing ───────────────────────────────────────────────────────────────────────────────
   const onThisPage = page ? live.filter((m) => m.page_id === page.id && items.get(m.item_id) && !items.get(m.item_id)!.hidden) : [];

@@ -91,15 +91,17 @@ export async function describePages(doc: PDFDocumentProxy, onPage?: (n: number) 
 }
 
 /**
- * Draws a page into a canvas with its long side `longPx` pixels (sharp enough to zoom in on an A1 sheet), returning
- * a cancel function. The canvas is shown at the page's size in PDF units and scaled by the viewer.
- */
-/**
- * Draws a page onto `canvas`. On-screen drawings go at the screen's pace (pdf.js waits for each repaint, so they pause
- * while the tab is hidden); `background` ones (comparing revisions, pictures for the AI) don't wait for the screen, so
- * they carry on if the office switches tabs.
+ * Draws a page onto `canvas` with its long side `longPx` pixels (sharp enough to zoom in on an A1 sheet), returning a
+ * cancel function. The canvas is shown at the page's size in PDF units and scaled by the viewer.
+ *
+ * pdf.js normally draws a page in small steps, one per screen refresh. Chrome gives no refreshes to a tab that's hidden
+ * or a window that's covered by another app, so the drawing used to sit at "Drawing the page…" until Chrome came back
+ * in front (6 Nov). Every drawing now takes its steps on its own timer instead (a message to itself, which Chrome
+ * doesn't slow down in the background), still letting clicks and scrolling in between steps.
+ * `background` is kept for callers that mark their drawings as such; all drawings now behave the same way.
  */
 export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx: number, turn = 0, background = false) {
+  void background;
   const rotation = (((page.rotate ?? 0) + turn) % 360 + 360) % 360;   // the PDF's own turn plus the office's
   const base = page.getViewport({ scale: 1, rotation });
   const scale = longPx / Math.max(base.width, base.height);
@@ -114,10 +116,43 @@ export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const task = page.render({ canvas, canvasContext: ctx, viewport: vp });
-  // pdf.js has no option for this on screen-intent drawings; its internal task reads the flag before each chunk
-  const inner = (task as unknown as { _internalRenderTask?: { _useRequestAnimationFrame?: boolean } })._internalRenderTask;
-  if (background && inner) inner._useRequestAnimationFrame = false;
+  stepWithoutScreen(task);
   return { done: task.promise, cancel: () => task.cancel() };
+}
+
+type Inner = { _useRequestAnimationFrame?: boolean; _scheduleNext?: () => void; _scheduleNextBound?: () => void;
+  _nextBound?: () => Promise<void>; _cancelBound?: (e: unknown) => void };
+/** Makes pdf.js take each drawing step on a message timer, not a screen refresh (see renderPage). */
+export function stepWithoutScreen(task: unknown) {
+  const inner = (task as { _internalRenderTask?: Inner })._internalRenderTask;
+  if (!inner || typeof inner._nextBound !== "function") return false;   // a pdf.js update changed its insides: draw as before
+  inner._useRequestAnimationFrame = false;
+  const next = () => {
+    nextTick(() => {
+      inner._nextBound!().catch((e) => inner._cancelBound?.(e));
+    });
+  };
+  inner._scheduleNext = next;
+  inner._scheduleNextBound = next;
+  return true;
+}
+let channel: MessageChannel | null = null;
+const queue: (() => void)[] = [];
+/** Runs `f` as soon as the browser has had a chance to handle clicks (a message to itself; not slowed when hidden). */
+function nextTick(f: () => void) {
+  if (typeof MessageChannel === "undefined") {
+    setTimeout(f, 0);
+    return;
+  }
+  if (!channel) {
+    channel = new MessageChannel();
+    channel.port1.onmessage = () => queue.shift()?.();
+    // in Node (the tests) don't let the channel keep the program running; browsers have no unref
+    (channel.port1 as unknown as { unref?: () => void }).unref?.();
+    (channel.port2 as unknown as { unref?: () => void }).unref?.();
+  }
+  queue.push(f);
+  channel.port2.postMessage(0);
 }
 
 /**

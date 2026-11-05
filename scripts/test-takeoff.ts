@@ -10,6 +10,7 @@ import {
   type Takeoff, type TakeoffMark, type TakeoffPage, type TakeoffPlan,
 } from "../src/lib/takeoff-shared";
 import { turnPoints } from "../src/components/office/takeoff/turn";
+import { stepWithoutScreen } from "../src/components/office/takeoff/pdf";
 
 const page = (id: string, mm: number | null, w = 2384, h = 1684): TakeoffPage => ({
   id, page_no: 1, label: null, width: w, height: h, mm_per_unit: mm, method: mm ? "calibrated" : null, ratio: null, sheet: null,
@@ -177,6 +178,23 @@ const sample = process.argv[2] ?? "../ai_native_plumbing_maintenance/docs/takeof
     turnedPlan, tk, turnedMarks));
   assert.equal(out2.getPage(3).getRotation().angle, 90, "turned page exported turned");
   assert.equal(out2.getPage(2).getRotation().angle, 0);
+  // page drawing takes its steps without waiting for a screen refresh (a hidden tab or covered window gives none)
+  {
+    let steps = 0;
+    const inner = { _useRequestAnimationFrame: true, _scheduleNext: () => assert.fail("old scheduler used"),
+      _scheduleNextBound: () => assert.fail("old scheduler used"),
+      _nextBound: async () => { steps++; if (steps < 3) inner._scheduleNextBound(); }, _cancelBound: (e: unknown) => assert.fail(String(e)) };
+    const g = globalThis as { requestAnimationFrame?: unknown };
+    g.requestAnimationFrame = () => assert.fail("waited for a screen refresh");
+    assert.equal(stepWithoutScreen({ _internalRenderTask: inner }), true);
+    assert.equal(inner._useRequestAnimationFrame, false);
+    inner._scheduleNext();
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(steps, 3, "every step ran with no screen refreshes");
+    delete g.requestAnimationFrame;
+    assert.equal(stepWithoutScreen({}), false, "unknown pdf.js insides: left alone");
+    console.log("✓ page drawing doesn't wait for screen refreshes (hidden tab / covered window)");
+  }
   console.log(`✓ marked-up PDF: ${n} plan pages + summary (${(out.length / 1048576).toFixed(1)} MB); CSV without prices`);
 })().catch((e) => {
   console.error(e);
