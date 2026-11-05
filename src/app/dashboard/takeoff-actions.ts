@@ -8,6 +8,7 @@ import { assertOffice } from "@/lib/auth";
 import { addFile, fileUploadUrl } from "@/lib/jobs";
 import {
   addPlan,
+  copyRevision,
   loadTakeoff,
   removePlan,
   saveItem,
@@ -15,6 +16,8 @@ import {
   setScale,
   sharedWithPlumbers,
   takeoffToQuote,
+  type AddedPlan,
+  type CopyResult,
   type ItemTotals,
   type MarkOp,
   type PageInfo,
@@ -55,7 +58,7 @@ export async function takeoffUploadUrlAction(jobId: string, fileName: string): P
 
 /** The uploaded PDF becomes a job file and a plan set (Rev A, or the next revision under the same name). */
 export async function takeoffAddPlanAction(jobId: string, path: string, fileName: string, bytes: number, name: string,
-  pages: PageInfo[]): Promise<Result<{ id: string; revision: string; message: string }>> {
+  pages: PageInfo[]): Promise<Result<AddedPlan>> {
   return run(async () => {
     need(jobId);
     if (!path.startsWith(`${jobId}/`)) throw new Error("Bad file path.");
@@ -103,6 +106,18 @@ export async function takeoffMarksAction(jobId: string, ops: MarkOp[]): Promise<
     need(jobId);
     if (!Array.isArray(ops) || ops.length === 0 || ops.length > 1000) throw new Error("Nothing to save.");
     return (await saveMarks(await assertOffice("jobs"), jobId, ops)).items;
+  });
+}
+
+/** Copies the takeoff from an older revision onto a newer one; "moved" are the marks where the drawing changed (4c). */
+export async function takeoffCopyRevisionAction(fromPlan: string, toPlan: string, moved: string[]): Promise<Result<CopyResult>> {
+  return run(async () => {
+    need(fromPlan, toPlan);
+    if (!Array.isArray(moved) || moved.length > 5000) throw new Error("Too many marks.");
+    need(...moved);
+    const r = await copyRevision(await assertOffice("jobs"), fromPlan, toPlan, moved);
+    revalidatePath("/dashboard/office/job", "layout");
+    return r;
   });
 }
 

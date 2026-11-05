@@ -35,7 +35,7 @@ export function TakeoffTab({ takeoff: t, base }: { takeoff: Takeoff; base: strin
             {t.plans.map((p) => (
               <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span>
-                  <strong>{p.name}</strong> · Rev {p.revision}{p.latest ? "" : " (older revision)"} · {p.page_count} pages ·
+                  <strong>{p.name}</strong> · Rev {p.revision}{p.superseded_at ? ` (replaced by Rev ${p.superseded_rev}: doesn't count)` : p.latest ? "" : " (older revision)"} · {p.page_count} pages ·
                   added by {p.created_by} {new Date(p.created_at).toLocaleDateString("en-NZ")}
                   {p.shared_at && <span className="text-green-700"> · shared with plumbers {new Date(p.shared_at).toLocaleDateString("en-NZ")}</span>}
                 </span>

@@ -7,7 +7,11 @@ import { describePages, openPdf } from "./pdf";
 
 const MAX = 100 * 1024 * 1024;
 
-export function PlanUpload({ jobId, names, onDone }: { jobId: string; names: string[]; onDone: (planId: string, message: string) => void }) {
+export function PlanUpload({ jobId, names, onDone }: {
+  jobId: string; names: string[];
+  /** previous: the older revision whose takeoff can be copied onto this one (4c). */
+  onDone: (planId: string, message: string, previous?: { id: string; revision: string; marks: number }) => void;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [step, setStep] = useState<string | null>(null);
@@ -33,7 +37,7 @@ export function PlanUpload({ jobId, names, onDone }: { jobId: string; names: str
       setStep("Saving…");
       const r = await takeoffAddPlanAction(jobId, up.data.path, file.name, file.size, name.trim() || file.name.replace(/\.pdf$/i, ""), pages);
       if (!r.ok) throw new Error(r.error);
-      onDone(r.data.id, r.data.message);
+      onDone(r.data.id, r.data.message, r.data.previous);
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : String(e2));
       setStep(null);

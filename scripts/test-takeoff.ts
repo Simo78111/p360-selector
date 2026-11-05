@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { markedUpPdf } from "../src/components/office/takeoff/export";
-import { itemTotals, markQty, ratioScale, readPageText, summaryCsv, type Takeoff, type TakeoffMark, type TakeoffPage } from "../src/lib/takeoff-shared";
+import {
+  countingPages, diffInk, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
+  type Takeoff, type TakeoffMark, type TakeoffPage, type TakeoffPlan,
+} from "../src/lib/takeoff-shared";
 
 const page = (id: string, mm: number | null, w = 2384, h = 1684): TakeoffPage => ({
   id, page_no: 1, label: null, width: w, height: h, mm_per_unit: mm, method: mm ? "calibrated" : null, ratio: null, sheet: null,
@@ -37,6 +40,48 @@ console.log("✓ measuring matches the database: 10.90 m of pipe (10% waste + 0.
 const t = readPageText("H-100 SANITARY PLUMBING H-110 1:25 1:40 1:50 H-110 SCALE @ A1: SCALES SHOWN ON THIS DRAWING ARE FOR AN A1 SCALE WITH CAUTION.");
 assert.deepEqual(t, { label: "H-110", ratios: [25, 40, 50], sheet: "A1" });
 console.log("✓ drawing text: sheet H-110, scales 1:25 · 1:40 · 1:50, for A1");
+
+// 3b. revisions (4c): pages matched by sheet number like the database; replaced revisions don't count;
+// what changed between two drawings, and which marks sit where it changed
+{
+  const pg = (id: string, no: number, label: string | null, w = 2384, h = 1684) => ({ ...page(id, 10, w, h), page_no: no, label });
+  const A = [pg("a1", 1, "H-110"), pg("a2", 2, "H-210"), pg("a3", 3, "H-900"), pg("a4", 4, null)];
+  const B = [pg("b1", 1, "H-210", 1190.55, 842), pg("b2", 2, "h-110"), pg("b3", 3, "H-300"), pg("b4", 4, null)];
+  const m = matchPages(A, B);
+  assert.equal(m.get("a1")?.id, "b2", "H-110 found on another page (and lower case)");
+  assert.equal(m.get("a2")?.id, "b1");
+  assert.equal(m.get("a3"), undefined, "H-900 has nowhere to go");
+  assert.equal(m.get("a4")?.id, "b4", "no sheet numbers: same page number");
+  assert.ok(samePageSize(A[0], B[1]) && !samePageSize(A[1], B[0]), "A1 vs the same drawing on A3");
+
+  const plan = (id: string, pages: TakeoffPage[], superseded: boolean): TakeoffPlan => ({ id, name: "H", revision: id, file_id: "f", page_count: 1,
+    file_name: "", bytes: null, created_at: "", created_by: "", shared_file_id: null, shared_at: null, latest: !superseded, pages,
+    superseded_at: superseded ? "2026-11-05" : null });
+  const counting = countingPages([plan("A", A, true), plan("B", B, false)]);
+  const ms: TakeoffMark[] = [{ id: "x", item_id: "s", page_id: "a1", points: [[1, 1]] }, { id: "y", item_id: "s", page_id: "b2", points: [[1, 1]] }];
+  assert.equal(itemTotals({ id: "s", tool: "count", waste_pct: 0, extra_m_per_run: 0 }, ms, counting).quantity, 1, "Rev A's copy doesn't count twice");
+
+  // two 100 × 100 drawings: a line along y = 20 on both, a box at (70–80, 70–80) on B only, a line moved by one pixel
+  const W = 100, H = 100;
+  const draw = (box: boolean, nudge: number) => {
+    const rgba = new Uint8ClampedArray(W * H * 4).fill(255);
+    const dot = (x: number, y: number) => rgba.fill(0, (y * W + x) * 4, (y * W + x) * 4 + 3);
+    for (let x = 5; x < 95; x++) dot(x, 20 + nudge);
+    if (box) for (let y = 70; y < 80; y++) for (let x = 70; x < 80; x++) dot(x, y);
+    return inkOf(rgba, W, H);
+  };
+  const diff = diffInk(draw(false, 0), draw(true, 1), W, H);
+  let added = 0, removed = 0;
+  for (const v of diff) { if (v === 2) added++; if (v === 1) removed++; }
+  assert.equal(added, 100, "the new box is found");
+  assert.equal(removed, 0, "a line drawn a pixel lower isn't a change");
+  // marks at 1 pixel per unit: a sink on the line (no change), a sink by the box (changed), a run passing the box
+  assert.equal(markChanged([[30, 20]], false, diff, W, H, 1), false);
+  assert.equal(markChanged([[76, 76]], false, diff, W, H, 1), true);
+  assert.equal(markChanged([[50, 60], [90, 60], [90, 95]], false, diff, W, H, 1), true, "the run passes within 10 px of the box");
+  assert.equal(markChanged([[10, 40], [40, 40]], false, diff, W, H, 1), false);
+  console.log("✓ revisions: pages matched by sheet number, replaced revisions don't count, changes found and marks near them flagged");
+}
 
 // 4. the marked-up PDF from a real plan set
 const sample = process.argv[2] ?? "../ai_native_plumbing_maintenance/docs/takeoff-samples/1044_AUCKLAND_COFFEE_EXPORTS_EDV_NTT.pdf";

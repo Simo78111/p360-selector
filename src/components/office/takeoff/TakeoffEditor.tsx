@@ -4,10 +4,13 @@
 // being taken off with their running totals. Pick an item, then click the plan: a count drops a numbered marker, a
 // length is clicked along the run (double-click or Enter to finish), an area is clicked round the shape.
 // Marks save as you go (in batches); undo/redo; the scale is set per page by calibrating or from a ratio.
+// 4c: when a new revision of a plan set arrives, the takeoff is copied onto it (marks where the drawing changed are
+// flagged "check"), the older revision stops counting, and the two revisions can be compared side by side.
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
+  takeoffCopyRevisionAction,
   takeoffItemAction,
   takeoffLoadAction,
   takeoffMarksAction,
@@ -18,8 +21,13 @@ import {
   takeoffUploadUrlAction,
 } from "@/app/dashboard/takeoff-actions";
 import {
+  countingPages,
+  diffInk,
   fmtQty,
   itemTotals,
+  markChanged,
+  matchPages,
+  samePageSize,
   markQty,
   readPageText,
   runLength,
@@ -33,11 +41,12 @@ import {
   type TakeoffPage,
   type TakeoffPlan,
 } from "@/lib/takeoff-shared";
+import { ComparePane } from "./ComparePane";
 import { ItemForm } from "./ItemForm";
 import { PlanUpload } from "./PlanUpload";
 import { ScaleDialog, SendToQuote } from "./dialogs";
 import { csvFor, download, markedUpPdf } from "./export";
-import { fetchJobFile, openPdf, pageText, renderPage } from "./pdf";
+import { changesImage, fetchJobFile, openPdf, pageInk, pageText, renderPage } from "./pdf";
 
 type ToolMode = "select" | "pan" | "measure" | "calibrate" | "check";
 type LocalMark = TakeoffMark & { removed?: boolean };
@@ -49,6 +58,9 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-400
 const money = (n: number) => `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const btn = "rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-40";
 const RENDER_PX = 4096;   // long side of the page image: sharp enough to zoom in on an A1 sheet
+const QUICK_PX = 1400;    // drawn first so the page shows in a second or two (big A1 sheets take a while at full size)
+const INK_PX = 1800;      // pages drawn this size to compare two revisions
+const remember = (jobId: string) => `p360.takeoff.${jobId}`;
 
 export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   initial: Takeoff; jobPath: string; testSite: boolean; startPlan?: string;
@@ -77,7 +89,14 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   const [hints, setHints] = useState<{ ratios: number[]; sheet: TakeoffPage["sheet"] }>({ ratios: [], sheet: null });
   const [loading, setLoading] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
+  const [sharpening, setSharpening] = useState(false);
   const [narrow, setNarrow] = useState(false);
+  // 4c: copying a takeoff onto a new revision, and comparing two revisions side by side
+  const [copy, setCopy] = useState<{ from: TakeoffPlan; to: TakeoffPlan } | null>(null);
+  const [copyStep, setCopyStep] = useState<string | null>(null);
+  const [compareId, setCompareId] = useState<string | null>(null);
+  const [showChanges, setShowChanges] = useState(true);
+  const [changes, setChanges] = useState<{ key: string; url: string | null; note: string } | null>(null);
 
   const viewer = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -88,11 +107,16 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   const panning = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const dragging = useRef<{ id: string; idx: number; before: Pt[] } | null>(null);
   const space = useRef(false);
+  const focus = useRef<Pt | null>(null);   // a mark to centre on once its page is drawn ("next to check")
+  const otherDoc = useRef<{ planId: string; doc: PDFDocumentProxy; close: () => Promise<void> } | null>(null);
 
-  const pages = useMemo(() => new Map(t.plans.flatMap((p) => p.pages).map((p) => [p.id, p])), [t.plans]);
+  const counting = useMemo(() => countingPages(t.plans), [t.plans]);   // replaced revisions don't count
   const live = useMemo(() => marks.filter((m) => !m.removed), [marks]);
-  const totals = useMemo(() => new Map(t.items.map((i) => [i.id, itemTotals(i, live, pages)])), [t.items, live, pages]);
-  const canMeasure = t.can.edit && !!active && !!page;
+  const totals = useMemo(() => new Map(t.items.map((i) => [i.id, itemTotals(i, live, counting)])), [t.items, live, counting]);
+  const replaced = !!plan?.superseded_at;
+  const editable = t.can.edit && !replaced;
+  const canMeasure = editable && !!active && !!page;
+  const toCheck = useMemo(() => live.filter((m) => m.needs_check && counting.has(m.page_id)), [live, counting]);
   const scaled = !!page?.mm_per_unit;
 
   // ── Saving marks (batched) ──────────────────────────────────────────────────────────────
@@ -136,7 +160,9 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       for (const o of ops) {
         if (o.op === "add") next = [...next.filter((m) => m.id !== o.id), { id: o.id, item_id: o.item_id, page_id: o.page_id, points: o.points }];
         else next = next.map((m) => m.id !== o.id ? m
-          : o.op === "move" ? { ...m, points: o.points } : { ...m, removed: o.op === "remove" });
+          : o.op === "move" ? { ...m, points: o.points, needs_check: false }   // moving a flagged mark is putting it right
+          : o.op === "check" || o.op === "uncheck" ? { ...m, needs_check: o.op === "uncheck" }
+          : { ...m, removed: o.op === "remove" });
       }
       return next;
     });
@@ -223,29 +249,84 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     let cancel: (() => void) | null = null;
     let stop = false;
     setRendering(true);
+    setHints({ ratios: [], sheet: null });
     (async () => {
       const p = await d.doc.getPage(page.page_no);
       if (stop) return;
-      const r = renderPage(p, canvas.current!, RENDER_PX);
-      cancel = r.cancel;
-      fit();
-      try {
-        await r.done;
-      } catch {
-        /* cancelled */
-      }
-      if (!stop) setRendering(false);
+      // the scales written on the page first (quick), so the scale dialog can suggest them straight away
       const h = readPageText(await pageText(p));
-      if (!stop) setHints({ ratios: h.ratios, sheet: h.sheet });
+      if (stop) return;
+      setHints({ ratios: h.ratios, sheet: h.sheet });
+      // a quick small drawing so the page shows in a second or two, then the sharp one swapped in when it's ready
+      // (a big A1 services drawing can take half a minute at full size)
+      const quick = renderPage(p, canvas.current!, QUICK_PX);
+      cancel = quick.cancel;
+      fit();
+      focusPending();
+      try {
+        await quick.done;
+      } catch {
+        return;   // cancelled: another page was picked
+      }
+      if (stop) return;
+      setRendering(false);
+      setSharpening(true);
+      const off = document.createElement("canvas");
+      const sharp = renderPage(p, off, RENDER_PX);
+      cancel = sharp.cancel;
+      try {
+        await sharp.done;
+      } catch {
+        return;
+      }
+      if (stop || !canvas.current) return;
+      canvas.current.width = off.width;
+      canvas.current.height = off.height;
+      canvas.current.getContext("2d")?.drawImage(off, 0, 0);
+      setSharpening(false);
     })();
     setDraft([]);
     setSelected(null);
     return () => {
       stop = true;
       cancel?.();
+      setSharpening(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page?.id, renderKey]);
+
+  // centre on a mark (after "next to check" switches page)
+  function focusPending() {
+    const el = viewer.current, f = focus.current;
+    if (!el || !f) return;
+    focus.current = null;
+    const z = 1.2;
+    setView({ z, tx: el.clientWidth / 2 - f[0] * z, ty: el.clientHeight / 2 - f[1] * z });
+  }
+
+  // back on the plan and page you were last on (this browser only)
+  useEffect(() => {
+    if (startPlan) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(remember(initial.job.id)) ?? "null") as { plan?: string; page?: string } | null;
+      const pl = saved?.plan ? initial.plans.find((p) => p.id === saved.plan) : undefined;
+      if (pl) {
+        setPlanId(pl.id);
+        if (pl.pages.some((p) => p.id === saved?.page)) setPageId(saved!.page!);
+      }
+    } catch {
+      /* no storage in this browser: start on the first page */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!planId || !page) return;
+    try {
+      localStorage.setItem(remember(t.job.id), JSON.stringify({ plan: planId, page: page.id }));
+    } catch {
+      /* ignore */
+    }
+  }, [planId, page, t.job.id]);
 
   // ── Pointer → page units ──────────────────────────────────────────────────────────────────
   const toPage = (e: { clientX: number; clientY: number }): Pt => {
@@ -291,7 +372,9 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     }
     if (mode !== "measure") return;
     if (!canMeasure) {
-      setNotice({ kind: "info", text: t.can.edit ? "Pick or add an item on the right first." : "You can look but not change this takeoff." });
+      setNotice({ kind: "info", text: replaced && plan
+        ? `Rev ${plan.revision} has been replaced by Rev ${plan.superseded_rev ?? "?"}: measure on Rev ${plan.superseded_rev ?? "?"}.`
+        : t.can.edit ? "Pick or add an item on the right first." : "You can look but not change this takeoff." });
       return;
     }
     if (active!.tool !== "count" && !scaled) {
@@ -337,6 +420,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
         setUndo((u) => [...u, { label: `moved ${it?.name ?? "mark"}`, undo: [{ op: "move", id: m.id, points: d.before }],
           redo: [{ op: "move", id: m.id, points: m.points }] }]);
         setRedo([]);
+        if (m.needs_check) setMarks((ms) => ms.map((x) => (x.id === m.id ? { ...x, needs_check: false } : x)));
         send([{ op: "move", id: m.id, points: m.points }]);
       }
     }
@@ -361,11 +445,11 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
 
   const removeMark = useCallback((id: string) => {
     const m = marks.find((x) => x.id === id);
-    if (!m || !t.can.edit) return;
+    if (!m || !editable) return;
     const it = t.items.find((i) => i.id === m.item_id);
     doStep({ label: `removed ${it?.name ?? "mark"}`, undo: [{ op: "restore", id }], redo: [{ op: "remove", id }] }, [{ op: "remove", id }]);
     setSelected(null);
-  }, [marks, t, doStep]);
+  }, [marks, t, doStep, editable]);
 
   // keyboard: Esc, Enter, Backspace/Delete, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Space (hold to pan), F (fit)
   useEffect(() => {
@@ -493,8 +577,152 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     setNotice({ kind: "ok", text: r.data.message });
   }
 
-  // ── Drawing ───────────────────────────────────────────────────────────────────────────────
+  // ── Revisions (4c) ────────────────────────────────────────────────────────────────────────
   const items = new Map(t.items.map((i) => [i.id, i]));
+  /** A plan set's other revisions, newest first. */
+  const revisionsOf = (pl: TakeoffPlan) => t.plans.filter((o) => o.id !== pl.id && o.name.toLowerCase() === pl.name.toLowerCase())
+    .sort((a, b) => (a.revision < b.revision ? 1 : -1));
+  /** An older, still-counting revision of this plan with marks that could be copied onto it. */
+  const copySource = (() => {
+    if (!plan || !t.can.edit || replaced || plan.copied_from_rev) return null;
+    const older = revisionsOf(plan).find((o) => o.revision < plan.revision && !o.superseded_at);
+    if (!older) return null;
+    const ids = new Set(older.pages.map((p) => p.id));
+    const n = live.filter((m) => ids.has(m.page_id) && items.has(m.item_id)).length;
+    return n ? { plan: older, marks: n } : null;
+  })();
+
+  /** Opens another revision's PDF (kept while comparing or copying). */
+  async function openOther(pl: TakeoffPlan) {
+    if (docRef.current?.planId === pl.id) return docRef.current.doc;
+    if (otherDoc.current?.planId === pl.id) return otherDoc.current.doc;
+    const bytes = await fetchJobFile(pl.file_id);
+    const { doc, close } = await openPdf(bytes);
+    void otherDoc.current?.close();
+    otherDoc.current = { planId: pl.id, doc, close };
+    return doc;
+  }
+
+  /** Two drawings of a page compared at the same size: what changed (1 = only on the first, 2 = only on the second). */
+  async function compareInk(docA: PDFDocumentProxy, a: TakeoffPage, docB: PDFDocumentProxy, b: TakeoffPage) {
+    const [ia, ib] = await Promise.all([pageInk(docA, a.page_no, INK_PX), pageInk(docB, b.page_no, INK_PX)]);
+    const w = Math.min(ia.w, ib.w), h = Math.min(ia.h, ib.h);
+    const crop = (x: { ink: Uint8Array; w: number }) => {
+      const out = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) out.set(x.ink.subarray(y * x.w, y * x.w + w), y * w);
+      return out;
+    };
+    return { mask: diffInk(crop(ia), crop(ib), w, h), w, h, pxPerPt: ia.pxPerPt };
+  }
+
+  /**
+   * Copy the takeoff from an older revision onto a newer one. Each matching page pair is drawn small and compared;
+   * marks where the drawing changed go across flagged "check". The older revision then stops counting.
+   */
+  async function runCopy(from: TakeoffPlan, to: TakeoffPlan) {
+    await flush();
+    setCopyStep("Opening both revisions…");
+    try {
+      const docA = await openOther(from);
+      const docB = docRef.current?.planId === to.id ? docRef.current.doc : (await openPdf(await fetchJobFile(to.file_id))).doc;
+      const pairs = [...matchPages(from.pages, to.pages).entries()];
+      const moved: string[] = [];
+      let n = 0;
+      for (const [aId, b] of pairs) {
+        const a = from.pages.find((p) => p.id === aId)!;
+        const ms = live.filter((m) => m.page_id === a.id && items.has(m.item_id));
+        n++;
+        if (!ms.length || !samePageSize(a, b)) continue;   // a page printed at another size: the database flags its marks
+        setCopyStep(`Comparing page ${a.label ?? a.page_no} (${n} of ${pairs.length})…`);
+        const d = await compareInk(docA, a, docB, b);
+        for (const m of ms) {
+          if (markChanged(m.points, items.get(m.item_id)!.tool === "area", d.mask, d.w, d.h, d.pxPerPt)) moved.push(m.id);
+        }
+      }
+      setCopyStep("Copying…");
+      const r = await takeoffCopyRevisionAction(from.id, to.id, moved);
+      if (!r.ok) throw new Error(r.error);
+      setCopy(null);
+      setCopyStep(null);
+      setUndo([]);
+      setRedo([]);
+      await reload();
+      setPlanId(to.id);
+      setNotice({ kind: "ok", text: r.data.to_check
+        ? `${r.data.message} Use "Next to check" on the right to go through them.` : r.data.message });
+    } catch (e) {
+      setCopyStep(null);
+      setNotice({ kind: "err", text: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  /** Jumps to the next copied mark still to check, on whichever page it is. */
+  function nextToCheck() {
+    if (!toCheck.length) return;
+    const after = toCheck.findIndex((m) => m.id === selected);
+    const m = toCheck[(after + 1) % toCheck.length];
+    const pl = t.plans.find((p) => p.pages.some((x) => x.id === m.page_id));
+    if (!pl) return;
+    setMode("select");
+    setActiveId(m.item_id);
+    focus.current = m.points[0];
+    if (pl.id !== planId) setPlanId(pl.id);
+    if (m.page_id !== page?.id) setPageId(m.page_id);
+    else focusPending();
+    setTimeout(() => setSelected(m.id), 0);   // after the page change clears the selection
+  }
+
+  function markChecked(id: string) {
+    const it = items.get(marks.find((m) => m.id === id)?.item_id ?? "");
+    doStep({ label: `checked ${it?.name ?? "mark"}`, undo: [{ op: "uncheck", id }], redo: [{ op: "check", id }] }, [{ op: "check", id }]);
+  }
+
+  // comparing: the other revision's matching page, and what changed between the two
+  const comparePlan = compareId ? t.plans.find((p) => p.id === compareId) ?? null : null;
+  const comparePage = (() => {
+    if (!comparePlan || !page) return null;
+    for (const [aId, b] of matchPages(comparePlan.pages, plan?.pages ?? [])) {
+      if (b.id === page.id) return comparePlan.pages.find((p) => p.id === aId) ?? null;
+    }
+    return null;
+  })();
+  useEffect(() => {
+    if (!comparePlan || !page || !plan) {
+      setChanges(null);
+      return;
+    }
+    const key = `${comparePlan.id}:${comparePage?.id}:${page.id}`;
+    if (!comparePage) {
+      setChanges({ key, url: null, note: `Rev ${comparePlan.revision} has no page ${page.label ?? page.page_no}.` });
+      return;
+    }
+    let stop = false;
+    setChanges({ key, url: null, note: "Finding what changed…" });
+    (async () => {
+      try {
+        const docOld = await openOther(comparePlan);
+        const docNew = docRef.current?.planId === plan.id ? docRef.current.doc : null;
+        if (!docNew || stop) return;
+        const older = comparePlan.revision < plan.revision;
+        // red = only on the older revision (taken out), blue = new on the newer one
+        const d = older ? await compareInk(docOld, comparePage, docNew, page) : await compareInk(docNew, page, docOld, comparePage);
+        if (stop) return;
+        let changed = 0;
+        for (let i = 0; i < d.mask.length; i++) if (d.mask[i]) changed++;
+        const [oldRev, newRev] = older ? [comparePlan.revision, plan.revision] : [plan.revision, comparePlan.revision];
+        setChanges({ key, url: changed ? changesImage(d.mask, d.w, d.h) : null,
+          note: changed ? `Red: taken out since Rev ${oldRev}. Blue: new on Rev ${newRev}.` : "No changes found on this page." });
+      } catch (e) {
+        if (!stop) setChanges({ key, url: null, note: e instanceof Error ? e.message : String(e) });
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comparePlan?.id, comparePage?.id, page?.id, renderKey]);
+
+  // ── Drawing ───────────────────────────────────────────────────────────────────────────────
   const onThisPage = page ? live.filter((m) => m.page_id === page.id && items.get(m.item_id) && !items.get(m.item_id)!.hidden) : [];
   const px = 1 / view.z;   // one screen pixel in page units
   const numbering = new Map<string, number>();
@@ -531,7 +759,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
         <div className="ml-3 flex items-center gap-1" role="toolbar" aria-label="Tools">
           <ToolBtn on={mode === "select"} onClick={() => setMode("select")} title="Select a mark to move its points or delete it (drag empty space to pan)">Select</ToolBtn>
           <ToolBtn on={mode === "pan"} onClick={() => setMode("pan")} title="Pan (or hold Space, or drag with the middle button)">Pan</ToolBtn>
-          {t.can.edit && (
+          {editable && (
             <ToolBtn on={mode === "measure"} onClick={() => setMode("measure")} disabled={!active}
               title={active ? `Measure ${active.name}` : "Pick an item first"}>
               {active ? `${active.tool === "count" ? "Count" : active.tool === "length" ? "Length" : "Area"}: ${active.name.slice(0, 22)}` : "Measure"}
@@ -554,6 +782,28 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
           {status === "saving" ? "Saving…" : status === "error" ? "Not saved" : "All changes saved"}
         </span>
         <div className="ml-auto flex items-center gap-2">
+          {plan && revisionsOf(plan).length > 0 && (compareId ? (
+            <div className="flex items-center gap-1 rounded-full bg-aqua-pale/60 px-2 py-1 text-xs" data-testid="compare-bar">
+              <span className="font-semibold">Comparing with</span>
+              <select aria-label="Compare with revision" value={compareId} onChange={(e) => setCompareId(e.target.value)}
+                className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-xs">
+                {revisionsOf(plan).map((o) => <option key={o.id} value={o.id}>Rev {o.revision}</option>)}
+              </select>
+              <label className="ml-1 flex items-center gap-1">
+                <input type="checkbox" checked={showChanges} onChange={(e) => setShowChanges(e.target.checked)} /> Show changes
+              </label>
+              <button type="button" className={`${btn} ml-1 bg-white`} onClick={() => setCompareId(null)}>Stop comparing</button>
+            </div>
+          ) : (
+            <button type="button" className={`${btn} bg-mist`} data-testid="compare"
+              title="Show another revision of this plan set beside this one, with what changed"
+              onClick={async () => {
+                await flush();
+                const others = revisionsOf(plan);
+                setCompareId((others.find((o) => o.revision < plan.revision) ?? others[0]).id);
+                setShowChanges(true);
+              }}>Compare revisions</button>
+          ))}
           <button type="button" className={`${btn} bg-mist`} onClick={() => setDialog("export")} disabled={!plan}>Export</button>
           {t.can.quote && (
             <button type="button" className={`${btn} bg-ink text-white`} onClick={async () => {
@@ -574,6 +824,29 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
         </div>
       )}
 
+      {plan && replaced && (
+        <div className="flex items-center gap-3 bg-amber-50 px-4 py-1.5 text-sm text-amber-950" data-testid="replaced-banner">
+          <span>Rev {plan.revision} was replaced by Rev {plan.superseded_rev ?? "?"}{plan.superseded_at ? ` on ${new Date(plan.superseded_at).toLocaleDateString("en-NZ")}` : ""}:
+            its takeoff was copied across and these marks no longer count. You can look but not change it.</span>
+          {plan.superseded_by && (
+            <button type="button" className="font-semibold underline" onClick={() => setPlanId(plan.superseded_by!)}>Open Rev {plan.superseded_rev}</button>
+          )}
+        </div>
+      )}
+      {copySource && plan && !copy && (
+        <div className="flex items-center gap-3 bg-aqua-pale/60 px-4 py-1.5 text-sm" data-testid="copy-banner">
+          <span>Rev {copySource.plan.revision} has {copySource.marks} marks and still counts. Copy its takeoff onto Rev {plan.revision}?
+            Marks where the drawing changed are flagged for you to check.</span>
+          <button type="button" className={`${btn} bg-ink text-white`} onClick={() => setCopy({ from: copySource.plan, to: plan })}>Copy the takeoff…</button>
+        </div>
+      )}
+      {comparePlan && changes && (
+        <div className="flex items-center gap-3 bg-mist px-4 py-1.5 text-xs" role="status" data-testid="compare-note">
+          <span><strong>Left:</strong> Rev {comparePlan.revision}. <strong>Right:</strong> Rev {plan?.revision}. Scroll or drag either side to move both.
+            {showChanges ? ` ${changes.note}` : ""}</span>
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
         {/* plans and pages */}
         <aside className="flex w-56 shrink-0 flex-col border-r border-black/10 bg-mist/60" aria-label="Plans and pages">
@@ -584,7 +857,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                 setPlanId(e.target.value);
               }} className="w-full rounded-lg border border-black/10 bg-white px-2 py-1.5 text-xs">
                 {t.plans.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} · Rev {p.revision}{p.latest ? "" : " (older)"}</option>
+                  <option key={p.id} value={p.id}>{p.name} · Rev {p.revision}{p.superseded_at ? ` (replaced by Rev ${p.superseded_rev})` : p.latest ? "" : " (older)"}</option>
                 ))}
               </select>
             ) : <p className="text-xs text-slate">No plans yet.</p>}
@@ -613,9 +886,15 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
           </ol>
         </aside>
 
+        {/* compare: the other revision's matching page on the left */}
+        {comparePlan && page && (
+          <ComparePane plan={comparePlan} page={comparePage} current={page} marks={live} items={items} view={view} setView={setView}
+            getDoc={() => openOther(comparePlan)} />
+        )}
+
         {/* the page */}
         <div className="relative min-w-0 flex-1 bg-[#e7ebef]">
-          {page && t.can.edit && (
+          {page && editable && !compareId && (
             <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs shadow">
               <span className={`font-semibold ${scaled ? (page.checked ? "text-green-700" : "text-amber-700") : "text-red-700"}`} data-testid="page-scale">
                 {scaleText(page)}
@@ -639,6 +918,23 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
               {mode === "calibrate" ? "Calibrate:" : "Check:"} click {scalePts?.length ? "the second point" : "the first point"} of a known length (Esc to stop)
             </div>
           )}
+          {(() => {
+            const m = selected ? live.find((x) => x.id === selected && x.needs_check) : undefined;
+            if (!m || !editable) return null;
+            const from = t.plans.find((p) => p.superseded_by === plan?.id);
+            return (
+              <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-amber-100 px-4 py-2 text-xs shadow"
+                data-testid="check-bar">
+                <span className="font-semibold text-amber-950">
+                  Copied from Rev {from?.revision ?? "the older revision"} where the drawing changed: is it still in the right place?
+                </span>
+                <button type="button" className={`${btn} bg-ink text-white`} onClick={() => markChecked(m.id)} data-testid="looks-right">Looks right</button>
+                <span className="text-amber-950">or drag its points to move it ·</span>
+                <button type="button" className={`${btn} bg-white text-red-700`} onClick={() => removeMark(m.id)}>Delete</button>
+                {toCheck.length > 1 && <button type="button" className={`${btn} bg-white`} onClick={nextToCheck}>Next</button>}
+              </div>
+            );
+          })()}
           {mode === "measure" && draft.length > 0 && (
             <div className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs font-semibold text-white shadow">
               {active?.tool === "length" ? `Run ${draftLen !== null ? `${draftLen.toFixed(2)} m` : ""}` : `${draft.length} points`} ·
@@ -656,6 +952,11 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                 transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.z})` }}>
                 <canvas ref={canvas} style={{ width: page.width, height: page.height, display: "block", background: "#fff",
                   boxShadow: "0 2px 12px rgba(0,0,0,.15)", pointerEvents: "none" }} />
+                {comparePlan && showChanges && changes?.url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={changes.url} alt="What changed between the revisions" data-testid="changes-overlay"
+                    style={{ position: "absolute", left: 0, top: 0, width: page.width, height: page.height, opacity: 0.7, pointerEvents: "none" }} />
+                )}
                 <svg width={page.width} height={page.height} viewBox={`0 0 ${page.width} ${page.height}`}
                   style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }} data-testid="takeoff-marks">
                   {onThisPage.map((m) => {
@@ -671,7 +972,11 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                       const n = (numbering.get(it.id) ?? 0) + 1;
                       numbering.set(it.id, n);
                       return (
-                        <g key={m.id} style={{ pointerEvents: hit }} onPointerDown={pick} data-item={it.id}>
+                        <g key={m.id} style={{ pointerEvents: hit }} onPointerDown={pick} data-item={it.id} data-check={m.needs_check ? "1" : undefined}>
+                          {m.needs_check && (
+                            <circle cx={m.points[0][0]} cy={m.points[0][1]} r={16 * px} fill="#fbbf24" fillOpacity={0.35} stroke="#b45309"
+                              strokeWidth={2.5 * px} strokeDasharray={`${4 * px} ${3 * px}`} />
+                          )}
                           <circle cx={m.points[0][0]} cy={m.points[0][1]} r={9 * px} fill={it.colour} fillOpacity={0.85}
                             stroke={sel ? "#000" : "#fff"} strokeWidth={(sel ? 3 : 1.5) * px} />
                           <text x={m.points[0][0]} y={m.points[0][1] + 3.5 * px} fontSize={10 * px} textAnchor="middle" fill="#fff"
@@ -683,7 +988,12 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                     const q = markQty(it.tool, m.points, page.mm_per_unit);
                     const end = m.points[m.points.length - 1];
                     return (
-                      <g key={m.id} style={{ pointerEvents: hit }} onPointerDown={pick} data-item={it.id}>
+                      <g key={m.id} style={{ pointerEvents: hit }} onPointerDown={pick} data-item={it.id} data-check={m.needs_check ? "1" : undefined}>
+                        {m.needs_check && (
+                          <polyline points={it.tool === "area" ? `${pts} ${m.points[0].join(",")}` : pts} fill="none" stroke="#f59e0b"
+                            strokeOpacity={0.6} strokeWidth={14 * px} strokeLinejoin="round" strokeLinecap="round"
+                            strokeDasharray={`${8 * px} ${5 * px}`} />
+                        )}
                         {it.tool === "area"
                           ? <polygon points={pts} fill={it.colour} fillOpacity={0.18} stroke={it.colour} strokeWidth={(sel ? 4 : 2.5) * px} />
                           : <polyline points={pts} fill="none" stroke={it.colour} strokeWidth={(sel ? 5 : 3) * px} strokeOpacity={0.9}
@@ -697,7 +1007,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                             {fmtQty(q, it.tool)} {unitOf(it.tool, it.unit)}
                           </text>
                         )}
-                        {sel && t.can.edit && m.points.map((pt, i) => (
+                        {sel && editable && m.points.map((pt, i) => (
                           <rect key={i} x={pt[0] - 5 * px} y={pt[1] - 5 * px} width={10 * px} height={10 * px} fill="#fff" stroke="#000"
                             strokeWidth={1.5 * px} style={{ cursor: "move", pointerEvents: "auto" }}
                             onPointerDown={(e) => {
@@ -738,14 +1048,22 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                 </div>
               </div>
             )}
-            {(loading || rendering) && plan && (
-              <div className="absolute right-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-xs shadow" role="status">{loading ?? "Drawing the page…"}</div>
+            {(loading || rendering || sharpening) && plan && (
+              <div className="absolute right-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-xs shadow" role="status" data-testid="drawing-status">
+                {loading ?? (rendering ? "Drawing the page…" : "Sharpening the page… (you can measure now)")}
+              </div>
             )}
           </div>
         </div>
 
         {/* items (the legend) */}
         <aside className="flex w-[22rem] shrink-0 flex-col border-l border-black/10" aria-label="Items being taken off">
+          {toCheck.length > 0 && (
+            <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 p-2 text-xs text-amber-950" data-testid="to-check">
+              <span><strong>{toCheck.length}</strong> copied {toCheck.length === 1 ? "mark" : "marks"} to check: the drawing changed around {toCheck.length === 1 ? "it" : "them"}.</span>
+              <button type="button" className={`${btn} shrink-0 bg-ink text-white`} onClick={nextToCheck} data-testid="next-to-check">Next to check</button>
+            </div>
+          )}
           <div className="flex items-center justify-between border-b border-black/10 p-2">
             <h2 className="text-sm font-semibold">Items</h2>
             {t.can.edit && (
@@ -801,6 +1119,10 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                             )}
                           </div>
                         </div>
+                        {(() => {
+                          const n = toCheck.filter((m) => m.item_id === i.id).length;
+                          return n > 0 ? <p className="mt-1 text-xs font-medium text-amber-800">{n} copied {n === 1 ? "mark" : "marks"} to check</p> : null;
+                        })()}
                         {(tot?.unscaled ?? 0) > 0 && (
                           <p className="mt-1 text-xs font-medium text-red-700">{tot!.unscaled} not measured: their page has no scale</p>
                         )}
@@ -884,7 +1206,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       )}
       {dialog === "upload" && (
         <Modal title="Add plans" onClose={() => setDialog(null)}>
-          <PlanUpload jobId={t.job.id} names={[...new Set(t.plans.map((p) => p.name))]} onDone={async (id, message) => {
+          <PlanUpload jobId={t.job.id} names={[...new Set(t.plans.map((p) => p.name))]} onDone={async (id, message, previous) => {
             setDialog(null);
             const next = await reload();
             const pl = next?.plans.find((p) => p.id === id);
@@ -892,8 +1214,47 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
               setPlanId(pl.id);
               setPageId(pl.pages[0]?.id ?? null);
             }
-            setNotice({ kind: "ok", text: `${message}. Set each page's scale before measuring lengths.` });
+            const prev = previous && previous.marks > 0 ? next?.plans.find((p) => p.id === previous.id) : undefined;
+            if (pl && prev) {
+              setCopy({ from: prev, to: pl });
+              setNotice({ kind: "ok", text: `${message}.` });
+            } else setNotice({ kind: "ok", text: `${message}. Set each page's scale before measuring lengths.` });
           }} />
+        </Modal>
+      )}
+      {copy && (
+        <Modal title={`Copy the takeoff onto Rev ${copy.to.revision}`} onClose={() => !copyStep && setCopy(null)}>
+          {(() => {
+            const pairs = matchPages(copy.from.pages, copy.to.pages);
+            const ids = new Set(copy.from.pages.map((p) => p.id));
+            const n = live.filter((m) => ids.has(m.page_id) && items.has(m.item_id)).length;
+            const missing = copy.from.pages.filter((p) => !pairs.has(p.id) && live.some((m) => m.page_id === p.id && items.has(m.item_id)));
+            const resized = copy.from.pages.filter((p) => pairs.has(p.id) && !samePageSize(p, pairs.get(p.id)!));
+            return (
+              <div className="space-y-3 text-sm" data-testid="copy-dialog">
+                <p>Rev {copy.from.revision} has <strong>{n} marks</strong>. They&apos;ll be copied onto the matching pages of Rev {copy.to.revision} (matched by
+                  sheet number, e.g. H-110 to H-110, even if the pages are in a different order), with each page&apos;s scale.</p>
+                <p>Each page is compared first: <strong>marks where the drawing changed are flagged</strong> for you to look at, and the rest come across as they are.
+                  Rev {copy.from.revision} is kept to look at and compare, but stops counting, so nothing is counted twice.</p>
+                {missing.length > 0 && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
+                    Rev {copy.to.revision} has no page matching {missing.map((p) => p.label ?? `page ${p.page_no}`).join(", ")}: those marks stay on Rev {copy.from.revision} (and stop counting).
+                  </p>
+                )}
+                {resized.length > 0 && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
+                    {resized.map((p) => p.label ?? `page ${p.page_no}`).join(", ")} came at a different paper size: the marks are re-sized to fit and all flagged to check.
+                  </p>
+                )}
+                {copyStep && <p className="text-xs text-slate" role="status" data-testid="copy-step">{copyStep}</p>}
+                <div className="flex justify-end gap-2">
+                  <button type="button" className={`${btn} bg-mist px-4 py-2 text-sm`} disabled={!!copyStep} onClick={() => setCopy(null)}>Not now</button>
+                  <button type="button" className={`${btn} bg-ink px-4 py-2 text-sm text-white`} disabled={!!copyStep || n === 0}
+                    onClick={() => void runCopy(copy.from, copy.to)} data-testid="copy-go">Copy {n} marks</button>
+                </div>
+              </div>
+            );
+          })()}
         </Modal>
       )}
       {dialog === "export" && plan && (

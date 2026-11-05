@@ -19,8 +19,10 @@ const who = (s: OfficeSession) => s.staffId; // null = owner backup password
 export const loadTakeoff = (s: OfficeSession, jobId: string) => rpc<Takeoff>("office_takeoff", { p_staff_id: who(s), p_job_id: jobId });
 
 export type PageInfo = { page_no: number; width: number; height: number; label: string | null };
+/** "previous": the older revision of the same set whose takeoff can be copied onto this one (4c). */
+export type AddedPlan = { id: string; revision: string; message: string; previous?: { id: string; revision: string; marks: number } };
 export const addPlan = (s: OfficeSession, jobId: string, fileId: string, name: string, pages: PageInfo[]) =>
-  rpc<{ id: string; revision: string; message: string }>("office_takeoff_add_plan", {
+  rpc<AddedPlan>("office_takeoff_add_plan", {
     p_staff_id: who(s), p_job_id: jobId, p_file_id: fileId, p_name: name, p_pages: pages,
   });
 export const removePlan = (s: OfficeSession, planId: string) =>
@@ -41,9 +43,14 @@ export type ItemTotals = Pick<TakeoffItem, "id" | "marks" | "unscaled" | "measur
 export const saveMarks = (s: OfficeSession, jobId: string, ops: MarkOp[]) =>
   rpc<{ saved: number; items: ItemTotals[] }>("office_takeoff_save_marks", { p_staff_id: who(s), p_job_id: jobId, p_ops: ops });
 
+/** Copies a takeoff onto a newer revision (4c). "moved": marks on the older revision whose part of the drawing changed. */
+export type CopyResult = { copied: number; to_check: number; left_behind: number; scales: number; pages: number; message: string };
+export const copyRevision = (s: OfficeSession, fromPlan: string, toPlan: string, moved: string[]) =>
+  rpc<CopyResult>("office_takeoff_copy_revision", { p_staff_id: who(s), p_from_plan: fromPlan, p_to_plan: toPlan, p_moved: moved });
+
 export const sharedWithPlumbers = (s: OfficeSession, planId: string, fileId: string) =>
   rpc<{ message: string }>("office_takeoff_shared", { p_staff_id: who(s), p_plan_id: planId, p_file_id: fileId });
 
 export const takeoffToQuote = (s: OfficeSession, jobId: string, versionId: string | null) =>
-  rpc<{ version_id: string; number: string; items: number; lines: number; replaced: number; unpriced: number; message: string }>(
+  rpc<{ version_id: string; number: string; items: number; lines: number; replaced: number; unpriced: number; to_check?: number; message: string }>(
     "office_takeoff_to_quote", { p_staff_id: who(s), p_job_id: jobId, p_version_id: versionId });

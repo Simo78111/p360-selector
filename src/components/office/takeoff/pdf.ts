@@ -91,3 +91,45 @@ export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx
   const task = page.render({ canvas, canvasContext: ctx, viewport: vp });
   return { done: task.promise, cancel: () => task.cancel() };
 }
+
+/**
+ * A page drawn small and turned into ink (1 = something drawn), for comparing two revisions (4c). The long side is
+ * `longPx` pixels; pxPerPt converts PDF units to these pixels.
+ */
+export async function pageInk(doc: PDFDocumentProxy, pageNo: number, longPx = 1800) {
+  const { inkOf } = await import("@/lib/takeoff-shared");
+  const page = await doc.getPage(pageNo);
+  const base = page.getViewport({ scale: 1 });
+  const pxPerPt = longPx / Math.max(base.width, base.height);
+  const canvas = document.createElement("canvas");
+  const r = renderPage(page, canvas, longPx);
+  await r.done;
+  const ctx = canvas.getContext("2d")!;
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  page.cleanup();
+  return { ink: inkOf(img.data, canvas.width, canvas.height), w: canvas.width, h: canvas.height, pxPerPt };
+}
+
+/** The changes between two revisions of a page as a see-through picture: red = only on the older one, blue = new. */
+export function changesImage(mask: Uint8Array, w: number, h: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  const img = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    if (!mask[i]) continue;
+    const o = i * 4;
+    if (mask[i] === 1) [img.data[o], img.data[o + 1], img.data[o + 2]] = [220, 38, 38];
+    else [img.data[o], img.data[o + 1], img.data[o + 2]] = [37, 99, 235];
+    img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  // thicken thin changes so they're easy to see at a glance
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const o2 = out.getContext("2d")!;
+  for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) o2.drawImage(canvas, dx, dy);
+  return out.toDataURL("image/png");
+}

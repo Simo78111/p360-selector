@@ -15,6 +15,10 @@ export type TakeoffPage = {
 export type TakeoffPlan = {
   id: string; name: string; revision: string; file_id: string; page_count: number; file_name: string; bytes: number | null;
   created_at: string; created_by: string; shared_file_id: string | null; shared_at: string | null; latest: boolean;
+  /** 4c: this revision's takeoff was copied onto a newer one, so its marks no longer count (still readable). */
+  superseded_by?: string | null; superseded_at?: string | null; superseded_rev?: string | null;
+  /** 4c: the older revision this one's takeoff was copied from. */
+  copied_from_rev?: string | null;
   pages: TakeoffPage[];
 };
 export type TakeoffItem = {
@@ -25,8 +29,11 @@ export type TakeoffItem = {
   marks: number; unscaled: number; measured: number; quantity: number;
   per_page: Record<string, { marks: number; measured: number }>;
   on_quote: boolean; unit_sell?: number | null;
+  /** 4c: copied marks where the drawing changed, still to look at. */
+  to_check?: number;
 };
-export type TakeoffMark = { id: string; item_id: string; page_id: string; points: Pt[] };
+/** needs_check: copied onto a new revision where the drawing changed (4c). */
+export type TakeoffMark = { id: string; item_id: string; page_id: string; points: Pt[]; needs_check?: boolean; copied_from?: string };
 export type TakeoffQuote = {
   version_id: string; number: string; status: "draft" | "published" | "superseded"; quote_status: string;
   sections: string[]; from_takeoff: boolean;
@@ -47,7 +54,9 @@ export type MarkOp =
   | { op: "add"; id: string; item_id: string; page_id: string; points: Pt[] }
   | { op: "move"; id: string; points: Pt[] }
   | { op: "remove"; id: string }
-  | { op: "restore"; id: string };
+  | { op: "restore"; id: string }
+  | { op: "check"; id: string }
+  | { op: "uncheck"; id: string };
 
 export const DEFAULT_GROUPS = ["Drainage", "Underslab", "Fixtures", "Pipework"];
 export const SHEETS = ["A0", "A1", "A2", "A3", "A4"] as const;
@@ -77,7 +86,11 @@ export function markQty(tool: Tool, points: Pt[], mmPerUnit: number | null) {
 export const ratioScale = (ratio: number, sheet: keyof typeof SHEET_MM, page: { width: number; height: number }) =>
   (SHEET_MM[sheet] / Math.max(page.width, page.height)) * ratio;
 
-/** Item totals worked out in the browser (same rules as the database). */
+/** The pages whose marks count: live plans that haven't been replaced by a newer revision (4c). */
+export const countingPages = (plans: TakeoffPlan[]) =>
+  new Map(plans.filter((p) => !p.superseded_at).flatMap((p) => p.pages).map((p) => [p.id, p]));
+
+/** Item totals worked out in the browser (same rules as the database). Pass countingPages() so replaced revisions don't count. */
 export function itemTotals(item: Pick<TakeoffItem, "id" | "tool" | "waste_pct" | "extra_m_per_run">, marks: TakeoffMark[],
   pages: Map<string, TakeoffPage>) {
   let measured = 0, runs = 0, unscaled = 0;
@@ -124,6 +137,99 @@ export function readPageText(text: string) {
     .sort((a, b) => a - b);
   const sheet = (text.match(/@\s?(A[0-4])\b/) ?? text.match(/\bFOR AN (A[0-4])\b/i))?.[1]?.toUpperCase() as TakeoffPage["sheet"] ?? null;
   return { label, ratios, sheet };
+}
+
+// ── Revisions (4c) ────────────────────────────────────────────────────────────────────────────
+
+/** Rev A's pages matched to Rev B's the way the database does: same sheet number (H-110 is H-110 wherever it moved),
+ *  else the same page number when either has no sheet number. */
+export function matchPages(from: TakeoffPage[], to: TakeoffPage[]) {
+  const out = new Map<string, TakeoffPage>();
+  const norm = (s: string | null) => (s ?? "").trim().toUpperCase();
+  for (const a of from) {
+    const byLabel = a.label ? to.find((b) => b.label && norm(b.label) === norm(a.label)) : undefined;
+    const byNo = byLabel ? undefined : to.find((b) => b.page_no === a.page_no && (!b.label || !a.label));
+    const b = byLabel ?? byNo;
+    if (b) out.set(a.id, b);
+  }
+  return out;
+}
+
+export const samePageSize = (a: { width: number; height: number }, b: { width: number; height: number }) =>
+  Math.abs(a.width - b.width) <= Math.max(a.width, 1) * 0.005 && Math.abs(a.height - b.height) <= Math.max(a.height, 1) * 0.005;
+
+/** Ink (dark pixels) from RGBA image data: 1 where something is drawn. */
+export function inkOf(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number) {
+  const ink = new Uint8Array(w * h);
+  for (let i = 0, j = 0; j < w * h; i += 4, j++) {
+    const lum = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+    ink[j] = lum < 200 ? 1 : 0;
+  }
+  return ink;
+}
+
+/**
+ * What changed between two drawings of the same page, rendered at the same size: 1 = drawn on Rev A only (removed),
+ * 2 = drawn on Rev B only (added). A pixel within `slack` pixels of ink on the other drawing doesn't count, so the
+ * same line drawn a hair differently isn't a change.
+ */
+export function diffInk(a: Uint8Array, b: Uint8Array, w: number, h: number, slack = 1) {
+  const out = new Uint8Array(w * h);
+  const near = (ink: Uint8Array, x: number, y: number) => {
+    for (let dy = -slack; dy <= slack; dy++) {
+      const yy = y + dy;
+      if (yy < 0 || yy >= h) continue;
+      for (let dx = -slack; dx <= slack; dx++) {
+        const xx = x + dx;
+        if (xx >= 0 && xx < w && ink[yy * w + xx]) return true;
+      }
+    }
+    return false;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (a[i] === b[i]) continue;
+      if (a[i] && !near(b, x, y)) out[i] = 1;
+      else if (b[i] && !near(a, x, y)) out[i] = 2;
+    }
+  }
+  return out;
+}
+
+/**
+ * Has the drawing changed where this mark sits? Looks `radius` pixels round each point and along each segment of a run
+ * or area (the mask is the page at `pxPerPt` pixels per PDF unit). `minPixels` changed pixels count as a change.
+ */
+export function markChanged(points: Pt[], closed: boolean, mask: Uint8Array, w: number, h: number, pxPerPt: number,
+  radius = 10, minPixels = 6) {
+  const seen = new Set<number>();
+  let hits = 0;
+  const look = (cx: number, cy: number) => {
+    const x0 = Math.max(0, Math.floor(cx - radius)), x1 = Math.min(w - 1, Math.ceil(cx + radius));
+    const y0 = Math.max(0, Math.floor(cy - radius)), y1 = Math.min(h - 1, Math.ceil(cy + radius));
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const i = y * w + x;
+        if (mask[i] && !seen.has(i)) {
+          seen.add(i);
+          hits++;
+        }
+      }
+    }
+    return hits >= minPixels;
+  };
+  const px = points.map(([x, y]) => [x * pxPerPt, y * pxPerPt] as const);
+  const path = closed && px.length > 2 ? [...px, px[0]] : px;
+  if (path.length === 1) return look(path[0][0], path[0][1]);
+  for (let i = 1; i < path.length; i++) {
+    const [ax, ay] = path[i - 1], [bx, by] = path[i];
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / radius));
+    for (let s = 0; s <= steps; s++) {
+      if (look(ax + ((bx - ax) * s) / steps, ay + ((by - ay) * s) / steps)) return true;
+    }
+  }
+  return false;
 }
 
 /** The takeoff summary as CSV rows (prices only when the person can see them). */

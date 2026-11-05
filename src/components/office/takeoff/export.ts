@@ -11,7 +11,9 @@ const clean = (s: string) => s.replace(/²/g, "2").replace(/[–—]/g, "-").rep
   .replace(/[^\x20-\x7e\xa0-\xff]/g, "?");
 
 export function download(bytes: Uint8Array | string, name: string, type: string) {
-  const blob = new Blob([typeof bytes === "string" ? bytes : new Uint8Array(bytes)], { type });
+  // CSV starts with a UTF-8 marker so Excel shows "Sink – 1st fix" and "m²" properly
+  const text = typeof bytes === "string" && type.startsWith("text/csv") && !bytes.startsWith("\ufeff") ? `\ufeff${bytes}` : bytes;
+  const blob = new Blob([typeof text === "string" ? text : new Uint8Array(text)], { type });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = name;
