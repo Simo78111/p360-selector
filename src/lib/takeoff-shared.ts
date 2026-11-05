@@ -141,16 +141,51 @@ export function readPageText(text: string) {
   return { label, ratios, sheet };
 }
 
+/**
+ * The sheet's own number from where the words sit on the page (x, y as the page is shown, y down): the number next to a
+ * "SHEET NUMBER" / "DRAWING NO" label in the title block, else the number nearest the bottom-right corner. Counting
+ * words alone picks the wrong one on sheets whose notes say "refer to H-710" more often than the sheet's own number.
+ */
+export function sheetNumber(items: { str: string; x: number; y: number }[], width: number, height: number): string | null {
+  const re = /\b([A-Z]{1,2}-?\d{3}[A-Z]?)\b/g;
+  const cands: { s: string; x: number; y: number }[] = [];
+  for (const it of items) for (const m of it.str.toUpperCase().matchAll(re)) cands.push({ s: m[1], x: it.x, y: it.y });
+  if (!cands.length) return null;
+  // a "SHEET NUMBER" / "SHEET NO" / "DRAWING NO" / "DWG NO" label: the number just below or to the right of it
+  const labels = items.filter((it) => /\b(SHEET\s*(NUMBER|NO\.?)|DRAWING\s*(NUMBER|NO\.?)|DWG\.?\s*(NUMBER|NO\.?))/i.test(it.str));
+  let best: { s: string; d: number } | null = null;
+  for (const l of labels) {
+    for (const c of cands) {
+      const dx = c.x - l.x, dy = c.y - l.y;
+      if (dx < -20 || dy < -5 || dx > 250 || dy > 60) continue;
+      const d = Math.hypot(dx, dy);
+      if (!best || d < best.d) best = { s: c.s, d };
+    }
+  }
+  if (best) return best.s;
+  // else the one nearest the bottom-right corner, if it's in the title block area
+  const br = cands.reduce((a, c) => (c.x + c.y > a.x + a.y ? c : a));
+  if (br.x > width * 0.6 && br.y > height * 0.6) return br.s;
+  return null;
+}
+
 // ── Revisions (4c) ────────────────────────────────────────────────────────────────────────────
 
 /** Rev A's pages matched to Rev B's the way the database does: same sheet number (H-110 is H-110 wherever it moved),
- *  else the same page number when either has no sheet number. */
+ *  else the same page number when either has no sheet number — or when a sheet number is on more than one page in
+ *  either set (a misread number must never send marks to the wrong sheet). */
 export function matchPages(from: TakeoffPage[], to: TakeoffPage[]) {
   const out = new Map<string, TakeoffPage>();
   const norm = (s: string | null) => (s ?? "").trim().toUpperCase();
+  const once = (ps: TakeoffPage[]) => {
+    const n = new Map<string, number>();
+    for (const p of ps) if (p.label) n.set(norm(p.label), (n.get(norm(p.label)) ?? 0) + 1);
+    return (p: TakeoffPage) => !!p.label && n.get(norm(p.label)) === 1;
+  };
+  const okA = once(from), okB = once(to);
   for (const a of from) {
-    const byLabel = a.label ? to.find((b) => b.label && norm(b.label) === norm(a.label)) : undefined;
-    const byNo = byLabel ? undefined : to.find((b) => b.page_no === a.page_no && (!b.label || !a.label));
+    const byLabel = okA(a) ? to.find((b) => okB(b) && norm(b.label) === norm(a.label)) : undefined;
+    const byNo = byLabel ? undefined : to.find((b) => b.page_no === a.page_no && (!okA(a) || !okB(b)));
     const b = byLabel ?? byNo;
     if (b) out.set(a.id, b);
   }

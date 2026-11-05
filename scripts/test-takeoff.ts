@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { markedUpPdf } from "../src/components/office/takeoff/export";
 import {
-  alignTurn, changeRegions, countingPages, diffInk, likelySet, marksIn, wordDiff, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
+  alignTurn, changeRegions, countingPages, diffInk, likelySet, marksIn, wordDiff, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, sheetNumber, samePageSize, summaryCsv,
   type Takeoff, type TakeoffMark, type TakeoffPage, type TakeoffPlan,
 } from "../src/lib/takeoff-shared";
 import { turnPoints } from "../src/components/office/takeoff/turn";
@@ -54,6 +54,20 @@ console.log("✓ drawing text: sheet H-110, scales 1:25 · 1:40 · 1:50, for A1"
   assert.equal(m.get("a3"), undefined, "H-900 has nowhere to go");
   assert.equal(m.get("a4")?.id, "b4", "no sheet numbers: same page number");
   assert.ok(samePageSize(A[0], B[1]) && !samePageSize(A[1], B[0]), "A1 vs the same drawing on A3");
+  // a sheet number on two pages (misread) never matches by number: page number instead
+  const C = [pg("c1", 1, "H-710"), pg("c2", 2, "H-710"), pg("c3", 3, "H-110")];
+  const D = [pg("d1", 1, "H-710"), pg("d2", 2, "H-510"), pg("d3", 3, "H-110")];
+  const m2 = matchPages(C, D);
+  assert.equal(m2.get("c1")?.id, "d1");
+  assert.equal(m2.get("c2")?.id, "d2", "repeated H-710 falls back to page 2");
+  assert.equal(m2.get("c3")?.id, "d3");
+
+  // the sheet's own number is in the title block, not the most-mentioned one in the notes
+  const SW = 2384, SH = 1684;
+  const notes = [1, 2, 3].map((i) => ({ str: `REFER TO H-710 DETAIL ${i}`, x: 400, y: 300 + i * 40 }));
+  assert.equal(sheetNumber([...notes, { str: "SHEET NUMBER:", x: 2076, y: 1622 }, { str: "H-110", x: 2087, y: 1638 }], SW, SH), "H-110");
+  assert.equal(sheetNumber([...notes, { str: "H-210", x: 2200, y: 1640 }], SW, SH), "H-210", "no label: bottom-right");
+  assert.equal(sheetNumber(notes, SW, SH), null, "nothing in the title block: let the caller decide");
 
   const plan = (id: string, pages: TakeoffPage[], superseded: boolean): TakeoffPlan => ({ id, name: "H", revision: id, file_id: "f", page_count: 1,
     file_name: "", bytes: null, created_at: "", created_by: "", shared_file_id: null, shared_at: null, latest: !superseded, pages,

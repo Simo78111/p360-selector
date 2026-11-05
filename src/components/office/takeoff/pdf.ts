@@ -2,7 +2,7 @@
 // pdf.js in the browser: open a plan set, draw a page onto a canvas, and read its text (sheet number, scales written on
 // it). The worker file is copied to /pdf.worker.min.mjs by scripts/copy-pdf-worker.mjs (predev / prebuild).
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
-import { readPageText } from "@/lib/takeoff-shared";
+import { readPageText, sheetNumber } from "@/lib/takeoff-shared";
 
 let lib: Promise<typeof import("pdfjs-dist")> | null = null;
 export function pdfjs() {
@@ -60,13 +60,29 @@ export async function pageText(page: PDFPageProxy) {
   }
 }
 
+/** The sheet number from the title block (where the words sit on the page). */
+export async function pageSheetNumber(page: PDFPageProxy, width: number, height: number) {
+  try {
+    const vp = page.getViewport({ scale: 1 });
+    const t = await page.getTextContent();
+    const items = t.items.flatMap((i) => {
+      if (!("str" in i) || !i.str.trim()) return [];
+      const [x, y] = vp.convertToViewportPoint(i.transform[4], i.transform[5]);
+      return [{ str: i.str, x, y }];
+    });
+    return sheetNumber(items, width, height);
+  } catch {
+    return null;
+  }
+}
+
 /** Each page's size and a suggested label (sheet number), for a new plan set. */
 export async function describePages(doc: PDFDocumentProxy, onPage?: (n: number) => void) {
   const pages: { page_no: number; width: number; height: number; label: string | null }[] = [];
   for (let n = 1; n <= doc.numPages; n++) {
     const page = await doc.getPage(n);
     const { width, height } = pageSize(page);
-    const { label } = readPageText(await pageText(page));
+    const label = await pageSheetNumber(page, width, height) ?? readPageText(await pageText(page)).label;
     pages.push({ page_no: n, width, height, label });
     page.cleanup();
     onPage?.(n);
