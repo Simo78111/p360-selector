@@ -94,7 +94,12 @@ export async function describePages(doc: PDFDocumentProxy, onPage?: (n: number) 
  * Draws a page into a canvas with its long side `longPx` pixels (sharp enough to zoom in on an A1 sheet), returning
  * a cancel function. The canvas is shown at the page's size in PDF units and scaled by the viewer.
  */
-export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx: number, turn = 0) {
+/**
+ * Draws a page onto `canvas`. On-screen drawings go at the screen's pace (pdf.js waits for each repaint, so they pause
+ * while the tab is hidden); `background` ones (comparing revisions, pictures for the AI) don't wait for the screen, so
+ * they carry on if the office switches tabs.
+ */
+export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx: number, turn = 0, background = false) {
   const rotation = (((page.rotate ?? 0) + turn) % 360 + 360) % 360;   // the PDF's own turn plus the office's
   const base = page.getViewport({ scale: 1, rotation });
   const scale = longPx / Math.max(base.width, base.height);
@@ -109,6 +114,9 @@ export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const task = page.render({ canvas, canvasContext: ctx, viewport: vp });
+  // pdf.js has no option for this on screen-intent drawings; its internal task reads the flag before each chunk
+  const inner = (task as unknown as { _internalRenderTask?: { _useRequestAnimationFrame?: boolean } })._internalRenderTask;
+  if (background && inner) inner._useRequestAnimationFrame = false;
   return { done: task.promise, cancel: () => task.cancel() };
 }
 
@@ -122,7 +130,7 @@ export async function pageInk(doc: PDFDocumentProxy, pageNo: number, longPx = 18
   const base = page.getViewport({ scale: 1 });
   const pxPerPt = longPx / Math.max(base.width, base.height);
   const canvas = document.createElement("canvas");
-  const r = renderPage(page, canvas, longPx, turn);
+  const r = renderPage(page, canvas, longPx, turn, true);
   await r.done;
   const ctx = canvas.getContext("2d")!;
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);

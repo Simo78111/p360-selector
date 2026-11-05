@@ -22,7 +22,7 @@ const jpeg = (c: HTMLCanvasElement, q = 0.82) =>
 async function draw(doc: PDFDocumentProxy, pg: TakeoffPage, longPx: number, turn: number) {
   const page = await doc.getPage(pg.page_no);
   const c = document.createElement("canvas");
-  await renderPage(page, c, longPx, turn).done;
+  await renderPage(page, c, longPx, turn, true).done;
   const words = (await page.getTextContent().catch(() => ({ items: [] }))).items
     .map((i) => ("str" in i ? i.str : "")).filter((s) => s.trim());
   page.cleanup();
