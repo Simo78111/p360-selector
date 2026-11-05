@@ -21,7 +21,9 @@ export function AiChanges({ report, step, marks, items, onGo, onClose, onAgain }
   const near = (c: AiChange, sheetTo: string) => {
     const { pg, box } = where(c, sheetTo);
     if (!pg || !box) return [];
-    const hit = [...marksIn(marks, pg.to_page, box), ...marksIn(marks, pg.from_page, box)];
+    // once the takeoff is copied, only the newer revision's marks (counting both would count each mark twice)
+    const copied = marks.some((m) => m.page_id === pg.to_page);
+    const hit = marksIn(marks, copied ? pg.to_page : pg.from_page, box);
     const byItem = new Map<string, number>();
     for (const m of hit) byItem.set(m.item_id, (byItem.get(m.item_id) ?? 0) + 1);
     return [...byItem].map(([id, n]) => ({ item: items.get(id), n })).filter((x) => x.item);
