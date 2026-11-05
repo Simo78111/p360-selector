@@ -182,7 +182,7 @@ export function likelySet(sets: { name: string; labels: (string | null)[]; pages
     const same = theirs.filter((l) => mine.has(l)).length;
     if (theirs.length && mine.size && same >= Math.max(1, Math.ceil(Math.min(theirs.length, mine.size) / 2))) {
       const score = same / Math.max(theirs.length, mine.size);
-      if (!best || score > best.score) best = { name: s.name, score, why: `${same} of ${theirs.length} sheet numbers match ${s.name}` };
+      if (!best || score > best.score) best = { name: s.name, score, why: `${same} of ${theirs.length} sheet numbers match` };
     }
   }
   if (best) return best;
