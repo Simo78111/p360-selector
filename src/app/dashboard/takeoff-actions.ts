@@ -8,6 +8,9 @@ import { assertOffice } from "@/lib/auth";
 import { addFile, fileUploadUrl } from "@/lib/jobs";
 import {
   addPlan,
+  compareGet,
+  compareList,
+  compareStart,
   copyRevision,
   loadTakeoff,
   rotatePage,
@@ -18,6 +21,8 @@ import {
   sharedWithPlumbers,
   takeoffToQuote,
   type AddedPlan,
+  type AiReport,
+  type AiReportRow,
   type CopyResult,
   type ItemTotals,
   type MarkOp,
@@ -107,6 +112,43 @@ export async function takeoffMarksAction(jobId: string, ops: MarkOp[]): Promise<
     need(jobId);
     if (!Array.isArray(ops) || ops.length === 0 || ops.length > 1000) throw new Error("Nothing to save.");
     return (await saveMarks(await assertOffice("jobs"), jobId, ops)).items;
+  });
+}
+
+/** Upload addresses for the AI comparison's pictures (in the job's files, under takeoff-compare/). */
+export async function takeoffCompareUploadsAction(jobId: string, names: string[]): Promise<Result<{ path: string; url: string }[]>> {
+  return run(async () => {
+    need(jobId);
+    if (!Array.isArray(names) || names.length === 0 || names.length > 300) throw new Error("Too many pictures.");
+    await assertOffice("jobs");
+    const batch = randomUUID();
+    return Promise.all(names.map(async (n) => {
+      const path = `${jobId}/takeoff-compare/${batch}/${safeName(String(n)).slice(0, 80)}`;
+      return { path, url: await fileUploadUrl(path) };
+    }));
+  });
+}
+
+/** Asks the AI what changed between two revisions (the browser has already found the changed areas). */
+export async function takeoffCompareStartAction(fromPlan: string, toPlan: string, input: unknown): Promise<Result<{ id: string }>> {
+  return run(async () => {
+    need(fromPlan, toPlan);
+    if (JSON.stringify(input ?? null).length > 500_000) throw new Error("Too much to compare at once.");
+    return compareStart(await assertOffice("jobs"), fromPlan, toPlan, input);
+  });
+}
+
+export async function takeoffCompareGetAction(id: string): Promise<Result<AiReport>> {
+  return run(async () => {
+    need(id);
+    return compareGet(await assertOffice("jobs"), id);
+  });
+}
+
+export async function takeoffCompareListAction(jobId: string): Promise<Result<AiReportRow[]>> {
+  return run(async () => {
+    need(jobId);
+    return compareList(await assertOffice("jobs"), jobId);
   });
 }
 

@@ -43,6 +43,24 @@ export type ItemTotals = Pick<TakeoffItem, "id" | "marks" | "unscaled" | "measur
 export const saveMarks = (s: OfficeSession, jobId: string, ops: MarkOp[]) =>
   rpc<{ saved: number; items: ItemTotals[] }>("office_takeoff_save_marks", { p_staff_id: who(s), p_job_id: jobId, p_ops: ops });
 
+/** AI list of what changed between two revisions (4c). */
+export type AiChange = { n: number | null; kind: string; what: string; impact: string; affects_quote: boolean;
+  confidence: "high" | "medium" | "low"; label?: string | null; to_page?: string };
+export type AiReport = {
+  id: string; from_plan: string; to_plan: string; status: "queued" | "running" | "done" | "failed"; error: string | null;
+  from_rev: string; to_rev: string; created_at: string; created_by: string | null; finished_at: string | null;
+  result: null | { summary: string; sheets: { label: string | null; to_page: string; from_page: string; summary: string; changes: AiChange[] }[];
+    changes_all: AiChange[]; unchanged: string[] };
+  pages: { label: string | null; from_page: string; to_page: string; regions: { n: number; box: [number, number, number, number] }[] }[];
+  unchanged: string[];
+};
+export type AiReportRow = { id: string; from_plan: string; to_plan: string; status: AiReport["status"]; created_at: string; changes: number };
+export const compareStart = (s: OfficeSession, fromPlan: string, toPlan: string, input: unknown) =>
+  rpc<{ id: string }>("office_takeoff_compare_start", { p_staff_id: who(s), p_from_plan: fromPlan, p_to_plan: toPlan, p_input: input });
+export const compareGet = (s: OfficeSession, id: string) => rpc<AiReport>("office_takeoff_compare_get", { p_staff_id: who(s), p_report_id: id });
+export const compareList = (s: OfficeSession, jobId: string) =>
+  rpc<AiReportRow[]>("office_takeoff_compare_list", { p_staff_id: who(s), p_job_id: jobId });
+
 /** Turns a page a quarter turn clockwise (its marks and calibration turn with it). */
 export const rotatePage = (s: OfficeSession, pageId: string) =>
   rpc<{ rotation: number; width: number; height: number; message: string }>("office_takeoff_rotate_page", { p_staff_id: who(s), p_page_id: pageId });

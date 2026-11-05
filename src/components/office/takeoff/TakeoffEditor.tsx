@@ -10,6 +10,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
+  takeoffCompareGetAction,
+  takeoffCompareListAction,
   takeoffCopyRevisionAction,
   takeoffRotatePageAction,
   takeoffItemAction,
@@ -43,6 +45,9 @@ import {
   type TakeoffPage,
   type TakeoffPlan,
 } from "@/lib/takeoff-shared";
+import type { AiReport, AiReportRow } from "@/lib/takeoff";
+import { startAiCompare } from "./ai-compare";
+import { AiChanges } from "./AiChanges";
 import { ComparePane } from "./ComparePane";
 import { ItemForm } from "./ItemForm";
 import { PlanUpload } from "./PlanUpload";
@@ -99,6 +104,13 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   const [copy, setCopy] = useState<{ from: TakeoffPlan; to: TakeoffPlan } | null>(null);
   const [copyStep, setCopyStep] = useState<string | null>(null);
   const [compareId, setCompareId] = useState<string | null>(null);
+  // AI list of what changed between two revisions
+  const [aiOpen, setAiOpen] = useState(false);
+  const [ai, setAi] = useState<AiReport | null>(null);
+  const [aiStep, setAiStep] = useState<string | null>(null);
+  const [aiRows, setAiRows] = useState<AiReportRow[]>([]);
+  const [aiFocus, setAiFocus] = useState<{ pageId: string; box: [number, number, number, number] } | null>(null);
+  const [aiAfterCopy, setAiAfterCopy] = useState(true);
   const [showChanges, setShowChanges] = useState(true);
   const [changes, setChanges] = useState<{ key: string; url: string | null; note: string } | null>(null);
 
@@ -685,10 +697,13 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       setCopyStep(null);
       setUndo([]);
       setRedo([]);
-      await reload();
+      const next = await reload();
       setPlanId(to.id);
       setNotice({ kind: "ok", text: r.data.to_check
         ? `${r.data.message} Use "Next to check" on the right to go through them.` : r.data.message });
+      // then the AI's list of what changed (with the plans as they are now: Rev B may have been turned to match)
+      const f2 = next?.plans.find((p) => p.id === from.id), t2 = next?.plans.find((p) => p.id === to.id);
+      if (aiAfterCopy && f2 && t2) void runAi(f2, t2);
     } catch (e) {
       setCopyStep(null);
       setNotice({ kind: "err", text: e instanceof Error ? e.message : String(e) });
@@ -779,6 +794,76 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comparePlan?.id, comparePage?.id, page?.id, renderKey]);
 
+  // ── AI list of what changed ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    void takeoffCompareListAction(t.job.id).then((r) => r.ok && setAiRows(r.data));
+  }, [t.job.id]);
+  // a report still being worked on: check every few seconds
+  useEffect(() => {
+    if (!ai || (ai.status !== "queued" && ai.status !== "running")) return;
+    const id = ai.id;
+    const timer = setInterval(async () => {
+      const r = await takeoffCompareGetAction(id);
+      if (!r.ok) return;
+      setAi(r.data);
+      if (r.data.status === "done" || r.data.status === "failed") {
+        void takeoffCompareListAction(t.job.id).then((x) => x.ok && setAiRows(x.data));
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [ai, t.job.id]);
+
+  /** The PDF of a plan set: the open one, or opened alongside. */
+  async function docFor(pl: TakeoffPlan) {
+    if (docRef.current?.planId === pl.id) return docRef.current.doc;
+    return openOther(pl);
+  }
+  /** Ask the AI what changed from `from` (older) to `to` (newer). */
+  async function runAi(from: TakeoffPlan, to: TakeoffPlan) {
+    setAiOpen(true);
+    setAi(null);
+    setAiStep("Opening both revisions…");
+    try {
+      const docTo = await docFor(to);
+      const docFrom = await docFor(from);
+      const r = await startAiCompare(t.job.id, from, to, docFrom, docTo, setAiStep);
+      if ("nothing" in r) {
+        setAiStep(null);
+        setNotice({ kind: "info", text: `No changes found between Rev ${from.revision} and Rev ${to.revision}.` });
+        setAiOpen(false);
+        return;
+      }
+      const g = await takeoffCompareGetAction(r.id);
+      if (!g.ok) throw new Error(g.error);
+      setAi(g.data);
+      setAiStep(null);
+    } catch (e) {
+      setAiStep(null);
+      setAiOpen(false);
+      setNotice({ kind: "err", text: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  async function openAi(id: string) {
+    setAiOpen(true);
+    const r = await takeoffCompareGetAction(id);
+    if (r.ok) setAi(r.data);
+    else setNotice({ kind: "err", text: r.error });
+  }
+  /** Go to a change on the drawing: its page, zoomed to the changed area. */
+  function goToChange(pageId: string, box: [number, number, number, number] | null) {
+    const pl = t.plans.find((p) => p.pages.some((x) => x.id === pageId));
+    if (!pl) return;
+    setCompareId(null);
+    setAiFocus(box ? { pageId, box } : null);
+    if (box) focus.current = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
+    if (pl.id !== planId) setPlanId(pl.id);
+    if (pageId !== page?.id) setPageId(pageId);
+    else focusPending();
+  }
+  // the latest report into this revision, and an older revision the AI hasn't looked at yet
+  const aiLatest = plan ? aiRows.find((r) => r.to_plan === plan.id) : undefined;
+  const aiOlder = plan && !replaced ? revisionsOf(plan).find((o) => o.revision < plan.revision) : undefined;
+
   // ── Drawing ───────────────────────────────────────────────────────────────────────────────
   const onThisPage = page ? live.filter((m) => m.page_id === page.id && items.get(m.item_id) && !items.get(m.item_id)!.hidden) : [];
   const px = 1 / view.z;   // one screen pixel in page units
@@ -849,6 +934,13 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
               <label className="ml-1 flex items-center gap-1">
                 <input type="checkbox" checked={showChanges} onChange={(e) => setShowChanges(e.target.checked)} /> Show changes
               </label>
+              {t.can.edit && comparePlan && plan && (
+                <button type="button" className={`${btn} ml-1 bg-ink text-white`} disabled={!!aiStep} data-testid="ai-run"
+                  onClick={() => {
+                    const [older, newer] = comparePlan.revision < plan.revision ? [comparePlan, plan] : [plan, comparePlan];
+                    void runAi(older, newer);
+                  }}>What changed? (AI)</button>
+              )}
               <button type="button" className={`${btn} ml-1 bg-white`} onClick={() => setCompareId(null)}>Stop comparing</button>
             </div>
           ) : (
@@ -861,6 +953,11 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                 setShowChanges(true);
               }}>Compare revisions</button>
           ))}
+          {aiLatest && !aiOpen && (
+            <button type="button" className={`${btn} bg-amber-100 text-amber-950`} onClick={() => void openAi(aiLatest.id)} data-testid="ai-open">
+              What changed (AI)
+            </button>
+          )}
           <button type="button" className={`${btn} bg-mist`} onClick={() => setDialog("export")} disabled={!plan}>Export</button>
           {t.can.quote && (
             <button type="button" className={`${btn} bg-ink text-white`} onClick={async () => {
@@ -895,6 +992,12 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
           <span>Rev {copySource.plan.revision} has {copySource.marks} marks and still counts. Copy its takeoff onto Rev {plan.revision}?
             Marks where the drawing changed are flagged for you to check.</span>
           <button type="button" className={`${btn} bg-ink text-white`} onClick={() => setCopy({ from: copySource.plan, to: plan })}>Copy the takeoff…</button>
+        </div>
+      )}
+      {aiOlder && plan && t.can.edit && !aiLatest && !aiOpen && !copySource && (
+        <div className="flex items-center gap-3 bg-amber-50 px-4 py-1.5 text-sm text-amber-950" data-testid="ai-banner">
+          <span>Rev {plan.revision} replaces Rev {aiOlder.revision}. Let the AI go through both and list what changed?</span>
+          <button type="button" className={`${btn} bg-ink text-white`} onClick={() => void runAi(aiOlder, plan)}>List what changed (AI)</button>
         </div>
       )}
       {comparePlan && changes && (
@@ -1081,6 +1184,11 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                       </g>
                     );
                   })}
+                  {aiFocus && aiFocus.pageId === page.id && (
+                    <rect x={aiFocus.box[0] - 12 * px} y={aiFocus.box[1] - 12 * px} width={aiFocus.box[2] - aiFocus.box[0] + 24 * px}
+                      height={aiFocus.box[3] - aiFocus.box[1] + 24 * px} fill="#f59e0b" fillOpacity={0.08} stroke="#d97706"
+                      strokeWidth={3 * px} strokeDasharray={`${10 * px} ${6 * px}`} rx={8 * px} data-testid="ai-focus" />
+                  )}
                   {/* the run being drawn */}
                   {draft.length > 0 && active && (
                     <g>
@@ -1120,6 +1228,14 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
 
         {/* items (the legend) */}
         <aside className="flex w-[22rem] shrink-0 flex-col border-l border-black/10" aria-label="Items being taken off">
+          {aiOpen ? (
+            <AiChanges report={ai} step={aiStep} marks={live} items={items} onGo={goToChange}
+              onClose={() => { setAiOpen(false); setAiFocus(null); }}
+              onAgain={ai && t.can.edit ? () => {
+                const f = t.plans.find((p) => p.id === ai.from_plan), to = t.plans.find((p) => p.id === ai.to_plan);
+                if (f && to) void runAi(f, to);
+              } : null} />
+          ) : (<>
           {toCheck.length > 0 && (
             <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 p-2 text-xs text-amber-950" data-testid="to-check">
               <span><strong>{toCheck.length}</strong> copied {toCheck.length === 1 ? "mark" : "marks"} to check: the drawing changed around {toCheck.length === 1 ? "it" : "them"}.</span>
@@ -1220,6 +1336,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
               You can look at this takeoff. To change it you need &quot;Can do takeoffs&quot; (Settings → Staff).
             </p>
           )}
+          </>)}
         </aside>
       </div>
 
@@ -1314,6 +1431,10 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                     {turned.map((p) => p.label ?? `page ${p.page_no}`).join(", ")} on Rev {copy.to.revision} will be turned to match Rev {copy.from.revision}.
                   </p>
                 )}
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={aiAfterCopy} onChange={(e) => setAiAfterCopy(e.target.checked)} data-testid="ai-after-copy" />
+                  <span>Then have the AI go through both revisions and list what changed</span>
+                </label>
                 {copyStep && <p className="text-xs text-slate" role="status" data-testid="copy-step">{copyStep}</p>}
                 <div className="flex justify-end gap-2">
                   <button type="button" className={`${btn} bg-mist px-4 py-2 text-sm`} disabled={!!copyStep} onClick={() => setCopy(null)}>Not now</button>

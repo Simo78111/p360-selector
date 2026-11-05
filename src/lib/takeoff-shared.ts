@@ -297,3 +297,85 @@ export function summaryCsv(t: Takeoff, withPrices: boolean) {
   }
   return rows.map((r) => r.map(q).join(",")).join("\r\n");
 }
+
+// ── AI list of what changed (4c, 6 Nov) ─────────────────────────────────────────────────────
+
+/** A changed area of a page: box in mask pixels and in page units, and how many pixels changed in it. */
+export type ChangeRegion = { px: [number, number, number, number]; box: [number, number, number, number]; pixels: number };
+
+/** Grows a mask by r pixels (a square), in two passes so big pages stay quick. */
+function grow(mask: Uint8Array, w: number, h: number, r: number) {
+  const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    let last = -1e9;   // nearest set pixel to the left (or right, second sweep)
+    for (let x = 0; x < w; x++) { if (mask[y * w + x]) last = x; if (x - last <= r) tmp[y * w + x] = 1; }
+    last = 1e9;
+    for (let x = w - 1; x >= 0; x--) { if (mask[y * w + x]) last = x; if (last - x <= r) tmp[y * w + x] = 1; }
+  }
+  for (let x = 0; x < w; x++) {
+    let last = -1e9;
+    for (let y = 0; y < h; y++) { if (tmp[y * w + x]) last = y; if (y - last <= r) out[y * w + x] = 1; }
+    last = 1e9;
+    for (let y = h - 1; y >= 0; y--) { if (tmp[y * w + x]) last = y; if (last - y <= r) out[y * w + x] = 1; }
+  }
+  return out;
+}
+
+/**
+ * Groups the changed pixels (diffInk's mask) into areas: changes within `join` pixels of each other are one area.
+ * Areas with fewer than `minPixels` changed pixels are dropped. Biggest first; boxes also in page units (÷ pxPerPt).
+ */
+export function changeRegions(mask: Uint8Array, w: number, h: number, pxPerPt: number, join = 12, minPixels = 25): ChangeRegion[] {
+  const g = grow(mask, w, h, join);
+  const seen = new Uint8Array(w * h);
+  const out: ChangeRegion[] = [];
+  const stack: number[] = [];
+  for (let i = 0; i < w * h; i++) {
+    if (!g[i] || seen[i]) continue;
+    let x0 = w, y0 = h, x1 = 0, y1 = 0, pixels = 0;
+    seen[i] = 1;
+    stack.push(i);
+    while (stack.length) {
+      const k = stack.pop()!;
+      const x = k % w, y = (k - x) / w;
+      if (mask[k]) {   // the box hugs the changed pixels, not the joining margin
+        pixels++;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x > 0 && g[k - 1] && !seen[k - 1]) { seen[k - 1] = 1; stack.push(k - 1); }
+      if (x < w - 1 && g[k + 1] && !seen[k + 1]) { seen[k + 1] = 1; stack.push(k + 1); }
+      if (y > 0 && g[k - w] && !seen[k - w]) { seen[k - w] = 1; stack.push(k - w); }
+      if (y < h - 1 && g[k + w] && !seen[k + w]) { seen[k + w] = 1; stack.push(k + w); }
+    }
+    if (pixels < minPixels) continue;
+    const r = (v: number) => Math.round((v / pxPerPt) * 10) / 10;
+    out.push({ px: [x0, y0, x1 + 1, y1 + 1], box: [r(x0), r(y0), r(x1 + 1), r(y1 + 1)], pixels });
+  }
+  return out.sort((a, b) => b.pixels - a.pixels);
+}
+
+/** The words only on the old sheet and only on the new one (each word counted, so a repeated note still shows). */
+export function wordDiff(oldWords: string[], newWords: string[], cap = 80) {
+  const count = (xs: string[]) => {
+    const m = new Map<string, number>();
+    for (const x of xs) {
+      const k = x.replace(/\s+/g, " ").trim();
+      if (k) m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  };
+  const a = count(oldWords), b = count(newWords);
+  const only = (p: Map<string, number>, q: Map<string, number>) => {
+    const out: string[] = [];
+    for (const [k, n] of p) for (let i = 0; i < n - (q.get(k) ?? 0) && out.length < cap; i++) out.push(k);
+    return out;
+  };
+  return { removed: only(a, b), added: only(b, a) };
+}
+
+/** Marks inside a box on a page (with a little room), for "near your takeoff" on an AI change. */
+export function marksIn(marks: TakeoffMark[], pageId: string, box: [number, number, number, number], pad = 20) {
+  const [x0, y0, x1, y1] = box;
+  return marks.filter((m) => m.page_id === pageId &&
+    m.points.some(([x, y]) => x >= x0 - pad && x <= x1 + pad && y >= y0 - pad && y <= y1 + pad));
+}

@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { markedUpPdf } from "../src/components/office/takeoff/export";
 import {
-  alignTurn, countingPages, diffInk, likelySet, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
+  alignTurn, changeRegions, countingPages, diffInk, likelySet, marksIn, wordDiff, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
   type Takeoff, type TakeoffMark, type TakeoffPage, type TakeoffPlan,
 } from "../src/lib/takeoff-shared";
 import { turnPoints } from "../src/components/office/takeoff/turn";
@@ -100,6 +100,21 @@ console.log("✓ drawing text: sheet H-110, scales 1:25 · 1:40 · 1:50, for A1"
   assert.equal(likelySet(existing, sheets(["H-110", "H-210", "H-300"]))?.name, "Hydraulics", "a part set still matches");
   assert.equal(likelySet(existing, sheets(["M-100", "M-200"])), null, "mechanical: a new set");
   assert.equal(likelySet(existing, sheets([null, null]))?.name, "Architectural", "no sheet numbers: same page count");
+  // AI changes list: changed pixels grouped into areas; words added/removed; marks inside an area
+  const regs = changeRegions(diff, W, H, 1);
+  assert.equal(regs.length, 1, "the new box is one area");
+  assert.deepEqual(regs[0].px, [70, 70, 80, 80]);
+  assert.equal(regs[0].pixels, 100);
+  const twoBoxes = new Uint8Array(W * H);
+  for (const [bx, by] of [[10, 10], [60, 60]]) for (let y = by; y < by + 6; y++) for (let x = bx; x < bx + 6; x++) twoBoxes[y * W + x] = 2;
+  assert.equal(changeRegions(twoBoxes, W, H, 1).length, 2, "far apart: two areas");
+  assert.equal(changeRegions(twoBoxes, W, H, 1, 30).length, 1, "joined when close enough");
+  assert.deepEqual(changeRegions(twoBoxes, W, H, 2).map((r) => r.box).sort((a, b) => a[0] - b[0]), [[5, 5, 8, 8], [30, 30, 33, 33]], "boxes in page units");
+  const wd = wordDiff(["NTT", "SANITARY", "NOTE", "NOTE", "3"], ["CONSTRUCTION", "SANITARY", "NOTE", "4", "POSTMIX / CO2"]);
+  assert.deepEqual(wd.removed, ["NTT", "NOTE", "3"]);
+  assert.deepEqual(wd.added, ["CONSTRUCTION", "4", "POSTMIX / CO2"]);
+  assert.deepEqual(marksIn(ms, "b2", [0, 0, 10, 10]).map((m) => m.id), ["y"]);
+  assert.deepEqual(marksIn(ms, "b2", [100, 100, 200, 200]), []);
   console.log("✓ revisions: pages matched by sheet number, replaced revisions don't count, changes found and marks near them flagged");
 }
 
