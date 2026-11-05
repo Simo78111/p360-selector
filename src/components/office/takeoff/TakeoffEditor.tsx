@@ -662,15 +662,28 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     return n ? { plan: older, marks: n } : null;
   })();
 
-  /** Opens another revision's PDF (kept while comparing or copying). */
-  async function openOther(pl: TakeoffPlan) {
-    if (docRef.current?.planId === pl.id) return docRef.current.doc;
-    if (otherDoc.current?.planId === pl.id) return otherDoc.current.doc;
-    const bytes = await fetchJobFile(pl.file_id);
-    const { doc, close } = await openPdf(bytes);
-    void otherDoc.current?.close();
-    otherDoc.current = { planId: pl.id, doc, close };
-    return doc;
+  /**
+   * Opens another revision's PDF (kept while comparing or copying). Asking twice at once (the compare pane and the
+   * changes layer both do) shares one opening: before 6 Nov each opened its own copy and the second closed the first
+   * mid-draw, leaving the left side of Compare blank the first time.
+   */
+  const opening = useRef<{ planId: string; p: Promise<PDFDocumentProxy> } | null>(null);
+  function openOther(pl: TakeoffPlan): Promise<PDFDocumentProxy> {
+    if (docRef.current?.planId === pl.id) return Promise.resolve(docRef.current.doc);
+    if (otherDoc.current?.planId === pl.id) return Promise.resolve(otherDoc.current.doc);
+    if (opening.current?.planId === pl.id) return opening.current.p;
+    const p = (async () => {
+      const bytes = await fetchJobFile(pl.file_id);
+      const { doc, close } = await openPdf(bytes);
+      void otherDoc.current?.close();
+      otherDoc.current = { planId: pl.id, doc, close };
+      return doc;
+    })();
+    opening.current = { planId: pl.id, p };
+    void p.then(() => {}, () => {}).finally(() => {
+      if (opening.current?.p === p) opening.current = null;
+    });
+    return p;
   }
 
   /**

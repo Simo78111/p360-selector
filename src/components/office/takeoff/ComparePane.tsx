@@ -26,9 +26,14 @@ export function ComparePane({ plan, page, current, turn, marks, items, view, set
     let cancel: (() => void) | null = null;
     blank(canvas.current);   // never leave the last page's drawing under this page's marks while it draws
     (async () => {
-      const doc = await getDoc();
-      if (stop) return;
-      const p = await doc.getPage(page.page_no);
+      let p: Awaited<ReturnType<PDFDocumentProxy["getPage"]>>;
+      try {
+        const doc = await getDoc();
+        if (stop) return;
+        p = await doc.getPage(page.page_no);
+      } catch {
+        return;   // the other revision couldn't be opened (or was closed): stays blank, never the wrong drawing
+      }
       if (stop || !canvas.current) return;
       const first = document.createElement("canvas");
       const show = (from: HTMLCanvasElement) => {
