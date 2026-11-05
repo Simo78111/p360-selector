@@ -14,9 +14,10 @@ export function pdfjs() {
 }
 
 /** Opens a PDF from its bytes. pdf.js takes over the buffer it's given, so it gets a copy. */
-export async function openPdf(bytes: ArrayBuffer): Promise<PDFDocumentProxy> {
+export async function openPdf(bytes: ArrayBuffer): Promise<{ doc: PDFDocumentProxy; close: () => Promise<void> }> {
   const m = await pdfjs();
-  return m.getDocument({ data: new Uint8Array(bytes.slice(0)) }).promise;
+  const task = m.getDocument({ data: new Uint8Array(bytes.slice(0)) });
+  return { doc: await task.promise, close: () => task.destroy() };
 }
 
 /** A job file's bytes, through the office's file link (checks the person can see the job). */

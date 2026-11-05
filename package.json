@@ -16,7 +16,8 @@
     "test:test-mode": "tsx scripts/test-test-mode.ts",
     "test:fergus-import": "tsx scripts/test-fergus-import.ts",
     "test:supplier-csv": "tsx scripts/test-supplier-csv.ts",
-    "test:invoice-pdf": "tsx --conditions=react-server scripts/test-invoice-pdf.ts"
+    "test:invoice-pdf": "tsx --conditions=react-server scripts/test-invoice-pdf.ts",
+    "test:takeoff": "tsx scripts/test-takeoff.ts"
   },
   "dependencies": {
     "@fontsource/archivo": "^5.2.8",

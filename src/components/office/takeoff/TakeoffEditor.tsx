@@ -81,7 +81,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
 
   const viewer = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const docRef = useRef<{ planId: string; doc: PDFDocumentProxy; bytes: ArrayBuffer } | null>(null);
+  const docRef = useRef<{ planId: string; doc: PDFDocumentProxy; close: () => Promise<void>; bytes: ArrayBuffer } | null>(null);
   const queue = useRef<MarkOp[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushing = useRef<Promise<void> | null>(null);
@@ -190,10 +190,13 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       try {
         const bytes = await fetchJobFile(plan.file_id, (d, all) =>
           !stop && setLoading(`Opening the plans… ${Math.round(d / 1048576)}${all ? ` of ${Math.round(all / 1048576)}` : ""} MB`));
-        const doc = await openPdf(bytes);
-        if (stop) return;
-        await docRef.current?.doc.destroy();
-        docRef.current = { planId: plan.id, doc, bytes };
+        const { doc, close } = await openPdf(bytes);
+        if (stop) {
+          void close();
+          return;
+        }
+        void docRef.current?.close();
+        docRef.current = { planId: plan.id, doc, close, bytes };
         setLoading(null);
         setPageId((p) => (plan.pages.some((x) => x.id === p) ? p : plan.pages[0]?.id ?? null));
         setRenderKey((k) => k + 1);
