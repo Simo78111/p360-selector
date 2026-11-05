@@ -28,18 +28,25 @@ export function ComparePane({ plan, page, current, turn, marks, items, view, set
       if (stop) return;
       const p = await doc.getPage(page.page_no);
       if (stop || !canvas.current) return;
-      const quick = renderPage(p, canvas.current, 1400, (page.rotation ?? 0) + turn);
-      cancel = quick.cancel;
+      const first = document.createElement("canvas");
+      const show = (from: HTMLCanvasElement) => {
+        if (!canvas.current) return;
+        canvas.current.width = from.width;
+        canvas.current.height = from.height;
+        canvas.current.getContext("2d", { alpha: false, willReadFrequently: true })?.drawImage(from, 0, 0);
+      };
       try {
+        const quick = renderPage(p, first, 1400, (page.rotation ?? 0) + turn);
+        cancel = quick.cancel;
         await quick.done;
+        if (stop) return;
+        show(first);
         const off = document.createElement("canvas");
         const sharp = renderPage(p, off, 3072, (page.rotation ?? 0) + turn);
         cancel = sharp.cancel;
         await sharp.done;
-        if (stop || !canvas.current) return;
-        canvas.current.width = off.width;
-        canvas.current.height = off.height;
-        canvas.current.getContext("2d")?.drawImage(off, 0, 0);
+        if (stop) return;
+        show(off);
       } catch {
         /* cancelled */
       }

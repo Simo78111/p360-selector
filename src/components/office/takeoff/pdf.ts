@@ -85,7 +85,10 @@ export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx
   const vp = page.getViewport({ scale, rotation });
   canvas.width = Math.floor(vp.width);
   canvas.height = Math.floor(vp.height);
-  const ctx = canvas.getContext("2d", { alpha: false });
+  // willReadFrequently makes Chrome draw this canvas in software, not on the graphics card. Services drawings are
+  // hundreds of thousands of tiny lines (H-110 of the Coffee Exports set: ~435,000 drawing steps), which a graphics
+  // card handles very slowly (30 s+ and a frozen tab on Simon's computer) but software draws in about a second.
+  const ctx = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
   if (!ctx) throw new Error("This browser can't draw the plans.");
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);

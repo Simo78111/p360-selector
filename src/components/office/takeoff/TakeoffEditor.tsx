@@ -265,30 +265,39 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       setHints({ ratios: h.ratios, sheet: h.sheet });
       // a quick small drawing so the page shows in a second or two, then the sharp one swapped in when it's ready
       // (a big A1 services drawing can take half a minute at full size)
-      const quick = renderPage(p, canvas.current!, QUICK_PX, page.rotation ?? 0);
-      cancel = quick.cancel;
+      // each drawing is made off-screen and copied in when it's done, so picking another page mid-draw can't jam it
+      const show = (from: HTMLCanvasElement) => {
+        if (!canvas.current) return;
+        canvas.current.width = from.width;
+        canvas.current.height = from.height;
+        canvas.current.getContext("2d", { alpha: false, willReadFrequently: true })?.drawImage(from, 0, 0);
+      };
       fit();
       focusPending();
+      const first = document.createElement("canvas");
       try {
+        const quick = renderPage(p, first, QUICK_PX, page.rotation ?? 0);
+        cancel = quick.cancel;
         await quick.done;
       } catch {
+        if (!stop) setRendering(false);
         return;   // cancelled: another page was picked
       }
       if (stop) return;
+      show(first);
       setRendering(false);
       setSharpening(true);
       const off = document.createElement("canvas");
-      const sharp = renderPage(p, off, RENDER_PX, page.rotation ?? 0);
-      cancel = sharp.cancel;
       try {
+        const sharp = renderPage(p, off, RENDER_PX, page.rotation ?? 0);
+        cancel = sharp.cancel;
         await sharp.done;
       } catch {
+        if (!stop) setSharpening(false);
         return;
       }
-      if (stop || !canvas.current) return;
-      canvas.current.width = off.width;
-      canvas.current.height = off.height;
-      canvas.current.getContext("2d")?.drawImage(off, 0, 0);
+      if (stop) return;
+      show(off);
       setSharpening(false);
     })();
     setDraft([]);
