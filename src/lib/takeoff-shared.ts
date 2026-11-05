@@ -172,6 +172,27 @@ export function alignTurn(a: TakeoffPage, b: TakeoffPage) {
   return fits ? { turn, width: b.height, height: b.width } : { turn: 0, width: b.width, height: b.height };
 }
 
+/** Which existing set the new PDF looks like: most sheet numbers in common (at least half), else the same page count. */
+export function likelySet(sets: { name: string; labels: (string | null)[]; pages: number }[], pages: { label: string | null }[]) {
+  const norm = (s: string | null) => (s ?? "").trim().toUpperCase();
+  const mine = new Set(pages.map((p) => norm(p.label)).filter(Boolean));
+  let best: { name: string; why: string; score: number } | null = null;
+  for (const s of sets) {
+    const theirs = s.labels.map(norm).filter(Boolean);
+    const same = theirs.filter((l) => mine.has(l)).length;
+    if (theirs.length && mine.size && same >= Math.max(1, Math.ceil(Math.min(theirs.length, mine.size) / 2))) {
+      const score = same / Math.max(theirs.length, mine.size);
+      if (!best || score > best.score) best = { name: s.name, score, why: `${same} of ${theirs.length} sheet numbers match ${s.name}` };
+    }
+  }
+  if (best) return best;
+  if (!mine.size) {
+    const byCount = sets.filter((s) => s.pages === pages.length);
+    if (byCount.length === 1) return { name: byCount[0].name, score: 0, why: `same number of pages as ${byCount[0].name}` };
+  }
+  return null;
+}
+
 /** Ink (dark pixels) from RGBA image data: 1 where something is drawn. */
 export function inkOf(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number) {
   const ink = new Uint8Array(w * h);

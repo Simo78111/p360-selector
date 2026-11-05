@@ -1267,7 +1267,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       )}
       {dialog === "upload" && (
         <Modal title="Add plans" onClose={() => setDialog(null)}>
-          <PlanUpload jobId={t.job.id} names={[...new Set(t.plans.map((p) => p.name))]} onDone={async (id, message, previous) => {
+          <PlanUpload jobId={t.job.id} plans={t.plans} onDone={async (id, message, previous) => {
             setDialog(null);
             const next = await reload();
             const pl = next?.plans.find((p) => p.id === id);

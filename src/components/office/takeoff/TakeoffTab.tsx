@@ -44,7 +44,7 @@ export function TakeoffTab({ takeoff: t, base }: { takeoff: Takeoff; base: strin
             ))}
           </ul>
         )}
-        {t.can.edit && <TakeoffTabUpload jobId={t.job.id} names={[...new Set(t.plans.map((p) => p.name))]} open={open} />}
+        {t.can.edit && <TakeoffTabUpload jobId={t.job.id} plans={t.plans} open={open} />}
         {!t.can.edit && (
           <p className="mt-2 text-xs text-slate">To add plans and measure you need &quot;Can do takeoffs&quot; (Settings → Staff).</p>
         )}

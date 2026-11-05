@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { markedUpPdf } from "../src/components/office/takeoff/export";
 import {
-  alignTurn, countingPages, diffInk, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
+  alignTurn, countingPages, diffInk, likelySet, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
   type Takeoff, type TakeoffMark, type TakeoffPage, type TakeoffPlan,
 } from "../src/lib/takeoff-shared";
 import { turnPoints } from "../src/components/office/takeoff/turn";
@@ -92,6 +92,14 @@ console.log("✓ drawing text: sheet H-110, scales 1:25 · 1:40 · 1:50, for A1"
   assert.equal(al.turn, 90);
   assert.ok(samePageSize(turnedA, al), "lined up after turning");
   assert.equal(alignTurn(turnedA, pg("tc", 1, "H-110", 1684, 2384)).turn, 0, "already the same shape: not turned");
+  // a new upload: the same sheet numbers as an existing set = a new revision of it (6 Nov, Simon's upload went in as a new set)
+  const sheets = (labels: (string | null)[]) => labels.map((label, i) => ({ page_no: i + 1, width: 2384, height: 1684, label }));
+  const existing = [{ name: "Hydraulics", labels: ["H-000", "H-001", "H-100", "H-110", "H-210", "H-510", "H-710", "H-720"], pages: 8 },
+    { name: "Architectural", labels: ["A-100", "A-200"], pages: 2 }];
+  assert.equal(likelySet(existing, sheets(["H-000", "H-001", "H-100", "H-110", "H-210", "H-510", "H-710", "H-720"]))?.name, "Hydraulics");
+  assert.equal(likelySet(existing, sheets(["H-110", "H-210", "H-300"]))?.name, "Hydraulics", "a part set still matches");
+  assert.equal(likelySet(existing, sheets(["M-100", "M-200"])), null, "mechanical: a new set");
+  assert.equal(likelySet(existing, sheets([null, null]))?.name, "Architectural", "no sheet numbers: same page count");
   console.log("✓ revisions: pages matched by sheet number, replaced revisions don't count, changes found and marks near them flagged");
 }
 
