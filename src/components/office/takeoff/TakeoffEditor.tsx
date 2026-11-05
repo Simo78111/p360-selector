@@ -325,7 +325,8 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     try {
       const saved = JSON.parse(localStorage.getItem(remember(initial.job.id)) ?? "null") as { plan?: string; page?: string } | null;
       const pl = saved?.plan ? initial.plans.find((p) => p.id === saved.plan) : undefined;
-      if (pl) {
+      // only if it's still the newest revision: when Rev B has arrived since, open Rev B
+      if (pl && pl.latest && !pl.superseded_at) {
         setPlanId(pl.id);
         if (pl.pages.some((p) => p.id === saved?.page)) setPageId(saved!.page!);
       }
