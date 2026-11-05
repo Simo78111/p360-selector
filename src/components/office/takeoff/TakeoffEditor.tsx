@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   takeoffCopyRevisionAction,
+  takeoffRotatePageAction,
   takeoffItemAction,
   takeoffLoadAction,
   takeoffMarksAction,
@@ -21,6 +22,7 @@ import {
   takeoffUploadUrlAction,
 } from "@/app/dashboard/takeoff-actions";
 import {
+  alignTurn,
   countingPages,
   diffInk,
   fmtQty,
@@ -61,6 +63,7 @@ const RENDER_PX = 4096;   // long side of the page image: sharp enough to zoom i
 const QUICK_PX = 1400;    // drawn first so the page shows in a second or two (big A1 sheets take a while at full size)
 const INK_PX = 1800;      // pages drawn this size to compare two revisions
 const remember = (jobId: string) => `p360.takeoff.${jobId}`;
+const DRAG_PX = 5;        // a press that moves further than this pans the page instead of clicking
 
 export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   initial: Takeoff; jobPath: string; testSite: boolean; startPlan?: string;
@@ -90,6 +93,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   const [loading, setLoading] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [sharpening, setSharpening] = useState(false);
+  const [rotating, setRotating] = useState(false);
   const [narrow, setNarrow] = useState(false);
   // 4c: copying a takeoff onto a new revision, and comparing two revisions side by side
   const [copy, setCopy] = useState<{ from: TakeoffPlan; to: TakeoffPlan } | null>(null);
@@ -107,6 +111,8 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
   const panning = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const dragging = useRef<{ id: string; idx: number; before: Pt[] } | null>(null);
   const space = useRef(false);
+  // a left press in Measure / scale modes: a click (place a point) unless it moves, then it's a pan
+  const press = useRef<{ x: number; y: number; tx: number; ty: number; detail: number; p: Pt } | null>(null);
   const focus = useRef<Pt | null>(null);   // a mark to centre on once its page is drawn ("next to check")
   const otherDoc = useRef<{ planId: string; doc: PDFDocumentProxy; close: () => Promise<void> } | null>(null);
 
@@ -259,7 +265,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       setHints({ ratios: h.ratios, sheet: h.sheet });
       // a quick small drawing so the page shows in a second or two, then the sharp one swapped in when it's ready
       // (a big A1 services drawing can take half a minute at full size)
-      const quick = renderPage(p, canvas.current!, QUICK_PX);
+      const quick = renderPage(p, canvas.current!, QUICK_PX, page.rotation ?? 0);
       cancel = quick.cancel;
       fit();
       focusPending();
@@ -272,7 +278,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       setRendering(false);
       setSharpening(true);
       const off = document.createElement("canvas");
-      const sharp = renderPage(p, off, RENDER_PX);
+      const sharp = renderPage(p, off, RENDER_PX, page.rotation ?? 0);
       cancel = sharp.cancel;
       try {
         await sharp.done;
@@ -361,6 +367,15 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       return;
     }
     const p = toPage(e);
+    if (mode === "select") return;
+    // wait to see if it's a click or a drag (drag = pan, nothing placed)
+    press.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty, detail: e.detail, p };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  /** A click on the page (a press that didn't move): place a point, a marker or a calibration point. */
+  function clickAt(p: Pt, detail: number) {
+    if (!page) return;
     if (p[0] < 0 || p[1] < 0 || p[0] > page.width || p[1] > page.height) return;
     if (mode === "calibrate" || mode === "check") {
       const pts = [...(scalePts ?? []), p];
@@ -388,11 +403,16 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
         [{ op: "add", id, item_id: active!.id, page_id: page.id, points: [round(p)] }]);
       return;
     }
-    if (e.detail >= 2) return;   // the double-click that finishes a run
+    if (detail >= 2) return;   // the double-click that finishes a run
     setDraft((d) => [...d, p]);
   }
 
   function onPointerMove(e: React.PointerEvent) {
+    const pr = press.current;
+    if (pr && Math.hypot(e.clientX - pr.x, e.clientY - pr.y) > DRAG_PX) {
+      press.current = null;
+      panning.current = { x: pr.x, y: pr.y, tx: pr.tx, ty: pr.ty };
+    }
     if (panning.current) {
       const s = panning.current;
       setView((v) => ({ ...v, tx: s.tx + e.clientX - s.x, ty: s.ty + e.clientY - s.y }));
@@ -411,6 +431,11 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
 
   function onPointerUp() {
     panning.current = null;
+    const pr = press.current;
+    if (pr) {
+      press.current = null;
+      clickAt(pr.p, pr.detail);
+    }
     const d = dragging.current;
     if (d) {
       dragging.current = null;
@@ -603,9 +628,13 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
     return doc;
   }
 
-  /** Two drawings of a page compared at the same size: what changed (1 = only on the first, 2 = only on the second). */
+  /**
+   * Two drawings of a page compared at the same size, in the first one's frame (the second turned to line up if they
+   * were rotated differently): what changed (1 = only on the first, 2 = only on the second).
+   */
   async function compareInk(docA: PDFDocumentProxy, a: TakeoffPage, docB: PDFDocumentProxy, b: TakeoffPage) {
-    const [ia, ib] = await Promise.all([pageInk(docA, a.page_no, INK_PX), pageInk(docB, b.page_no, INK_PX)]);
+    const turnB = (b.rotation ?? 0) + alignTurn(a, b).turn;
+    const [ia, ib] = await Promise.all([pageInk(docA, a.page_no, INK_PX, a.rotation ?? 0), pageInk(docB, b.page_no, INK_PX, turnB)]);
     const w = Math.min(ia.w, ib.w), h = Math.min(ia.h, ib.h);
     const crop = (x: { ink: Uint8Array; w: number }) => {
       const out = new Uint8Array(w * h);
@@ -632,7 +661,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
         const a = from.pages.find((p) => p.id === aId)!;
         const ms = live.filter((m) => m.page_id === a.id && items.has(m.item_id));
         n++;
-        if (!ms.length || !samePageSize(a, b)) continue;   // a page printed at another size: the database flags its marks
+        if (!ms.length || !samePageSize(a, alignTurn(a, b))) continue;   // printed at another size: the database flags its marks
         setCopyStep(`Comparing page ${a.label ?? a.page_no} (${n} of ${pairs.length})…`);
         const d = await compareInk(docA, a, docB, b);
         for (const m of ms) {
@@ -654,6 +683,23 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
       setCopyStep(null);
       setNotice({ kind: "err", text: e instanceof Error ? e.message : String(e) });
     }
+  }
+
+  /** Turns the page a quarter turn clockwise: saved for everyone, its marks and calibration turn with it. */
+  async function rotate() {
+    if (!page || !editable || rotating) return;
+    await flush();
+    setDraft([]);
+    setSelected(null);
+    setRotating(true);
+    const r = await takeoffRotatePageAction(page.id);
+    setRotating(false);
+    if (!r.ok) return setNotice({ kind: "err", text: r.error });
+    setUndo([]);   // the marks moved with the page, so earlier steps no longer line up
+    setRedo([]);
+    await reload();
+    setRenderKey((k) => k + 1);
+    setNotice({ kind: "ok", text: `${r.data.message}. Marks and the scale turned with it.` });
   }
 
   /** Jumps to the next copied mark still to check, on whichever page it is. */
@@ -704,9 +750,10 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
         const docNew = docRef.current?.planId === plan.id ? docRef.current.doc : null;
         if (!docNew || stop) return;
         const older = comparePlan.revision < plan.revision;
-        // red = only on the older revision (taken out), blue = new on the newer one
-        const d = older ? await compareInk(docOld, comparePage, docNew, page) : await compareInk(docNew, page, docOld, comparePage);
+        // worked out in this page's frame; then red = only on the older revision (taken out), blue = new on the newer one
+        const d = await compareInk(docNew, page, docOld, comparePage);
         if (stop) return;
+        if (older) for (let i = 0; i < d.mask.length; i++) if (d.mask[i]) d.mask[i] = 3 - d.mask[i];
         let changed = 0;
         for (let i = 0; i < d.mask.length; i++) if (d.mask[i]) changed++;
         const [oldRev, newRev] = older ? [comparePlan.revision, plan.revision] : [plan.revision, comparePlan.revision];
@@ -758,7 +805,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
         {testSite && <span className="rounded bg-red-200 px-2 py-0.5 text-xs font-bold text-red-950">TEST SITE</span>}
         <div className="ml-3 flex items-center gap-1" role="toolbar" aria-label="Tools">
           <ToolBtn on={mode === "select"} onClick={() => setMode("select")} title="Select a mark to move its points or delete it (drag empty space to pan)">Select</ToolBtn>
-          <ToolBtn on={mode === "pan"} onClick={() => setMode("pan")} title="Pan (or hold Space, or drag with the middle button)">Pan</ToolBtn>
+          <ToolBtn on={mode === "pan"} onClick={() => setMode("pan")} title="Pan. You can also just press and drag the page in any mode (a click without moving still places a point), hold Space, or use the middle button">Pan</ToolBtn>
           {editable && (
             <ToolBtn on={mode === "measure"} onClick={() => setMode("measure")} disabled={!active}
               title={active ? `Measure ${active.name}` : "Pick an item first"}>
@@ -888,7 +935,8 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
 
         {/* compare: the other revision's matching page on the left */}
         {comparePlan && page && (
-          <ComparePane plan={comparePlan} page={comparePage} current={page} marks={live} items={items} view={view} setView={setView}
+          <ComparePane plan={comparePlan} page={comparePage} current={page} turn={comparePage ? alignTurn(page, comparePage).turn : 0}
+            marks={live} items={items} view={view} setView={setView}
             getDoc={() => openOther(comparePlan)} />
         )}
 
@@ -911,6 +959,9 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                   setNotice({ kind: "info", text: "Click both ends of a dimension written on the drawing." });
                 }}>Check a dimension</button>
               )}
+              <button type="button" className={`${btn} bg-mist`} onClick={() => void rotate()} disabled={rotating}
+                title="Turn this page a quarter turn clockwise (click again to keep turning). Marks and the scale turn with it."
+                data-testid="rotate-page">{rotating ? "Turning…" : "Rotate ↻"}</button>
             </div>
           )}
           {(mode === "calibrate" || mode === "check") && (
@@ -944,6 +995,7 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
           <div ref={viewer} className="absolute inset-0 overflow-hidden"
             style={{ cursor: panning.current ? "grabbing" : mode === "pan" ? "grab" : mode === "select" ? "default" : "crosshair", touchAction: "none" }}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setCursor(null)}
+            onPointerCancel={() => { press.current = null; panning.current = null; }}
             onWheel={onWheel}
             onDoubleClick={() => mode === "measure" && draft.length && finishDraft(draft)}
             onContextMenu={(e) => e.preventDefault()} data-testid="takeoff-viewer">
@@ -1229,7 +1281,8 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
             const ids = new Set(copy.from.pages.map((p) => p.id));
             const n = live.filter((m) => ids.has(m.page_id) && items.has(m.item_id)).length;
             const missing = copy.from.pages.filter((p) => !pairs.has(p.id) && live.some((m) => m.page_id === p.id && items.has(m.item_id)));
-            const resized = copy.from.pages.filter((p) => pairs.has(p.id) && !samePageSize(p, pairs.get(p.id)!));
+            const resized = copy.from.pages.filter((p) => pairs.has(p.id) && !samePageSize(p, alignTurn(p, pairs.get(p.id)!)));
+            const turned = copy.from.pages.filter((p) => pairs.has(p.id) && alignTurn(p, pairs.get(p.id)!).turn !== 0);
             return (
               <div className="space-y-3 text-sm" data-testid="copy-dialog">
                 <p>Rev {copy.from.revision} has <strong>{n} marks</strong>. They&apos;ll be copied onto the matching pages of Rev {copy.to.revision} (matched by
@@ -1244,6 +1297,11 @@ export function TakeoffEditor({ initial, jobPath, testSite, startPlan }: {
                 {resized.length > 0 && (
                   <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
                     {resized.map((p) => p.label ?? `page ${p.page_no}`).join(", ")} came at a different paper size: the marks are re-sized to fit and all flagged to check.
+                  </p>
+                )}
+                {turned.length > 0 && (
+                  <p className="rounded-lg bg-mist px-3 py-2">
+                    {turned.map((p) => p.label ?? `page ${p.page_no}`).join(", ")} on Rev {copy.to.revision} will be turned to match Rev {copy.from.revision}.
                   </p>
                 )}
                 {copyStep && <p className="text-xs text-slate" role="status" data-testid="copy-step">{copyStep}</p>}

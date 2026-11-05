@@ -54,6 +54,8 @@ export async function markedUpPdf(bytes: ArrayBuffer, plan: TakeoffPlan, t: Take
     if (!page) continue;
     const onPage = marks.filter((m) => m.page_id === pg.id && items.get(m.item_id) && !items.get(m.item_id)!.hidden);
     if (onPage.length === 0) continue;
+    // a page the office turned comes out turned the same way
+    if (pg.rotation) page.setRotation(degrees((((page.getRotation().angle + pg.rotation) % 360) + 360) % 360));
     const map = mapper(page);
     const rot = page.getRotation().angle;
     const k = Math.max(pg.width, pg.height) / 1190;   // marks sized for the sheet (A1 ≈ 2× an A3)

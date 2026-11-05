@@ -43,8 +43,12 @@ export type ItemTotals = Pick<TakeoffItem, "id" | "marks" | "unscaled" | "measur
 export const saveMarks = (s: OfficeSession, jobId: string, ops: MarkOp[]) =>
   rpc<{ saved: number; items: ItemTotals[] }>("office_takeoff_save_marks", { p_staff_id: who(s), p_job_id: jobId, p_ops: ops });
 
+/** Turns a page a quarter turn clockwise (its marks and calibration turn with it). */
+export const rotatePage = (s: OfficeSession, pageId: string) =>
+  rpc<{ rotation: number; width: number; height: number; message: string }>("office_takeoff_rotate_page", { p_staff_id: who(s), p_page_id: pageId });
+
 /** Copies a takeoff onto a newer revision (4c). "moved": marks on the older revision whose part of the drawing changed. */
-export type CopyResult = { copied: number; to_check: number; left_behind: number; scales: number; pages: number; message: string };
+export type CopyResult = { copied: number; to_check: number; left_behind: number; scales: number; pages: number; turned?: number; message: string };
 export const copyRevision = (s: OfficeSession, fromPlan: string, toPlan: string, moved: string[]) =>
   rpc<CopyResult>("office_takeoff_copy_revision", { p_staff_id: who(s), p_from_plan: fromPlan, p_to_plan: toPlan, p_moved: moved });
 

@@ -10,6 +10,7 @@ import {
   addPlan,
   copyRevision,
   loadTakeoff,
+  rotatePage,
   removePlan,
   saveItem,
   saveMarks,
@@ -106,6 +107,16 @@ export async function takeoffMarksAction(jobId: string, ops: MarkOp[]): Promise<
     need(jobId);
     if (!Array.isArray(ops) || ops.length === 0 || ops.length > 1000) throw new Error("Nothing to save.");
     return (await saveMarks(await assertOffice("jobs"), jobId, ops)).items;
+  });
+}
+
+/** Turns a plan page a quarter turn clockwise. */
+export async function takeoffRotatePageAction(pageId: string): Promise<Result<{ rotation: number; message: string }>> {
+  return run(async () => {
+    need(pageId);
+    const r = await rotatePage(await assertOffice("jobs"), pageId);
+    revalidatePath("/dashboard/office/job", "layout");
+    return { rotation: r.rotation, message: r.message };
   });
 }
 

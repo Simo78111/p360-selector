@@ -78,10 +78,11 @@ export async function describePages(doc: PDFDocumentProxy, onPage?: (n: number) 
  * Draws a page into a canvas with its long side `longPx` pixels (sharp enough to zoom in on an A1 sheet), returning
  * a cancel function. The canvas is shown at the page's size in PDF units and scaled by the viewer.
  */
-export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx: number) {
-  const base = page.getViewport({ scale: 1 });
+export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx: number, turn = 0) {
+  const rotation = (((page.rotate ?? 0) + turn) % 360 + 360) % 360;   // the PDF's own turn plus the office's
+  const base = page.getViewport({ scale: 1, rotation });
   const scale = longPx / Math.max(base.width, base.height);
-  const vp = page.getViewport({ scale });
+  const vp = page.getViewport({ scale, rotation });
   canvas.width = Math.floor(vp.width);
   canvas.height = Math.floor(vp.height);
   const ctx = canvas.getContext("2d", { alpha: false });
@@ -96,13 +97,13 @@ export function renderPage(page: PDFPageProxy, canvas: HTMLCanvasElement, longPx
  * A page drawn small and turned into ink (1 = something drawn), for comparing two revisions (4c). The long side is
  * `longPx` pixels; pxPerPt converts PDF units to these pixels.
  */
-export async function pageInk(doc: PDFDocumentProxy, pageNo: number, longPx = 1800) {
+export async function pageInk(doc: PDFDocumentProxy, pageNo: number, longPx = 1800, turn = 0) {
   const { inkOf } = await import("@/lib/takeoff-shared");
   const page = await doc.getPage(pageNo);
   const base = page.getViewport({ scale: 1 });
   const pxPerPt = longPx / Math.max(base.width, base.height);
   const canvas = document.createElement("canvas");
-  const r = renderPage(page, canvas, longPx);
+  const r = renderPage(page, canvas, longPx, turn);
   await r.done;
   const ctx = canvas.getContext("2d")!;
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);

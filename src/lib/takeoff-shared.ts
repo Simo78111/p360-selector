@@ -11,6 +11,8 @@ export type TakeoffPage = {
   mm_per_unit: number | null; method: "calibrated" | "ratio" | null; ratio: number | null;
   sheet: "A0" | "A1" | "A2" | "A3" | "A4" | null; calib: { a: Pt; b: Pt; mm: number } | null;
   checked: boolean; set_by: string | null; set_at: string | null;
+  /** Quarter turns clockwise the office added (0, 90, 180, 270); width and height are as turned. */
+  rotation?: number;
 };
 export type TakeoffPlan = {
   id: string; name: string; revision: string; file_id: string; page_count: number; file_name: string; bytes: number | null;
@@ -157,6 +159,18 @@ export function matchPages(from: TakeoffPage[], to: TakeoffPage[]) {
 
 export const samePageSize = (a: { width: number; height: number }, b: { width: number; height: number }) =>
   Math.abs(a.width - b.width) <= Math.max(a.width, 1) * 0.005 && Math.abs(a.height - b.height) <= Math.max(a.height, 1) * 0.005;
+
+/**
+ * Comparing Rev A's page with Rev B's when one has been turned: how many extra degrees Rev B needs to line up (the same
+ * rule as the database's copy: a half turn always, a quarter turn when the shapes then match).
+ */
+export function alignTurn(a: TakeoffPage, b: TakeoffPage) {
+  const turn = (((a.rotation ?? 0) - (b.rotation ?? 0)) % 360 + 360) % 360;
+  if (turn === 0) return { turn: 0, width: b.width, height: b.height };
+  if (turn === 180) return { turn, width: b.width, height: b.height };
+  const fits = Math.abs(b.height / b.width - a.width / a.height) <= (a.width / a.height) * 0.02;
+  return fits ? { turn, width: b.height, height: b.width } : { turn: 0, width: b.width, height: b.height };
+}
 
 /** Ink (dark pixels) from RGBA image data: 1 where something is drawn. */
 export function inkOf(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number) {

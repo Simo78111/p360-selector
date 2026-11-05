@@ -6,9 +6,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { markedUpPdf } from "../src/components/office/takeoff/export";
 import {
-  countingPages, diffInk, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
+  alignTurn, countingPages, diffInk, inkOf, itemTotals, markChanged, markQty, matchPages, ratioScale, readPageText, samePageSize, summaryCsv,
   type Takeoff, type TakeoffMark, type TakeoffPage, type TakeoffPlan,
 } from "../src/lib/takeoff-shared";
+import { turnPoints } from "../src/components/office/takeoff/turn";
 
 const page = (id: string, mm: number | null, w = 2384, h = 1684): TakeoffPage => ({
   id, page_no: 1, label: null, width: w, height: h, mm_per_unit: mm, method: mm ? "calibrated" : null, ratio: null, sheet: null,
@@ -80,6 +81,17 @@ console.log("✓ drawing text: sheet H-110, scales 1:25 · 1:40 · 1:50, for A1"
   assert.equal(markChanged([[76, 76]], false, diff, W, H, 1), true);
   assert.equal(markChanged([[50, 60], [90, 60], [90, 95]], false, diff, W, H, 1), true, "the run passes within 10 px of the box");
   assert.equal(markChanged([[10, 40], [40, 40]], false, diff, W, H, 1), false);
+  // turned pages (6 Nov): a quarter turn moves (x, y) to (H - y, x); four turns = back; Rev B lines up with a turned Rev A
+  const pts: [number, number][] = [[500, 500], [100, 200]];
+  assert.deepEqual(turnPoints(pts, 90, 2384, 1684), [[1184, 500], [1484, 100]]);
+  assert.deepEqual(turnPoints(pts, 360, 2384, 1684), pts);
+  assert.deepEqual(turnPoints(turnPoints(pts, 90, 2384, 1684), 270, 1684, 2384), pts);
+  const turnedA = { ...pg("ta", 1, "H-110", 1684, 2384), rotation: 90 };
+  const rawB = pg("tb", 1, "H-110", 2384, 1684);
+  const al = alignTurn(turnedA, rawB);
+  assert.equal(al.turn, 90);
+  assert.ok(samePageSize(turnedA, al), "lined up after turning");
+  assert.equal(alignTurn(turnedA, pg("tc", 1, "H-110", 1684, 2384)).turn, 0, "already the same shape: not turned");
   console.log("✓ revisions: pages matched by sheet number, replaced revisions don't count, changes found and marks near them flagged");
 }
 
@@ -121,6 +133,13 @@ const sample = process.argv[2] ?? "../ai_native_plumbing_maintenance/docs/takeof
   const csv = summaryCsv(tk, false);
   assert.match(csv, /Fixtures,Toilet – 1st fix,count/);
   assert.doesNotMatch(csv, /Sell/, "no prices without see-costs");
+  // a page the office turned comes out turned, with its marks still on the page
+  const turnedPlan = { ...plan, pages: plan.pages.map((x) => (x.id === "pg4" ? { ...x, rotation: 90, width: pg.height, height: pg.width } : x)) };
+  const turnedMarks = ms.map((m) => ({ ...m, points: turnPoints(m.points, 90, pg.width, pg.height) }));
+  const out2 = await PDFDocument.load(await markedUpPdf(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) as ArrayBuffer,
+    turnedPlan, tk, turnedMarks));
+  assert.equal(out2.getPage(3).getRotation().angle, 90, "turned page exported turned");
+  assert.equal(out2.getPage(2).getRotation().angle, 0);
   console.log(`✓ marked-up PDF: ${n} plan pages + summary (${(out.length / 1048576).toFixed(1)} MB); CSV without prices`);
 })().catch((e) => {
   console.error(e);
