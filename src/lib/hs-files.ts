@@ -19,11 +19,22 @@ const MIME: Record<HsFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
+/** "0800776360" → "0800 776 360", "+6495550931" → "09 555 0931". */
+export const nzPhone = (p: string | null) => {
+  if (!p) return p;
+  const d = p.replace(/^\+64\s?/, "0").replace(/\D/g, "");
+  if (/^0[58]00\d{6}$/.test(d)) return `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7)}`;
+  if (/^0[3-79]\d{7}$/.test(d)) return `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5)}`;
+  if (/^02\d{7,9}$/.test(d)) return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+  return p;
+};
+
 export function toPrint(raw: HsPrintRaw): HsPrint {
   const c = raw.company;
   return {
     ...raw,
-    company: { ...c, name: `${c.legal_name.replace(/\bLtd\b/, "Limited")}${c.name && c.name !== c.legal_name ? ` (${c.name})` : ""}` },
+    company: { ...c, phone: nzPhone(c.phone),
+      name: `${c.legal_name.replace(/\bLtd\b/, "Limited")}${c.name && c.name !== c.legal_name ? ` (${c.name})` : ""}` },
   };
 }
 
