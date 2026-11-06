@@ -55,6 +55,7 @@ export function HealthSafetyTab({ hs: initial }: { hs: HsJob }) {
   const [hs, setHs] = useState(initial);
   const [msg, setMsg] = useState<{ ok?: string; err?: string }>({});
   const [busy, start] = useTransition();
+  const [sure, setSure] = useState(false);
   useEffect(() => setHs(initial), [initial]);
   const d = hs.document;
   const working = !!d && (d.status === "queued" || d.status === "drafting") && !(d as HsDocument & { stuck?: boolean }).stuck;
@@ -98,10 +99,11 @@ export function HealthSafetyTab({ hs: initial }: { hs: HsJob }) {
         </div>
         {hs.can_edit && (!d || ["failed", "sent", "approved", "to_approve"].includes(d.status) || (d as { stuck?: boolean }).stuck) && (
           <button disabled={busy} onClick={() => {
-            if (d && !confirm(d.status === "sent" ? "Start a new version (v" + (d.version_no + 1) + ")? The sent one is kept." : "Start again from the quote as a new version?")) return;
+            if (d && !sure) return setSure(true);
+            setSure(false);
             act(() => hsStartAction(hs.job_id), "Drafting started");
           }} className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" data-testid="hs-start">
-            {d ? "New version" : "Draft SWMS and JSA"}
+            {!d ? "Draft SWMS and JSA" : sure ? `Yes – start v${d.version_no + 1} from the quote` : "New version"}
           </button>
         )}
       </div>
@@ -252,6 +254,7 @@ function Draft({ doc, content: c, hs, busy, onHold, onApprove, onSent }: {
   onApprove: () => void; onSent: (note: string | null) => void;
 }) {
   const [view, setView] = useState<"swms" | "jsa">("swms");
+  const [sentNote, setSentNote] = useState("");
   const open = doc.hold_points.filter((h) => h.status === "open").length;
   const highest = useMemo(() => c.tasks.flatMap((t) => t.hazards.map((h) => h.initial)), [c]);
   return (
@@ -266,10 +269,14 @@ function Draft({ doc, content: c, hs, busy, onHold, onApprove, onSent }: {
           </button>
         ) : <span className="text-sm text-slate">Waiting for someone with &ldquo;Can approve H&amp;S documents&rdquo;.</span>)}
         {doc.status === "approved" && hs.can_edit && (
-          <button disabled={busy} onClick={() => onSent(prompt("Sent to whom / how? (optional)") || null)}
-            className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" data-testid="hs-sent">
-            Mark as sent to the principal contractor
-          </button>
+          <span className="flex flex-wrap items-center gap-2">
+            <input value={sentNote} onChange={(e) => setSentNote(e.target.value)} placeholder="Sent to whom / how (optional)"
+              className="rounded-lg border border-mist px-2 py-1 text-sm" />
+            <button disabled={busy} onClick={() => onSent(sentNote.trim() || null)}
+              className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" data-testid="hs-sent">
+              Mark as sent to the principal contractor
+            </button>
+          </span>
         )}
         {open > 0 && doc.status === "to_approve" && <span className="text-sm text-amber-800">{open} hold point{open === 1 ? "" : "s"} to answer or keep for site first.</span>}
         <span className="ml-auto text-xs text-slate">
