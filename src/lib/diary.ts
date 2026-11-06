@@ -5,7 +5,7 @@ import "server-only";
 import { engine } from "./engine";
 import type { OfficeSession } from "./auth";
 export * from "./diary-shared";
-import type { Diary, DiaryPhase, SavedBooking } from "./diary-shared";
+import type { Diary, DiaryPhase, JobSchedule, SavedBooking } from "./diary-shared";
 
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const db = engine();
@@ -40,3 +40,7 @@ export const sendSchedule = (s: OfficeSession, plumberId: string | null) =>
     p_staff_id: who(s),
     p_plumber_id: plumberId,
   });
+
+/** Schedule from the job: the company's people (those who've worked on the job first) and upcoming bookings. */
+export const loadJobSchedule = (s: OfficeSession, jobId: string) =>
+  rpc<JobSchedule>("office_job_schedule", { p_staff_id: who(s), p_job_id: jobId });

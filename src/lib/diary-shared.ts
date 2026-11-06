@@ -96,3 +96,13 @@ export const timeLabel = (min: number) => {
 export const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? "am" : "pm"}`;
 export const lengthLabel = (min: number) => `${Number((min / 60).toFixed(2))} hrs`;
 export const snap = (min: number) => Math.round(min / SLOT_MIN) * SLOT_MIN;
+
+/** Schedule from the job (6 Nov): who the phase card offers (office_job_schedule). */
+export type JobSchedulePerson = {
+  plumber_id: string; staff_id: string; name: string; trade: string | null; apprentice: boolean;
+  worked: boolean; last: string | null; days: number; next: string | null;
+};
+export type JobSchedule = {
+  can_book: boolean; people: JobSchedulePerson[];
+  upcoming: { id: string; phase_id: string; phase_ref: string; name: string; starts_at: string; ends_at: string }[];
+};

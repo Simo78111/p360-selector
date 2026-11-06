@@ -28,6 +28,8 @@ import { newQuoteAction } from "@/app/dashboard/quote-actions";
 import { costRange, filterCosts, KIND_LABEL, loadJobCosts, STATUS_LABEL as COST_STATUS, type JobCosts } from "@/lib/job-costs";
 import { CostRangeForm } from "@/components/office/CostSummary";
 import { PhaseCostBoxes } from "@/components/office/PhaseCostBoxes";
+import { ScheduleFromJob } from "@/components/office/ScheduleFromJob";
+import { loadJobSchedule, type JobSchedule } from "@/lib/diary";
 import { loadJobMoney, loadJobQuotes, STATUS_LABEL, type JobMoney, type JobQuotes, type Money as MoneyT } from "@/lib/quotes";
 import { loadJobInvoices, type JobInvoices } from "@/lib/invoices";
 import { InvoicesTab } from "@/components/office/invoices-ui";
@@ -73,9 +75,10 @@ export default async function JobPageView({ params, searchParams }: Props) {
   let invoices: JobInvoices | null = null;
   let takeoff: Takeoff | null = null;
   let hs: HsJob | null = null;
+  let schedule: JobSchedule | null = null;
   const costScope: "job" | "project" = scopeParam === "job" ? "job" : "project";
   try {
-    [jobMoney, quotes, costs, invoices, takeoff, hs] = await Promise.all([
+    [jobMoney, quotes, costs, invoices, takeoff, hs, schedule] = await Promise.all([
       loadJobMoney(session, job.job_id),
       tab === "quotes" && job.kind === "managed" ? loadJobQuotes(session, job.job_id) : Promise.resolve(null),
       tab === "costs" ? loadJobCosts(session, job.job_id, costScope).then((c) => filterCosts(c, costDates))
@@ -83,6 +86,9 @@ export default async function JobPageView({ params, searchParams }: Props) {
       tab === "invoices" && job.kind === "managed" && job.can.edit ? loadJobInvoices(session, job.job_id) : Promise.resolve(null),
       tab === "takeoff" && job.kind === "managed" ? loadTakeoff(session, job.job_id) : Promise.resolve(null),
       tab === "hs" && job.kind === "managed" ? loadHs(session, job.job_id) : Promise.resolve(null),
+      // Schedule from the job (6 Nov): the phase cards' Schedule button
+      tab === "summary" && job.kind === "managed" && job.state === "active"
+        ? loadJobSchedule(session, job.job_id).catch(() => null) : Promise.resolve(null),
     ]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
@@ -320,7 +326,7 @@ export default async function JobPageView({ params, searchParams }: Props) {
                 {job.phases.length === 0 && <p className="rounded-2xl bg-white p-5 text-sm text-slate">This booking was cancelled.</p>}
                 {job.phases.map((p) => (
                   <PhaseCard key={p.ref} job={job} phase={p} path={path} focus={p.id !== null && p.id === job.focus_phase_id} canMove={managed && canEdit && active}
-                    costs={costs ? phaseCosts(costs, p.ref, job.phases.length === 1) : null} />
+                    costs={costs ? phaseCosts(costs, p.ref, job.phases.length === 1) : null} schedule={schedule} />
                 ))}
               </section>
 
@@ -939,8 +945,8 @@ function phaseCosts(c: JobCosts, ref: string, onlyPhase: boolean): JobCosts {
   return { ...c, lines: c.lines.filter((l) => l.phase_ref === ref || (onlyPhase && !l.phase_ref)) };
 }
 
-function PhaseCard({ job, phase, path, focus, canMove, costs }: {
-  job: JobPage; phase: Phase; path: string; focus: boolean; canMove: boolean; costs: JobCosts | null;
+function PhaseCard({ job, phase, path, focus, canMove, costs, schedule }: {
+  job: JobPage; phase: Phase; path: string; focus: boolean; canMove: boolean; costs: JobCosts | null; schedule?: JobSchedule | null;
 }) {
   const i = STAGES.findIndex((s) => s.id === phase.stage);
   const next = STAGES[i + 1];
@@ -972,6 +978,11 @@ function PhaseCard({ job, phase, path, focus, canMove, costs }: {
             </select>
             <button className={quietBtn}>Go</button>
           </form>
+        </div>
+      )}
+      {managed && schedule && phase.id && !["invoiced", "to_be_approved", "to_invoice"].includes(phase.stage) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="schedule-phase">
+          <ScheduleFromJob phaseId={phase.id} phaseRef={phase.ref} schedule={schedule} back={path} />
         </div>
       )}
       {managed && !canMove && job.state !== "active" && <p className="mt-2 text-xs text-slate">The pipeline is paused while the job is {job.state.replace("_", " ")}.</p>}

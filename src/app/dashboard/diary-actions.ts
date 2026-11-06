@@ -4,7 +4,7 @@
 // of redirecting, because the board stays on screen and refreshes itself.
 import { revalidatePath } from "next/cache";
 import { assertOffice } from "@/lib/auth";
-import { loadDiaryPhases, removeBooking, saveBooking, sendSchedule, setDiaryColour, type DiaryPhase } from "@/lib/diary";
+import { loadDiaryPhases, nzInstant, removeBooking, saveBooking, sendSchedule, setDiaryColour, type DiaryPhase } from "@/lib/diary";
 
 const isId = (s: unknown): s is string => typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
 const isTime = (s: unknown): s is string => typeof s === "string" && !Number.isNaN(Date.parse(s));
@@ -101,4 +101,43 @@ export async function setColourAction(jobId: string, colour: string | null): Pro
 export async function searchPhasesAction(q: string, companyId: string | null): Promise<DiaryPhase[]> {
   const s = await assertOffice("jobs");
   return loadDiaryPhases(s, q.trim().slice(0, 100) || null, isId(companyId) ? companyId : null);
+}
+
+/** Schedule from the job's phase card (6 Nov): the chosen people on the chosen working days, start to finish each day.
+ *  Each booking goes through the same database function as the Calendar ("Can book the diary", clash warnings). */
+export async function scheduleFromJobAction(input: {
+  phase_id: string; plumber_ids: string[]; date: string; start_min: number; end_min: number; days: number;
+  skip_weekends: boolean; note: string | null; back: string;
+}): Promise<DiaryResult> {
+  try {
+    const s = await assertOffice("jobs");
+    if (!isId(input.phase_id)) throw new Error("Pick a phase.");
+    const people = (input.plumber_ids ?? []).filter(isId).slice(0, 20);
+    if (!people.length) throw new Error("Tick at least one person.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error("Pick a start date.");
+    const [a, b] = [Math.round(input.start_min / 15) * 15, Math.round(input.end_min / 15) * 15];
+    if (!(a >= 0 && b <= 24 * 60 && b > a)) throw new Error("The finish time has to be after the start.");
+    const n = Math.min(Math.max(Math.floor(input.days || 1), 1), 20);
+    const dates: string[] = [];
+    for (let d = new Date(`${input.date}T12:00:00Z`); dates.length < n; d.setUTCDate(d.getUTCDate() + 1)) {
+      if (input.skip_weekends && (d.getUTCDay() === 0 || d.getUTCDay() === 6)) continue;
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    const warnings: string[] = [];
+    let made = 0;
+    for (const day of dates) {
+      for (const p of people) {
+        const r = await saveBooking(s, null, { phase_id: input.phase_id, plumber_id: p, starts_at: nzInstant(day, a),
+          ends_at: nzInstant(day, b), ...(input.note?.trim() ? { note: input.note.trim().slice(0, 1000) } : {}) });
+        made++;
+        warnings.push(...(r.warnings ?? []));
+      }
+    }
+    done();
+    if (typeof input.back === "string" && input.back.startsWith("/dashboard/office/job/")) revalidatePath(input.back.split("?")[0]);
+    return { ok: true, message: `${made} booking${made === 1 ? "" : "s"} made — they're on the Calendar. Send the schedule from there when you're ready.`,
+             warnings: [...new Set(warnings)] };
+  } catch (e) {
+    return fail(e);
+  }
 }
