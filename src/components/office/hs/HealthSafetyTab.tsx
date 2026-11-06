@@ -360,7 +360,7 @@ function Swms({ c }: { c: HsContent }) {
             <tr key={h.category} className="border-t border-mist align-top">
               <td className="py-1 pr-3 font-medium">{h.category}</td>
               <td className={`py-1 pr-3 ${h.status === "hold" ? "font-bold text-amber-800" : h.status === "na" ? "text-slate" : ""}`}>{SUMMARY_LABEL[h.status]}</td>
-              <td className="py-1">{h.where || h.reason}</td>
+              <td className="py-1">{(h.where || h.reason || "").replace(/^N\/A\s*[–-]\s*not applicable to this scope[:.]?\s*/i, "")}</td>
             </tr>
           ))}
         </tbody></table>
