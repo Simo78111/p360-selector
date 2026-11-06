@@ -20,6 +20,8 @@ import { area, input, label, money, nzDate, primaryBtn, quietBtn } from "@/compo
 import { requireOffice } from "@/lib/auth";
 import { TakeoffTab } from "@/components/office/takeoff/TakeoffTab";
 import { loadTakeoff, type Takeoff } from "@/lib/takeoff";
+import { HealthSafetyTab } from "@/components/office/hs/HealthSafetyTab";
+import { loadHs, type HsJob } from "@/lib/hs";
 import { fmtBytes, loadJobPage, nzDateTime, STAGES, type JobPage, type Phase } from "@/lib/jobs";
 import { officeEnabled } from "@/lib/office";
 import { newQuoteAction } from "@/app/dashboard/quote-actions";
@@ -38,6 +40,7 @@ const TABS = [
   ["summary", "Job Summary"],
   ["quotes", "Quotes"],
   ["takeoff", "Takeoff"],
+  ["hs", "Health & Safety"],
   ["money", "Financial Summary"],
   ["costs", "Cost Report"],
   ["invoices", "Invoices"],
@@ -69,15 +72,17 @@ export default async function JobPageView({ params, searchParams }: Props) {
   let costs: JobCosts | null = null;
   let invoices: JobInvoices | null = null;
   let takeoff: Takeoff | null = null;
+  let hs: HsJob | null = null;
   const costScope: "job" | "project" = scopeParam === "job" ? "job" : "project";
   try {
-    [jobMoney, quotes, costs, invoices, takeoff] = await Promise.all([
+    [jobMoney, quotes, costs, invoices, takeoff, hs] = await Promise.all([
       loadJobMoney(session, job.job_id),
       tab === "quotes" && job.kind === "managed" ? loadJobQuotes(session, job.job_id) : Promise.resolve(null),
       tab === "costs" ? loadJobCosts(session, job.job_id, costScope).then((c) => filterCosts(c, costDates))
         : tab === "summary" && job.kind === "managed" ? loadJobCosts(session, job.job_id, "job") : Promise.resolve(null),
       tab === "invoices" && job.kind === "managed" && job.can.edit ? loadJobInvoices(session, job.job_id) : Promise.resolve(null),
       tab === "takeoff" && job.kind === "managed" ? loadTakeoff(session, job.job_id) : Promise.resolve(null),
+      tab === "hs" && job.kind === "managed" ? loadHs(session, job.job_id) : Promise.resolve(null),
     ]);
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
@@ -331,6 +336,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
             </>
           )}
           {tab === "takeoff" && takeoff && <TakeoffTab takeoff={takeoff} base={base} />}
+          {tab === "hs" && (hs ? <HealthSafetyTab hs={hs} />
+            : <p className="rounded-2xl bg-white p-4 text-sm text-slate">Health and safety documents are for managed jobs.</p>)}
           {tab === "quotes" && <QuotesTab job={job} quotes={quotes} money={jobMoney} realPhases={realPhases} base={base} />}
           {tab === "money" && jobMoney && <Money job={job} money={jobMoney} scope={scope} base={base} />}
           {tab === "costs" && costs && <CostReport job={job} costs={costs} money={jobMoney} scope={costScope} base={base} dates={costDates} />}
@@ -775,7 +782,7 @@ function JobMenu({ job, base, tab, money: m, canEdit }: { job: JobPage; base: st
       <nav className="rounded-2xl bg-white p-2" aria-label="Job">
         <p className="px-3 pt-1 pb-2 text-xs font-bold tracking-wide text-slate">JOB OVERVIEW</p>
         <ul className="space-y-0.5 text-sm">
-          {TABS.filter(([k]) => (managed || (k !== "quotes" && k !== "invoices" && k !== "takeoff")) && (k !== "invoices" || canEdit)).map(([k, v]) => (
+          {TABS.filter(([k]) => (managed || (k !== "quotes" && k !== "invoices" && k !== "takeoff" && k !== "hs")) && (k !== "invoices" || canEdit)).map(([k, v]) => (
             <li key={k}>
               <Link href={`${base}?tab=${k}`} aria-current={tab === k ? "page" : undefined}
                 className={`flex items-center justify-between rounded-xl px-3 py-2 ${tab === k ? "bg-ink font-semibold text-white" : "hover:bg-mist"}`}>
