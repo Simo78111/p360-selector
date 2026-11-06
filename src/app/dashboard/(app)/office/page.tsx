@@ -287,7 +287,7 @@ function ActionCards({ actions: a, error, hs }: { actions: TodayActions | null; 
   );
 }
 
-// Phase 5b: SWMS to approve, jobs starting within 3 days with no approved SWMS (red), workers still to sign.
+// Phase 5b/5c: SWMS to approve, jobs starting within 3 days with no approved SWMS (red), workers still to sign.
 function hsCards(hs: HsToday, plural: (n: number, one: string, many: string) => string): Card[] {
   const REG = "/dashboard/office/health-safety?show=action";
   const when = (iso: string) => new Date(iso).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", timeZone: "Pacific/Auckland" });
@@ -301,6 +301,19 @@ function hsCards(hs: HsToday, plural: (n: number, one: string, many: string) => 
     { key: "hs_sign", count: hs.to_sign.length, tone: "amber",
       title: `${plural(hs.to_sign.length, "worker", "workers")} still to sign the SWMS`,
       detail: hs.to_sign.map((x) => `${x.name.split(" ")[0]} (${x.job_ref}, ${when(x.starts)})`).join(" · "), href: REG },
+    // 5c: scope changes to check, ticket gaps on jobs starting soon, tickets running out in the next 30 days
+    { key: "hs_scope", count: hs.scope_changed?.length ?? 0, tone: "amber",
+      title: `${plural(hs.scope_changed?.length ?? 0, "job's scope", "jobs' scope")} changed — update the SWMS?`,
+      detail: (hs.scope_changed ?? []).map((x) => x.job_ref).join(" · "),
+      href: hs.scope_changed?.length === 1 ? `/dashboard/office/job/${encodeURIComponent(hs.scope_changed[0].job_ref)}?tab=hs` : REG },
+    { key: "hs_tickets", count: hs.ticket_gaps?.length ?? 0, tone: "amber",
+      title: `${plural(hs.ticket_gaps?.length ?? 0, "job starts", "jobs start")} within 3 days with a missing or expired ticket`,
+      detail: (hs.ticket_gaps ?? []).map((x) => `${x.job_ref} ${when(x.starts)} (${x.warnings})`).join(" · "),
+      href: hs.ticket_gaps?.length === 1 ? `/dashboard/office/job/${encodeURIComponent(hs.ticket_gaps[0].job_ref)}?tab=hs` : REG },
+    { key: "hs_expiring", count: hs.tickets_expiring?.length ?? 0, tone: (hs.tickets_expiring ?? []).some((x) => x.expired) ? "red" : "amber",
+      title: `${plural(hs.tickets_expiring?.length ?? 0, "licence or ticket", "licences and tickets")} expired or expiring in 30 days`,
+      detail: (hs.tickets_expiring ?? []).map((x) => `${x.name.split(" ")[0]}: ${x.label} ${x.expired ? "expired" : "expires"} ${new Date(x.expires_on).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}`).join(" · "),
+      href: "/dashboard/office/staff" },
   ];
 }
 

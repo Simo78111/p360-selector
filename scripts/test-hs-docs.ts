@@ -41,6 +41,26 @@ async function main() {
   assert.equal(swmsLayout(draft).draft, true);
   assert.ok(!JSON.stringify(swmsLayout(draft).blocks).includes("Approved in the job system"));
 
+  // 5c: the crew's tickets on the SWMS training table, with what's missing or expired flagged
+  const withTickets: HsPrint = { ...sample, tickets: {
+    needed: [{ kind: "ewp", label: "EWP / scissor lift", scope: "one", tasks: [3] }, { kind: "airside", label: "Airside / ASIC", scope: "each", tasks: [1] }],
+    crew: [
+      { staff_id: "a", name: "James Hall", next_start: null, problems: [],
+        tickets: [{ kind: "airside", label: "Airside / ASIC", number: "A123", expires_on: "2030-01-01", state: "ok", card: true }] },
+      { staff_id: "b", name: "Alex Burnett", next_start: null, tickets: [],
+        problems: [{ kind: "airside", label: "Airside / ASIC", state: "missing", tasks: [1] }] },
+    ],
+    crew_problems: [{ kind: "ewp", label: "EWP / scissor lift", state: "missing", tasks: [3] }],
+    warnings: 2,
+  } };
+  const tl = JSON.stringify(swmsLayout(withTickets).blocks);
+  for (const want of ["Crew booked", "Airside / ASIC A123", "All current", "Airside / ASIC missing (task 1)", "At least one person needs EWP / scissor lift (task 3)", "Nobody booked holds it"]) {
+    assert.ok(tl.includes(want), `training table has "${want}"`);
+  }
+  assert.ok(!JSON.stringify(swmsLayout(sample).blocks).includes("Crew booked"), "no tickets table without ticket data");
+  await layoutPdf(swmsLayout(withTickets));
+  await layoutDocx(swmsLayout(withTickets));
+
   // odd characters and a long unbroken word don't break the PDF
   const odd = structuredClone(sample);
   odd.document.content.tasks[0].hazards[0].hazard = "≤4 m → ☐ ✓ Ōtāhuhu " + "x".repeat(400);

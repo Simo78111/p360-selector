@@ -43,25 +43,17 @@ export const TRADES: Record<string, string> = {
   office: "Office",
   other: "Other",
 };
-export const LICENCE_KINDS: Record<string, string> = {
-  plumber: "Plumber (PGDB)",
-  gasfitter: "Gas fitter (PGDB)",
-  drainlayer: "Drainlayer (PGDB)",
-  certifying_plumber: "Certifying plumber",
-  certifying_gasfitter: "Certifying gas fitter",
-  certifying_drainlayer: "Certifying drainlayer",
-  site_safe: "Site Safe",
-  drivers: "Driver licence",
-  first_aid: "First aid",
-  other: "Other",
-};
-export type Licence = { id: string; kind: string; number: string | null; expires_on: string | null; notes: string | null; expired: boolean; expiring: boolean };
+export { LICENCE_KINDS } from "./jm-kinds";
+export type Licence = { id: string; kind: string; number: string | null; expires_on: string | null; notes: string | null; expired: boolean; expiring: boolean;
+  /** Phase 5c: a photo of the card is on file */ card?: boolean; card_name?: string | null };
 export type Staff = {
   id: string; full_name: string; phone: string | null; email: string | null; trade: string | null;
   cost_rate: number | null; charge_out_rate: number | null; smartly_employee_code: string | null; smartly_pay_rate: number | null;
   is_apprentice: boolean; works_on_jobs: boolean; active: boolean; notes: string | null; login: boolean; plumber_id: string | null;
   roles: Record<string, Role>; licences: Licence[]; licence_warning: boolean;
 };
+/** Phase 5c: where a licence's card photo is stored (null = none). */
+export const licenceCard = (licenceId: string) => rpc<{ path: string; name: string | null } | null>("office_licence_card", { p_licence_id: licenceId });
 export const loadStaff = () => rpc<Staff[]>("office_staff", {});
 export const saveStaff = (id: string | null, changes: Record<string, unknown>) =>
   rpc<{ staff_id: string; created: boolean; plumber_id: string | null }>("office_save_staff", { p_staff_id: id, p_changes: changes });

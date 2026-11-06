@@ -4,6 +4,7 @@ import { saveStaffPayAction } from "@/app/dashboard/timesheet-actions";
 import { loadStaffPay, type StaffPay } from "@/lib/timesheets";
 import { loadStaffPermissions, PERM_LABEL, type Perm, type StaffPerms } from "@/lib/quotes";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
+import { CardPhotoUpload } from "@/components/office/CardPhotoUpload";
 import { area, input, label, money, nzDate, primaryBtn, quietBtn } from "@/components/office/jm";
 import { LICENCE_KINDS, loadCompanies, loadStaff, ROLE_LABEL, ROLES, TRADES, type Company, type Staff } from "@/lib/jm";
 import { officeEnabled } from "@/lib/office";
@@ -37,17 +38,18 @@ export default async function StaffPage({ searchParams }: Props) {
       <div>
         <h1 className="text-2xl font-bold">Staff</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate">
-          Everyone in both companies: their role in each, licences and expiry dates, rates, and their Smartly employee code
-          and pay rate for the timesheet export. People who work on jobs also appear in the diary and can sign in to the
+          Everyone in both companies: their role in each, licences and tickets with expiry dates and a photo of the card,
+          rates, and their Smartly employee code and pay rate for the timesheet export. The SWMS checks the people booked on a
+          job against the tickets its tasks need, and Today lists tickets running out in the next 30 days. People who work on jobs also appear in the diary and can sign in to the
           plumber app with the same login.
         </p>
       </div>
       <Flash ok={ok} err={err} />
-      {!owner && <p className="text-sm text-slate">View only: an owner/admin adds and changes staff, roles and rates.</p>}
+      {!owner && <p className="text-sm text-slate">An owner/admin adds and changes staff, roles and rates; you can keep licences and tickets up to date.</p>}
 
       {warnings.length > 0 && (
         <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
-          Licences expired or expiring in the next 60 days: {warnings.map((s) => s.full_name).join(", ")}.
+          Licences or tickets expired or expiring in the next 60 days: {warnings.map((s) => s.full_name).join(", ")}.
         </p>
       )}
 
@@ -124,6 +126,9 @@ export default async function StaffPage({ searchParams }: Props) {
                           {LICENCE_KINDS[l.kind] ?? l.kind}
                           {l.number && ` ${l.number}`}
                           {l.expires_on && ` · ${l.expired ? "expired" : "expires"} ${nzDate(l.expires_on)}`}
+                          {l.card && (
+                            <> · <a className="underline" href={`/api/office/staff-card?id=${l.id}`} target="_blank" rel="noreferrer">card</a></>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -143,20 +148,12 @@ export default async function StaffPage({ searchParams }: Props) {
                   <StaffForm companies={companies} staff={s} />
                   {pay[s.id] && <PayForm s={s} p={pay[s.id]} />}
                   {perms[s.id]?.office && <PermForm s={s} p={perms[s.id]} />}
-                  <div>
-                    <h3 className="text-sm font-bold">Licences</h3>
-                    <ul className="mt-2 space-y-2">
-                      {s.licences.map((l) => (
-                        <li key={l.id}>
-                          <LicenceForm staffId={s.id} licence={l} />
-                        </li>
-                      ))}
-                      <li>
-                        <LicenceForm staffId={s.id} />
-                      </li>
-                    </ul>
-                  </div>
+                  <Licences s={s} />
                 </div>
+              </details>}
+              {!owner && <details className="mt-2">
+                <summary className="cursor-pointer text-sm font-semibold text-aqua-deep">Licences and tickets</summary>
+                <div className="mt-3 rounded-2xl bg-mist/40 p-4"><Licences s={s} /></div>
               </details>}
             </li>
           ))}
@@ -247,6 +244,28 @@ function StaffForm({ companies, staff }: { companies: Company[]; staff?: Staff }
   );
 }
 
+function Licences({ s }: { s: Staff }) {
+  return (
+    <div data-testid="licences">
+      <h3 className="text-sm font-bold">Licences and tickets</h3>
+      <p className="mt-0.5 text-xs text-slate">
+        PGDB licences, Site Safe, first aid, EWP, confined space, airside and the rest. Add the expiry date and a photo of the
+        card; a certifying licence counts as the trade licence.
+      </p>
+      <ul className="mt-2 space-y-2">
+        {s.licences.map((l) => (
+          <li key={l.id}>
+            <LicenceForm staffId={s.id} licence={l} />
+          </li>
+        ))}
+        <li>
+          <LicenceForm staffId={s.id} />
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 function LicenceForm({ staffId, licence }: { staffId: string; licence?: Staff["licences"][number] }) {
   const l = licence;
   return (
@@ -254,20 +273,36 @@ function LicenceForm({ staffId, licence }: { staffId: string; licence?: Staff["l
       <form action={saveLicenceAction} className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="staffId" value={staffId} />
         {l && <input type="hidden" name="licenceId" value={l.id} />}
-        <select name="kind" aria-label="Licence type" defaultValue={l?.kind ?? "plumber"} className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-sm">
+        <select name="kind" aria-label="Licence or ticket" defaultValue={l?.kind ?? "plumber"} className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-sm">
           {Object.entries(LICENCE_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <input name="number" aria-label="Licence number" placeholder="Number" defaultValue={l?.number ?? ""} className="w-32 rounded-full border border-black/10 bg-white px-3 py-1.5 text-sm" />
         <input name="expires_on" aria-label="Expiry date" type="date" defaultValue={l?.expires_on ?? ""} className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-sm" />
-        <button className={quietBtn}>{l ? "Save" : "+ Add licence"}</button>
+        <button className={quietBtn}>{l ? "Save" : "+ Add licence or ticket"}</button>
       </form>
       {l && (
-        <form action={saveLicenceAction}>
-          <input type="hidden" name="staffId" value={staffId} />
-          <input type="hidden" name="licenceId" value={l.id} />
-          <input type="hidden" name="remove" value="true" />
-          <button className="text-xs text-red-700 underline">Remove</button>
-        </form>
+        <>
+          {l.card && (
+            <a className="text-xs font-semibold text-aqua-deep underline" href={`/api/office/staff-card?id=${l.id}`} target="_blank" rel="noreferrer">
+              View card
+            </a>
+          )}
+          <CardPhotoUpload staffId={staffId} licenceId={l.id} has={!!l.card} />
+          {l.card && (
+            <form action={saveLicenceAction}>
+              <input type="hidden" name="staffId" value={staffId} />
+              <input type="hidden" name="licenceId" value={l.id} />
+              <input type="hidden" name="remove_card" value="true" />
+              <button className="text-xs text-slate underline">Remove photo</button>
+            </form>
+          )}
+          <form action={saveLicenceAction}>
+            <input type="hidden" name="staffId" value={staffId} />
+            <input type="hidden" name="licenceId" value={l.id} />
+            <input type="hidden" name="remove" value="true" />
+            <button className="text-xs text-red-700 underline">Remove</button>
+          </form>
+        </>
       )}
     </div>
   );

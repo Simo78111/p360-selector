@@ -5,6 +5,9 @@
 // the plumber app, older versions, and editing a single hazard or JSA row on screen.
 // An AI draft is only ever a draft: it can't be marked sent until someone with "Can approve H&S documents" approves it.
 // While the AI is working the tab checks back every 10 seconds.
+// 5c: "Scope changed — update the SWMS?" when a quote or variation is accepted (update → the next version, or no change,
+// both in the amendment log); the booked crew's tickets against what each task needs (warnings, never a block); and
+// saving a task from an approved pack to the hazard and controls library.
 import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -13,6 +16,9 @@ import {
   hsFileAction,
   hsSaveAction,
   hsHoldPointAction,
+  hsLibrarySaveAction,
+  hsScopeDismissAction,
+  hsUpdateScopeAction,
   hsMarkSentAction,
   hsRedraftAction,
   hsSiteAction,
@@ -33,6 +39,8 @@ import {
   type HsTask,
   type Hazard,
   type HoldPoint,
+  type HsTickets,
+  type ScopeChange,
   type Risk,
   type SiteDetails,
 } from "@/lib/hs-shared";
@@ -119,10 +127,15 @@ export function HealthSafetyTab({ hs: initial }: { hs: HsJob }) {
           {msg.err ?? msg.ok}
         </p>
       )}
-      {d?.scope_changed_at && (
-        <p className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-900">
-          Scope changed since this was drafted (a quote or variation was accepted). Check whether the SWMS and JSA need updating:
-          redraft with a note, or start a new version.
+      {d && (d.scope_changes?.length ?? 0) > 0 && (
+        <ScopeChanged doc={d} canEdit={hs.can_edit} busy={busy}
+          onUpdate={(note) => act(() => hsUpdateScopeAction(d.id, note), `Drafting v${d.version_no + 1} for the new scope – workers sign it again once approved`)}
+          onDismiss={(reason) => act(() => hsScopeDismissAction(d.id, reason), "Noted in the amendment log: no change needed")} />
+      )}
+      {d?.trigger === "scope_change" && d.update_of_version && d.status !== "approved" && d.status !== "sent" && (
+        <p className="rounded-xl bg-aqua-pale/60 px-4 py-2 text-sm" data-testid="hs-update-of">
+          v{d.version_no} updates v{d.update_of_version} for {changeNames(d.update_changes ?? [])}.
+          {d.change_summary && <> What changed: {d.change_summary}</>} Check it, approve it, and everyone booked signs it again.
         </p>
       )}
       {working && (
@@ -151,6 +164,7 @@ export function HealthSafetyTab({ hs: initial }: { hs: HsJob }) {
       )}
 
       {d?.content && ["to_approve", "approved", "sent"].includes(d.status) && <SignOn hs={hs} />}
+      {d?.content && hs.tickets && ["to_approve", "approved", "sent"].includes(d.status) && <Tickets t={hs.tickets} />}
 
       {d && hs.can_edit && ["to_approve", "approved", "failed", "tasks_to_confirm"].includes(d.status) && (
         <Redraft busy={busy} onRedraft={(note) => act(() => hsRedraftAction(d.id, note), "Redraft started")} />
@@ -344,7 +358,9 @@ function Draft({ doc, content: c, hs, busy, onHold, onApprove, onSent, onFile, o
         ))}
       </div>
       {view === "swms"
-        ? <Swms c={c} edit={editable ? { busy, approved: doc.status === "approved", onSave } : null} />
+        ? <Swms c={c} edit={editable ? { busy, approved: doc.status === "approved", onSave } : null}
+            lib={doc.approved_at && hs.can_approve ? { docId: doc.id, names: (hs.library ?? []).map((x) => x.name) } : null}
+            tickets={hs.tickets ?? null} />
         : <Jsa c={c} doc={doc} edit={editable ? { busy, approved: doc.status === "approved", onSave } : null} />}
     </div>
   );
@@ -396,7 +412,9 @@ function Box({ title, children }: { title: string; children: React.ReactNode }) 
 
 type Edit = { busy: boolean; approved: boolean; onSave: (content: HsContent, change: string | null, ok: string) => void } | null;
 
-function Swms({ c, edit }: { c: HsContent; edit: Edit }) {
+type Lib = { docId: string; names: string[] } | null;
+
+function Swms({ c, edit, lib, tickets }: { c: HsContent; edit: Edit; lib?: Lib; tickets?: HsTickets | null }) {
   const doc = c.document;
   return (
     <div className="space-y-4" data-testid="hs-swms">
@@ -427,6 +445,7 @@ function Swms({ c, edit }: { c: HsContent; edit: Edit }) {
             <div key={t.n}>
               <p className="font-semibold">{t.n}. {t.title}</p>
               {t.quote_wording && <p className="text-xs text-slate">Quote: {t.quote_wording}</p>}
+              <TaskTickets n={t.n} kinds={t.tickets} library={t.library} tickets={tickets ?? null} />
               <table className="mt-1 w-full text-sm"><thead><tr className="text-left text-xs text-slate">
                 <th className="w-1/4 py-1">Hazard</th><th className="w-10">Before</th><th>Controls</th><th className="w-10">After</th><th className="w-28">Who</th>
                 {edit && <th className="w-12" />}
@@ -436,6 +455,7 @@ function Swms({ c, edit }: { c: HsContent; edit: Edit }) {
                 ))}
               </tbody></table>
               {edit && <AddHazard c={c} task={t.n} edit={edit} />}
+              {lib && <SaveToLibrary lib={lib} task={t} />}
             </div>
           ))}
         </div>
@@ -549,6 +569,197 @@ function SignOn({ hs }: { hs: HsJob }) {
           ))}
         </ul>
       ) : <p className="mt-2 text-sm text-slate">Nobody is booked on this job in the diary yet.</p>}
+    </div>
+  );
+}
+
+// ── Phase 5c ──────────────────────────────────────────────────────────────────────────────────
+
+const changeNames = (xs: ScopeChange[]) =>
+  xs.map((x) => (x.kind === "quote" ? `${x.number}${x.job_ref ? ` (${x.job_ref})` : ""}` : `variation ${x.job_ref}`)).join(", ") || "a scope change";
+
+/** A quote or variation accepted since this version: update the SWMS (next version), or note that nothing changes. */
+function ScopeChanged({ doc, canEdit, busy, onUpdate, onDismiss }: {
+  doc: HsDocument; canEdit: boolean; busy: boolean; onUpdate: (note: string | null) => void; onDismiss: (reason: string | null) => void;
+}) {
+  const [note, setNote] = useState("");
+  const xs = doc.scope_changes ?? [];
+  return (
+    <div className="space-y-2 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" data-testid="hs-scope">
+      <p className="font-semibold">Scope changed — update the SWMS?</p>
+      <ul className="list-disc pl-5">
+        {xs.map((x, i) => (
+          <li key={i}>
+            {x.kind === "quote" ? <>Quote <b>{x.number}</b> accepted</> : <>Variation <b>{x.job_ref}</b> added</>}
+            {x.title && <> – {x.title}</>}
+            {x.kind === "quote" && x.job_ref && <span className="text-amber-800"> ({x.job_ref})</span>}
+            <span className="text-amber-800"> · {new Date(x.at).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</span>
+          </li>
+        ))}
+      </ul>
+      {canEdit ? (
+        <>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000}
+            placeholder="Anything the AI should know (optional) – or, for no change, why"
+            className="w-full rounded-xl border border-amber-300 bg-white px-3 py-2" aria-label="Note about the scope change" />
+          <div className="flex flex-wrap gap-2">
+            <button disabled={busy || doc.status === "drafting" || doc.status === "queued"} onClick={() => onUpdate(note.trim() || null)}
+              className="rounded-full bg-ink px-4 py-2 font-semibold text-white disabled:opacity-50" data-testid="hs-scope-update">
+              Update the SWMS (v{doc.version_no + 1})
+            </button>
+            <button disabled={busy} onClick={() => onDismiss(note.trim() || null)}
+              className="rounded-full border border-amber-400 bg-white px-4 py-2 font-semibold disabled:opacity-50" data-testid="hs-scope-dismiss">
+              No change needed
+            </button>
+          </div>
+          <p className="text-xs text-amber-800">
+            Updating keeps everything that still applies and adds what the change needs; it goes up a version, needs approving again,
+            and everyone booked signs the new version. Either way it&apos;s recorded in the amendment log.
+          </p>
+        </>
+      ) : <p className="text-xs">The office decides whether it needs updating.</p>}
+    </div>
+  );
+}
+
+const STATE_STYLE = { ok: "bg-emerald-50 text-emerald-900", expiring: "bg-amber-50 text-amber-900", expired: "bg-red-50 text-red-800", missing: "bg-red-50 text-red-800" };
+const dateNZ = (d: string) => new Date(d).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
+
+/** The booked crew's licences and tickets against what the tasks need. Warnings only (Simon, 6 Nov). */
+function Tickets({ t }: { t: HsTickets }) {
+  if (t.needed.length === 0) return null;
+  return (
+    <div className={`rounded-2xl p-4 ${t.warnings ? "border-2 border-amber-300 bg-white" : "bg-white"}`} data-testid="hs-tickets">
+      <h3 className="font-semibold">
+        Licences and tickets{" "}
+        {t.crew.length > 0 && <span className={`text-sm font-normal ${t.warnings ? "text-amber-800" : "text-emerald-800"}`}>
+          · {t.warnings ? `${t.warnings} to sort out` : "all current for the crew booked"}</span>}
+      </h3>
+      <p className="text-sm text-slate">
+        What the tasks need: {t.needed.map((n) => `${n.label}${n.scope === "each" ? " (everyone)" : ""}`).join(", ")}. A warning
+        doesn&apos;t stop anyone being booked or starting. Tickets are on Settings → Staff.
+      </p>
+      {t.crew.length === 0 ? <p className="mt-2 text-sm text-slate">Nobody is booked yet.</p> : (
+        <>
+          {t.crew_problems.length > 0 && (
+            <ul className="mt-2 space-y-1 text-sm" data-testid="hs-crew-problems">
+              {t.crew_problems.map((p) => (
+                <li key={p.kind} className="rounded-lg bg-red-50 px-3 py-1.5 text-red-800">
+                  ⚠ Nobody booked has a {p.state === "expired" ? "current " : ""}<b>{p.label}</b>
+                  {p.tasks.length > 0 && <> (task {p.tasks.join(", ")})</>}{p.state === "expired" && " – theirs has expired"}
+                </li>
+              ))}
+            </ul>
+          )}
+          <ul className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+            {t.crew.map((c) => (
+              <li key={c.staff_id} className="rounded-lg bg-mist/40 px-3 py-2">
+                <p className="font-medium">{c.name}</p>
+                {c.problems.map((p) => (
+                  <p key={p.kind} className="text-xs font-semibold text-red-800">
+                    ⚠ {p.label} {p.state === "expired" ? "expired" : "missing"}{p.tasks.length > 0 && ` (task ${p.tasks.join(", ")})`}
+                  </p>
+                ))}
+                <p className="mt-1 flex flex-wrap gap-1">
+                  {c.tickets.map((k, i) => (
+                    <span key={i} className={`rounded-full px-2 py-0.5 text-xs ${STATE_STYLE[k.state]}`}
+                      title={k.expires_on ? `${k.state === "expired" ? "Expired" : "Expires"} ${dateNZ(k.expires_on)}` : "No expiry"}>
+                      {k.label}{k.state !== "ok" && k.expires_on ? ` · ${k.state === "expired" ? "expired" : "expires"} ${dateNZ(k.expires_on)}` : ""}
+                    </span>
+                  ))}
+                  {c.tickets.length === 0 && <span className="text-xs text-slate">No licences or tickets on file</span>}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Under each task: the tickets it needs (red when the crew is short of one) and the library entry it started from. */
+function TaskTickets({ n, kinds, library, tickets }: { n: number; kinds?: string[]; library?: string; tickets: HsTickets | null }) {
+  const needs = (tickets?.needed ?? []).filter((x) => x.tasks.includes(n));
+  const short = new Set([...(tickets?.crew_problems ?? []).map((p) => p.kind),
+                         ...(tickets?.crew ?? []).flatMap((c) => c.problems.filter((p) => p.tasks.includes(n)).map((p) => p.kind))]);
+  if (!needs.length && !library && !kinds?.length) return null;
+  return (
+    <p className="mt-0.5 flex flex-wrap gap-1 text-xs" data-testid="hs-task-tickets">
+      {needs.map((x) => (
+        <span key={x.kind} className={`rounded-full px-2 py-0.5 ${short.has(x.kind) && tickets?.crew.length ? "bg-red-50 font-semibold text-red-800" : "bg-mist text-slate"}`}>
+          {short.has(x.kind) && tickets?.crew.length ? "⚠ " : ""}{x.label}
+        </span>
+      ))}
+      {library && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-900">From the library: {library}</span>}
+    </p>
+  );
+}
+
+/** Save this task (all rows or chosen ones) from an approved pack to the hazard and controls library. */
+function SaveToLibrary({ lib, task }: { lib: NonNullable<Lib>; task: HsContent["tasks"][number] }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(task.library ?? task.title.slice(0, 200));
+  const [when, setWhen] = useState("");
+  const [rows, setRows] = useState<number[]>(task.hazards.map((_, i) => i + 1));
+  const [msg, setMsg] = useState<{ ok?: string; err?: string }>({});
+  const [busy, start] = useTransition();
+  const exists = lib.names.some((x) => x.toLowerCase() === name.trim().toLowerCase());
+  const save = (mode: "new" | "replace" | "add") => start(async () => {
+    const r = await hsLibrarySaveAction(lib.docId, task.n, rows, name, when || null, mode);
+    if (r.ok) {
+      setMsg({ ok: `Saved to the library as "${r.data.name}" (${r.data.hazards.length} row${r.data.hazards.length === 1 ? "" : "s"}).` });
+      setOpen(false);
+    } else setMsg({ err: r.error });
+  });
+  if (!open) {
+    return (
+      <p className="mt-1 text-xs">
+        <button onClick={() => setOpen(true)} className="font-semibold text-aqua-deep underline" data-testid="hs-lib-open">Save to library</button>
+        {msg.ok && <span className="ml-2 text-emerald-800">{msg.ok}</span>}
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-violet-200 bg-violet-50/50 p-3 text-sm" data-testid="hs-lib-form">
+      <p className="font-semibold">Save task {task.n} to the hazard and controls library</p>
+      <p className="text-xs text-slate">The AI starts from the library when a new job has a matching task, so documents stay consistent.
+        The job&apos;s hold point references aren&apos;t copied.</p>
+      <label className="block text-xs font-semibold text-slate">Name
+        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} list={`lib-names-${task.n}`}
+          className="mt-1 block w-full rounded-lg border border-black/10 bg-white px-2 py-1 text-sm" />
+        <datalist id={`lib-names-${task.n}`}>{lib.names.map((x) => <option key={x} value={x} />)}</datalist>
+      </label>
+      <label className="block text-xs font-semibold text-slate">When it applies (helps the AI match it)
+        <input value={when} onChange={(e) => setWhen(e.target.value)} maxLength={1000} placeholder="e.g. any core hole through a slab"
+          className="mt-1 block w-full rounded-lg border border-black/10 bg-white px-2 py-1 text-sm" />
+      </label>
+      <fieldset className="text-xs">
+        <legend className="font-semibold text-slate">Hazard rows to save</legend>
+        {task.hazards.map((h, i) => (
+          <label key={i} className="mt-1 flex items-start gap-2">
+            <input type="checkbox" checked={rows.includes(i + 1)}
+              onChange={(e) => setRows(e.target.checked ? [...rows, i + 1].sort((a, b) => a - b) : rows.filter((r) => r !== i + 1))} />
+            <span>{h.hazard} <span className="text-slate">({h.initial} → {h.residual})</span></span>
+          </label>
+        ))}
+      </fieldset>
+      <div className="flex flex-wrap gap-2">
+        {!exists ? (
+          <button disabled={busy || !rows.length || name.trim().length < 2} onClick={() => save("new")}
+            className="rounded-full bg-ink px-3 py-1 text-xs font-semibold text-white disabled:opacity-50" data-testid="hs-lib-save">Save as new</button>
+        ) : (
+          <>
+            <button disabled={busy || !rows.length} onClick={() => save("add")}
+              className="rounded-full bg-ink px-3 py-1 text-xs font-semibold text-white disabled:opacity-50" data-testid="hs-lib-add">Add these rows to it</button>
+            <button disabled={busy || !rows.length} onClick={() => save("replace")}
+              className="rounded-full border border-black/15 bg-white px-3 py-1 text-xs font-semibold disabled:opacity-50">Replace its rows</button>
+          </>
+        )}
+        <button onClick={() => setOpen(false)} className="text-xs text-slate underline">Cancel</button>
+      </div>
+      {exists && <p className="text-xs text-amber-800">There&apos;s already a library task called that: add to it or replace it.</p>}
+      {msg.err && <p className="text-xs font-medium text-red-700" role="alert">{msg.err}</p>}
     </div>
   );
 }

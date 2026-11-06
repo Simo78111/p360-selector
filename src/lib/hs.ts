@@ -5,7 +5,7 @@ import "server-only";
 import { engine } from "./engine";
 import type { OfficeSession } from "./auth";
 export * from "./hs-shared";
-import type { HsJob, HsSettings, HsRegisterRow, HsContent, HsTask, HsToday, SiteDetails } from "./hs-shared";
+import type { HsJob, HsSettings, HsRegisterRow, HsContent, HsTask, HsToday, SiteDetails, HsLibraryTask } from "./hs-shared";
 import type { HsPrint } from "./hs-layout";
 
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
@@ -47,3 +47,19 @@ export const loadHsPrint = (s: OfficeSession, docId: string) => rpc<HsPrintRaw>(
 export const saveHsFiles = (s: OfficeSession, docId: string, files: { file_id: string; kind: string; format: string; name: string }[]) =>
   rpc<HsJob>("office_hs_files_saved", { p_staff_id: who(s), p_document_id: docId, p_files: files });
 export const loadHsToday = (s: OfficeSession) => rpc<HsToday>("office_hs_today", { p_staff_id: who(s) });
+
+// ── Phase 5c ──
+/** "No change needed" for the scope changes on the live pack (logged in the amendment log). */
+export const dismissScopeChange = (s: OfficeSession, docId: string, reason: string | null) =>
+  rpc<HsJob>("office_hs_scope_dismiss", { p_staff_id: who(s), p_document_id: docId, p_reason: reason });
+/** The next version, drafted from this one plus what changed; workers sign it again. */
+export const updateForScope = (s: OfficeSession, docId: string, note: string | null) =>
+  rpc<HsJob>("office_hs_update_scope", { p_staff_id: who(s), p_document_id: docId, p_note: note });
+/** Save a task (all rows, or the chosen 1-based rows) from an approved pack to the hazard and controls library. */
+export const saveToLibrary = (s: OfficeSession, docId: string, taskN: number, rows: number[] | null, name: string,
+                              appliesWhen: string | null, mode: "new" | "replace" | "add") =>
+  rpc<HsLibraryTask>("office_hs_library_save", {
+    p_staff_id: who(s), p_document_id: docId, p_task_n: taskN, p_rows: rows, p_name: name, p_applies_when: appliesWhen, p_mode: mode,
+  });
+export const updateLibrary = (s: OfficeSession, id: string, changes: { name?: string; applies_when?: string; active?: boolean; remove_row?: number }) =>
+  rpc<HsLibraryTask>("office_hs_library_update", { p_staff_id: who(s), p_id: id, p_changes: changes });

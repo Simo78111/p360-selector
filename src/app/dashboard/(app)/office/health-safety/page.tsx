@@ -25,7 +25,8 @@ export default async function HsRegisterPage({ searchParams }: Props) {
   }
   const soon = (r: HsRegisterRow) => !!r.next_start && new Date(r.next_start).getTime() < Date.now() + 3 * 86_400_000;
   const needs = (r: HsRegisterRow) =>
-    !["approved", "sent"].includes(r.document.status) || (r.unsigned.length > 0 && soon(r));
+    !["approved", "sent"].includes(r.document.status) || (r.unsigned.length > 0 && soon(r))
+    || (r.document.scope_changes?.length ?? 0) > 0 || ((r.ticket_warnings ?? 0) > 0 && soon(r));
   const list = rows
     .filter((r) => show !== "action" || needs(r))
     .sort((a, b) => (ORDER[a.document.status] ?? 9) - (ORDER[b.document.status] ?? 9)
@@ -73,11 +74,13 @@ export default async function HsRegisterPage({ searchParams }: Props) {
                     <td className={`px-3 py-2 ${ready ? "text-emerald-800" : d.status === "failed" ? "text-red-800" : "font-semibold text-amber-800"}`}>
                       {STATUS_LABEL[d.status]}
                       {d.approved_by && <span className="block text-xs font-normal text-slate">by {d.approved_by}</span>}
+                      {(d.scope_changes?.length ?? 0) > 0 && <span className="block text-xs font-semibold text-amber-800">Scope changed — update?</span>}
                     </td>
                     <td className="px-3 py-2">{d.open_hold_points ? <span className="font-semibold text-amber-800">{d.open_hold_points} open</span> : d.hold_points.length ? `${d.hold_points.length}, dealt with` : "–"}</td>
                     <td className="px-3 py-2">
                       {r.booked ? `${r.signed} of ${r.booked}` : r.signed ? `${r.signed}` : "–"}
                       {ready && r.unsigned.length > 0 && <span className={`block text-xs ${soon(r) ? "font-semibold text-red-800" : "text-slate"}`}>To sign: {r.unsigned.join(", ")}</span>}
+                      {(r.ticket_warnings ?? 0) > 0 && <span className={`block text-xs ${soon(r) ? "font-semibold text-red-800" : "text-amber-800"}`}>⚠ {r.ticket_warnings} ticket{r.ticket_warnings === 1 ? "" : "s"} missing or expired</span>}
                     </td>
                     <td className={`px-3 py-2 ${soon(r) && !ready ? "font-semibold text-red-800" : ""}`}>{day(r.next_start)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">

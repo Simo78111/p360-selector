@@ -8,6 +8,11 @@ import { fileHsDocs } from "@/lib/hs-files";
 import {
   answerHoldPoint,
   approveHs,
+  dismissScopeChange,
+  saveToLibrary,
+  updateForScope,
+  updateLibrary,
+  type HsLibraryTask,
   confirmTasks,
   loadHs,
   markHsSent,
@@ -131,6 +136,44 @@ export async function hsMarkSentAction(docId: string, note: string | null): Prom
 export async function hsSettingsSaveAction(instructions: string | null, reference: Record<string, unknown> | null, note: string | null): Promise<Result<HsSettings>> {
   return run(async () => {
     const r = await saveHsSettings(await assertOffice("jobs"), instructions, reference, note);
+    revalidatePath("/dashboard/office/health-safety/settings");
+    return r;
+  });
+}
+
+// ── Phase 5c ──
+export async function hsScopeDismissAction(docId: string, reason: string | null): Promise<Result<HsJob>> {
+  return run(async () => {
+    need(docId);
+    return done(await dismissScopeChange(await assertOffice("jobs"), docId, reason ? reason.slice(0, 500) : null));
+  });
+}
+
+export async function hsUpdateScopeAction(docId: string, note: string | null): Promise<Result<HsJob>> {
+  return run(async () => {
+    need(docId);
+    return done(await updateForScope(await assertOffice("jobs"), docId, note ? note.slice(0, 4000) : null));
+  });
+}
+
+export async function hsLibrarySaveAction(docId: string, taskN: number, rows: number[] | null, name: string,
+                                          appliesWhen: string | null, mode: "new" | "replace" | "add"): Promise<Result<HsLibraryTask>> {
+  return run(async () => {
+    need(docId);
+    if (!Number.isInteger(taskN) || !["new", "replace", "add"].includes(mode)) throw new Error("Something's missing: reload the page.");
+    const r = await saveToLibrary(await assertOffice("jobs"), docId, taskN,
+      rows && rows.length ? rows.filter((n) => Number.isInteger(n) && n > 0) : null,
+      String(name ?? "").trim().slice(0, 200), appliesWhen ? appliesWhen.trim().slice(0, 1000) : null, mode);
+    revalidatePath("/dashboard/office/health-safety/settings");
+    revalidatePath("/dashboard/office/job/[ref]", "page");
+    return r;
+  });
+}
+
+export async function hsLibraryUpdateAction(id: string, changes: { name?: string; applies_when?: string; active?: boolean; remove_row?: number }): Promise<Result<HsLibraryTask>> {
+  return run(async () => {
+    need(id);
+    const r = await updateLibrary(await assertOffice("jobs"), id, changes);
     revalidatePath("/dashboard/office/health-safety/settings");
     return r;
   });

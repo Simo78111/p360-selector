@@ -4,7 +4,7 @@
 // Friendship House SWMS-PTSL-19628-01 and its JSA): landscape A4, logo header, orange management approval block,
 // PTSL risk matrix with colour key, hold point tick boxes, sign-on sheet, amendment log, principal contractor acceptance
 // to sign by hand. No server-only imports: tested by scripts/test-hs-docs.ts.
-import { LIKELIHOOD, RISK_LABEL, SEVERITY, type HoldPoint, type HsContent, type HsDocument, type Risk, type SiteDetails } from "./hs-shared";
+import { LIKELIHOOD, RISK_LABEL, SEVERITY, type HoldPoint, type HsContent, type HsDocument, type HsTickets, type Risk, type SiteDetails } from "./hs-shared";
 
 // ── The description ─────────────────────────────────────────────────────────────────────────────
 export type Run = { t: string; b?: boolean; i?: boolean; color?: string; size?: number };
@@ -46,6 +46,8 @@ export type HsPrint = {
   site: SiteDetails;
   crew: { staff_id: string; name: string; trade?: string | null; apprentice?: boolean }[];
   signoffs: HsSignoff[];      // for this version
+  /** 5c: the booked crew's licences and tickets against what the tasks need (office_hs_print → hs_crew_tickets) */
+  tickets?: HsTickets | null;
   approved_role?: string | null;
   printed_at: string;         // ISO
 };
@@ -228,6 +230,23 @@ export function swmsLayout(x: HsPrint): Layout {
 
   h("Training and competency");
   B.push(table([44, 22, 34], [head(["Requirement", "Who", "Evidence / note"]), ...c.training.map((x2) => ({ cells: [cell(x2.requirement), cell(x2.who ?? ""), cell(x2.note ?? "")] }))], 1));
+  // 5c: the crew booked and their licences / tickets (from Settings → Staff), with anything missing or expired flagged
+  const tk = x.tickets;
+  if (tk && tk.crew.length) {
+    B.push({ kind: "gap", pt: 4 });
+    const fmt = (t: HsTickets["crew"][number]["tickets"][number]) =>
+      `${t.label}${t.number ? ` ${t.number}` : ""}${t.expires_on ? ` – ${t.state === "expired" ? "EXPIRED" : "exp."} ${nzDate(t.expires_on)}` : ""}`;
+    const rows: Row[] = tk.crew.map((m) => {
+      const bad = m.problems.map((q) => `${q.label} ${q.state === "expired" ? "expired" : "missing"}${q.tasks.length ? ` (task ${q.tasks.join(", ")})` : ""}`);
+      return { cells: [label(m.name), cell(m.tickets.map(fmt).join("\n") || "None on file"),
+        cell(bad.length ? bad.join("\n") : "All current", { fill: bad.length ? C.peach : undefined, run: bad.length ? { b: true } : undefined })] };
+    });
+    for (const q of tk.crew_problems) {
+      rows.push({ cells: [label("Crew"), cell(`At least one person needs ${q.label}${q.tasks.length ? ` (task ${q.tasks.join(", ")})` : ""}`),
+        cell(q.state === "expired" ? "Held but expired" : "Nobody booked holds it", { fill: C.peach, run: { b: true } })] });
+    }
+    B.push(table([24, 50, 26], [head(["Crew booked", "Licences and tickets held", "To sort before work"]), ...rows], 1));
+  }
 
   if (c.permits.length || c.legal_flags.length) {
     h("Permits and matters to confirm");

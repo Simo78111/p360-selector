@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { assertOffice, canEditCompany } from "@/lib/auth";
+import { fileUploadUrl } from "@/lib/jobs";
 import {
   fergusImport,
   findItemByCode,
@@ -118,6 +119,8 @@ export async function staffActiveAction(form: FormData) {
   });
 }
 
+/** Licences and tickets (Phase 5c: office managers keep them up to date too, not only the owner). */
+const staffArea = () => assertOffice("staff");
 export async function saveLicenceAction(form: FormData) {
   await run("/dashboard/office/staff", async () => {
     const licenceId = text(form, "licenceId", 40) || null;
@@ -126,6 +129,10 @@ export async function saveLicenceAction(form: FormData) {
       await saveLicence(licenceId, staffId, { remove: true });
       return "Licence removed.";
     }
+    if (form.get("remove_card") === "true") {
+      await saveLicence(licenceId, staffId, { remove_card: true });
+      return "Card photo removed.";
+    }
     await saveLicence(licenceId, staffId, {
       kind: text(form, "kind", 40),
       number: text(form, "number", 60),
@@ -133,7 +140,36 @@ export async function saveLicenceAction(form: FormData) {
       notes: text(form, "notes", 300),
     });
     return "Licence saved.";
-  });
+  }, staffArea);
+}
+
+const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
+type CardResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+/** A photo of a licence or ticket card goes straight from the browser to storage (staff-cards/<staff id>/...). */
+export async function startCardUploadAction(staffId: string, fileName: string): Promise<CardResult<{ path: string; url: string }>> {
+  try {
+    await staffArea();
+    if (!isUuid(staffId)) throw new Error("Something's missing: reload the page.");
+    const ext = (fileName.match(/\.([A-Za-z0-9]{1,5})$/)?.[1] ?? "jpg").toLowerCase();
+    if (!["jpg", "jpeg", "png", "heic", "heif", "webp", "pdf"].includes(ext)) throw new Error("Use a photo (JPG, PNG, HEIC) or a PDF.");
+    const path = `staff-cards/${staffId}/${crypto.randomUUID()}.${ext}`;
+    return { ok: true, data: { path, url: await fileUploadUrl(path) } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function finishCardUploadAction(staffId: string, licenceId: string, path: string, fileName: string): Promise<CardResult<null>> {
+  try {
+    await staffArea();
+    if (!isUuid(staffId) || !isUuid(licenceId)) throw new Error("Something's missing: reload the page.");
+    await saveLicence(licenceId, staffId, { card_path: path, card_name: fileName.slice(0, 200) });
+    revalidatePath("/dashboard/office/staff");
+    return { ok: true, data: null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // ── Companies ──────────────────────────────────────────────────────────────

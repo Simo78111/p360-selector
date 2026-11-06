@@ -33,7 +33,8 @@ export type HsContent = {
   legislation: string[];
   roles: { role: string; name?: string; responsibilities: string }[];
   plant: { item: string; use?: string; checks?: string }[];
-  tasks: (HsTask & { hazards: Hazard[] })[];
+  /** 5c: tickets someone doing the task must hold (codes, see TICKET_LABEL), and the library entry it started from */
+  tasks: (HsTask & { hazards: Hazard[]; tickets?: string[]; library?: string })[];
   ppe: { item: string; when: string }[];
   emergency: { emergency_number?: string; hospital?: string; urgent_care?: string; assembly_point?: string;
                first_aider?: string; site_contact?: string; office?: string; procedures?: string[] };
@@ -51,11 +52,14 @@ export const STATUS_LABEL: Record<HsStatus, string> = {
 };
 
 export type HsDocument = {
-  id: string; version_no: number; stage: "tasks" | "full"; status: HsStatus; trigger: "quote_accepted" | "one_click";
+  id: string; version_no: number; stage: "tasks" | "full"; status: HsStatus; trigger: "quote_accepted" | "one_click" | "scope_change";
   quote_version_id: string | null; quote_number: string | null;
   tasks: HsTask[] | null; simple: boolean | null; simple_reason: string | null; missing: { field: string; question: string }[] | null;
   hold_points: HoldPoint[]; open_hold_points: number; word_count: number | null; draft_count: number;
   redraft_note: string | null; error: string | null; scope_changed_at: string | null;
+  /** 5c: scope changes since this version (the tab asks whether to update), and what this version was updated for */
+  scope_changes?: ScopeChange[]; update_of_version?: number | null; update_changes?: ScopeChange[] | null;
+  change_summary?: string | null;
   edited_at: string | null; edited_by: string | null; approved_at: string | null; approved_by: string | null;
   sent_at: string | null; sent_by: string | null; sent_note: string | null;
   created_at: string; created_by: string; finished_at: string | null; model: string | null;
@@ -63,6 +67,27 @@ export type HsDocument = {
   changes?: { version_no: number; summary: string; by: string; at: string }[];
   signoffs?: { staff_id: string; name: string; signed_at: string }[];
   files?: { file_id: string; kind: "swms" | "jsa"; format: "pdf" | "docx"; name: string; at: string }[];
+};
+
+export type ScopeChange = {
+  kind: "quote" | "variation"; job_id: string; job_ref: string; title: string | null; at: string;
+  quote_id?: string; version_id?: string; number?: string;
+};
+
+/** Phase 5c: licences and tickets. Same codes as Settings → Staff and hs_ticket_kinds in the engine. */
+export type TicketState = "ok" | "expiring" | "expired" | "missing";
+export type HsTickets = {
+  needed: { kind: string; label: string; scope: "each" | "one"; tasks: number[] }[];
+  crew: { staff_id: string; name: string; next_start: string | null;
+          tickets: { kind: string; label: string; number: string | null; expires_on: string | null; state: TicketState; card: boolean }[];
+          problems: { kind: string; label: string; state: TicketState; tasks: number[] }[] }[];
+  crew_problems: { kind: string; label: string; state: TicketState; tasks: number[] }[];
+  warnings: number;
+};
+export type HsLibraryTask = {
+  id: string; name: string; applies_when: string | null; hazards: Omit<Hazard, "hold_point">[]; permits: string[];
+  tickets: string[]; active: boolean; source: string | null; updated_by_name: string | null; updated_at: string;
+  created_by_name: string | null; created_at: string;
 };
 
 export type SiteDetails = Partial<Record<SiteField, string | unknown>>;
@@ -74,6 +99,9 @@ export type HsJob = {
   /** Phase 5b: everyone booked on the job and when they signed this version (null = not yet) */
   booked?: { staff_id: string; name: string; next_start: string | null; signed_at: string | null }[];
   older: { id: string; version_no: number; approved_at: string | null; sent_at: string | null; has_content?: boolean }[];
+  /** Phase 5c: the booked crew's tickets against what the pack needs (warnings only), and the library's names */
+  tickets?: HsTickets | null;
+  library?: { id: string; name: string }[];
   /** set by the approve action when the documents couldn't be filed on the job (approval still stands) */
   filing_error?: string;
 };
@@ -82,17 +110,23 @@ export type HsSettings = {
   version: number; instructions: string; reference: Record<string, unknown>; note: string | null;
   saved_by: string; saved_at: string; can_edit: boolean;
   history: { version: number; note: string | null; by: string; at: string }[];
-  library: unknown[];
+  library: HsLibraryTask[];
 };
 export type HsRegisterRow = {
   job_id: string; job_ref: string; title: string | null; company: string; customer: string; document: HsDocument;
   signed: number; booked: number; unsigned: string[]; next_start: string | null;
+  /** 5c: missing or expired tickets among the people booked */
+  ticket_warnings?: number;
 };
 /** Today's H&S cards (Phase 5b, office_hs_today). */
 export type HsToday = {
   to_approve: number; to_check: number; can_approve: boolean;
   start_soon: { job_ref: string; starts: string }[];
   to_sign: { job_ref: string; name: string; starts: string }[];
+  /** 5c */
+  scope_changed?: { job_ref: string; changes: number }[];
+  ticket_gaps?: { job_ref: string; starts: string; warnings: number }[];
+  tickets_expiring?: { staff_id: string; name: string; kind: string; label: string; expires_on: string; expired: boolean }[];
 };
 
 /** The site details form: label, help, and whether the full draft needs it (hs_site_required in the database). */
