@@ -28,7 +28,7 @@ import { newQuoteAction } from "@/app/dashboard/quote-actions";
 import { costRange, filterCosts, KIND_LABEL, loadJobCosts, STATUS_LABEL as COST_STATUS, type JobCosts } from "@/lib/job-costs";
 import { CostRangeForm } from "@/components/office/CostSummary";
 import { PhaseCostBoxes } from "@/components/office/PhaseCostBoxes";
-import { ScheduleFromJob } from "@/components/office/ScheduleFromJob";
+import { SchedulePopup } from "@/components/office/SchedulePopup";
 import { loadJobSchedule, type JobSchedule } from "@/lib/diary";
 import { loadJobMoney, loadJobQuotes, STATUS_LABEL, type JobMoney, type JobQuotes, type Money as MoneyT } from "@/lib/quotes";
 import { loadJobInvoices, type JobInvoices } from "@/lib/invoices";
@@ -940,6 +940,14 @@ function Box({ title, rows, note }: { title: string; rows: [string, string][]; n
   );
 }
 
+/** "Booked: Tama Mon 9 Nov · …" beside the Schedule button. */
+function bookedLine(s: JobSchedule, phaseId: string) {
+  const up = s.upcoming.filter((b) => b.phase_id === phaseId);
+  if (!up.length) return null;
+  const d = (iso: string) => new Date(iso).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", timeZone: "Pacific/Auckland" });
+  return `Booked: ${up.slice(0, 3).map((b) => `${b.name.split(" ")[0]} ${d(b.starts_at)}`).join(" · ")}${up.length > 3 ? ` +${up.length - 3} more` : ""}`;
+}
+
 /** This phase's costs from the job's Cost Report (a one-phase job also gets the costs with no phase). */
 function phaseCosts(c: JobCosts, ref: string, onlyPhase: boolean): JobCosts {
   return { ...c, lines: c.lines.filter((l) => l.phase_ref === ref || (onlyPhase && !l.phase_ref)) };
@@ -980,9 +988,9 @@ function PhaseCard({ job, phase, path, focus, canMove, costs, schedule }: {
           </form>
         </div>
       )}
-      {managed && schedule && phase.id && !["invoiced", "to_be_approved", "to_invoice"].includes(phase.stage) && (
+      {managed && schedule?.can_book && phase.id && ["to_schedule", "to_start", "in_progress"].includes(phase.stage) && (
         <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="schedule-phase">
-          <ScheduleFromJob phaseId={phase.id} phaseRef={phase.ref} schedule={schedule} back={path} />
+          <SchedulePopup phaseRef={phase.ref} booked={bookedLine(schedule, phase.id)} />
         </div>
       )}
       {managed && !canMove && job.state !== "active" && <p className="mt-2 text-xs text-slate">The pipeline is paused while the job is {job.state.replace("_", " ")}.</p>}

@@ -47,6 +47,9 @@ type Props = {
   personFilter: string; today: string;
   /** Plumbing 360's automatic booking pool: plumber_id → the days in range they can be booked by the system */
   pool?: Record<string, string[]>;
+  /** Scheduling one phase from its job (the job page's Schedule pop-up, 6 Nov): navigation stays on `basePath`, the side
+   *  panel shows only this phase, and when people have already worked on the job only their rows show at first. */
+  focus?: { phase: DiaryPhase; basePath: string; worked: string[] };
 };
 type Lane = { id: string; person: DiaryPerson | null };
 type Item =
@@ -114,7 +117,7 @@ function CoBadge({ code }: { code?: string | null }) {
   );
 }
 
-export function DiaryBoard({ diary, phases, date, view, orientation, companyCode, personFilter, today, pool = {} }: Props) {
+export function DiaryBoard({ diary, phases, date, view, orientation, companyCode, personFilter, today, pool = {}, focus }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [toast, setToast] = useState<{ ok: boolean; text: string; warnings?: string[] } | null>(null);
@@ -124,6 +127,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
     | null
   >(null);
   const [panel, setPanel] = useState(true);
+  const [everyone, setEveryone] = useState(!focus?.worked.length);
   const [phaseSearch, setPhaseSearch] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const horizontal = orientation === "horizontal";
@@ -139,15 +143,20 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
       if (v) p.set(k, v);
       else p.delete(k);
     }
-    return `/dashboard/office/diary?${p}`;
+    return `${focus?.basePath ?? "/dashboard/office/diary"}?${p}`;
   };
   const go = (changes: Record<string, string>) => router.push(url(changes));
 
   // ── lanes (Unassigned + people, filtered) ────────────────────────────────
   const lanes: Lane[] = useMemo(() => {
-    const people = diary.people.filter((p) => !personFilter || p.plumber_id === personFilter);
+    let people = diary.people.filter((p) => !personFilter || p.plumber_id === personFilter);
+    if (focus?.worked.length) {
+      // the people who've worked on this job first (only them until "Show everyone")
+      const w = new Set(focus.worked);
+      people = [...people.filter((p) => w.has(p.plumber_id)), ...(everyone ? people.filter((p) => !w.has(p.plumber_id)) : [])];
+    }
     return [...(personFilter ? [] : [{ id: UNASSIGNED, person: null }]), ...people.map((p) => ({ id: p.plumber_id, person: p }))];
-  }, [diary.people, personFilter]);
+  }, [diary.people, personFilter, focus, everyone]);
   const peopleById = useMemo(() => new Map(diary.people.map((p) => [p.plumber_id, p])), [diary.people]);
   const companyByCode = useMemo(() => new Map(diary.companies.map((c) => [c.code, c])), [diary.companies]);
   const totalNotSent =
@@ -669,7 +678,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
     );
   };
 
-  const shownPhases = phases.filter((p) => {
+  const shownPhases = (focus ? phases.filter((p) => p.phase_id === focus.phase.phase_id) : phases).filter((p) => {
     const q = phaseSearch.trim().toLowerCase();
     return !q || `${p.phase_ref} ${p.phase_name} ${p.job_title ?? ""} ${p.customer} ${p.site}`.toLowerCase().includes(q);
   });
@@ -678,7 +687,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
   const navBtn = "inline-flex h-10 min-w-10 items-center justify-center rounded-lg bg-[#eef1fb] px-3 text-sm font-semibold text-[#1d3fce] hover:bg-[#dfe5f8]";
 
   return (
-    <div className="-my-8 ml-[calc(50%-50vw)] w-screen px-3 py-4 sm:px-4">
+    <div className={focus ? "w-full py-3 pr-14 pl-3" : "-my-8 ml-[calc(50%-50vw)] w-screen px-3 py-4 sm:px-4"}>
       {/* toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h1 className="sr-only">Diary</h1>
@@ -774,24 +783,31 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
         <div
           ref={scroller}
           className={`relative min-w-0 flex-1 overflow-auto rounded-xl border border-black/10 bg-white ${pending ? "opacity-80" : ""}`}
-          style={{ maxHeight: "calc(100vh - 170px)" }}
+          style={{ maxHeight: focus ? "calc(100vh - 80px)" : "calc(100vh - 170px)" }}
           data-testid="diary-board"
         >
           {Board()}
         </div>
 
         {canBookAny && panel && (
-          <aside className="hidden w-72 shrink-0 flex-col rounded-xl border border-black/10 bg-white lg:flex" style={{ maxHeight: "calc(100vh - 170px)" }} aria-label="Phases to schedule">
+          <aside className="hidden w-72 shrink-0 flex-col rounded-xl border border-black/10 bg-white lg:flex" style={{ maxHeight: focus ? "calc(100vh - 80px)" : "calc(100vh - 170px)" }} aria-label="Phases to schedule">
             <div className="border-b border-black/10 p-3">
-              <h2 className="text-sm font-bold">To schedule</h2>
-              <p className="mt-0.5 text-xs text-slate">Drag a phase onto someone. It books 7:30 AM for 7.5 hrs (or where you drop it in Day view).</p>
-              <input
+              <h2 className="text-sm font-bold">{focus ? `Scheduling for ${focus.phase.phase_ref}` : "To schedule"}</h2>
+              <p className="mt-0.5 text-xs text-slate">
+                {focus ? "Drag it onto someone, or press Book. " : "Drag a phase onto someone. "}It books 7:30 AM for 7.5 hrs (or where you drop it in Day view).
+              </p>
+              {focus && focus.worked.length > 0 && (
+                <button type="button" onClick={() => setEveryone(!everyone)} className="mt-2 text-xs font-semibold text-[#1d3fce] underline" data-testid="focus-everyone">
+                  {everyone ? "Only people who've worked on this job" : `Show everyone (${focus.worked.length} worked here so far)`}
+                </button>
+              )}
+              {!focus && <input
                 value={phaseSearch}
                 onChange={(e) => setPhaseSearch(e.target.value)}
                 placeholder="Find a phase, customer, site…"
                 aria-label="Find a phase"
                 className="mt-2 w-full rounded-full border border-black/10 bg-mist px-3 py-1.5 text-sm"
-              />
+              />}
             </div>
             <div className="flex-1 space-y-1.5 overflow-auto p-2">
               {[...toSchedule, ...others].map((p, i) => (
@@ -866,6 +882,7 @@ export function DiaryBoard({ diary, phases, date, view, orientation, companyCode
           onAddPerson={(b) => save(b)}
           onRemove={(id) => run(() => removeBookingAction(id), () => setDialog(null))}
           onColour={(jobId, c) => run(() => setColourAction(jobId, c))}
+          topLinks={!!focus}
         />
       )}
     </div>
@@ -879,11 +896,11 @@ type DialogState =
   | { mode: "new"; phaseId: string | null; lane: string; day: string; start: number; end: number };
 
 function BookingDialog({
-  dialog, phases, people, peopleById, canEdit, canBookAny, bookableCodes, pending, onClose, onSave, onAddPerson, onRemove, onColour,
+  dialog, phases, people, peopleById, canEdit, canBookAny, bookableCodes, pending, onClose, onSave, onAddPerson, onRemove, onColour, topLinks,
 }: {
   dialog: DialogState; phases: DiaryPhase[]; people: DiaryPerson[]; peopleById: Map<string, DiaryPerson>;
   canEdit: (code: string | undefined) => boolean; canBookAny: boolean; bookableCodes: string[];
-  pending: boolean; onClose: () => void; onSave: (b: BookingInput) => void; onAddPerson: (b: BookingInput) => void;
+  pending: boolean; onClose: () => void; onSave: (b: BookingInput) => void; onAddPerson: (b: BookingInput) => void; topLinks?: boolean;
   onRemove: (id: string) => void; onColour: (jobId: string, colour: string | null) => void;
 }) {
   const b = dialog.mode === "edit" ? dialog.booking : null;
@@ -1112,7 +1129,7 @@ function BookingDialog({
               </button>
             )}
             {b?.job_ref && (
-              <Link href={`/dashboard/office/job/${encodeURIComponent(b.job_ref)}`} className="ml-auto text-sm font-semibold text-aqua-deep hover:underline">
+              <Link target={topLinks ? "_top" : undefined} href={`/dashboard/office/job/${encodeURIComponent(b.job_ref)}`} className="ml-auto text-sm font-semibold text-aqua-deep hover:underline">
                 Open job {b.job_ref}
               </Link>
             )}
@@ -1121,7 +1138,7 @@ function BookingDialog({
         {!editable && (
           <p className="mt-4 text-sm">
             {b?.job_ref && (
-              <Link href={`/dashboard/office/job/${encodeURIComponent(b.job_ref)}`} className="font-semibold text-aqua-deep hover:underline">Open job {b.job_ref} · </Link>
+              <Link target={topLinks ? "_top" : undefined} href={`/dashboard/office/job/${encodeURIComponent(b.job_ref)}`} className="font-semibold text-aqua-deep hover:underline">Open job {b.job_ref} · </Link>
             )}
             <span className="text-slate">Changing the diary needs &ldquo;Can book the diary&rdquo;.</span>
           </p>
