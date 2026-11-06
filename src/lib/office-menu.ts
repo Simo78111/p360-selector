@@ -58,6 +58,8 @@ export const SETTINGS: SettingsGroup[] = [
     title: "Team",
     items: [
       { href: "/dashboard/office/staff", label: "Staff", area: "staff", note: "People, roles, permissions, pay and rates." },
+      { href: "/dashboard/office/staff/compliance", label: "Staff compliance schedule", area: "staff",
+        note: "Licences, tickets and expiry dates as one PDF for a customer, with copies of the cards." },
       { href: "/dashboard/office/timesheets/settings", label: "Pay rates & allowances", area: "staff" },
     ],
   },

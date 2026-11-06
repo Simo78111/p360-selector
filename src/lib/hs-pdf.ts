@@ -236,8 +236,9 @@ export async function layoutPdf(l: Layout): Promise<Uint8Array> {
     else if (b.kind === "break") P.newPage();
   }
   // header and footer on every page
-  const logo = await doc.embedPng(Buffer.from(HS_LOGO_PNG, "base64"));
-  const lh = 24, lw = (HS_LOGO_SIZE.w / HS_LOGO_SIZE.h) * lh;
+  const lg = l.logo ?? { png: HS_LOGO_PNG, ...HS_LOGO_SIZE };
+  const logo = await doc.embedPng(Buffer.from(lg.png, "base64"));
+  const lh = 24, lw = (lg.w / lg.h) * lh;
   P.pages.forEach((pg, i) => {
     pg.drawImage(logo, { x: MX, y: PAGE[1] - 14 - lh, width: lw, height: lh });
     pg.drawText(clean(f.reg, l.header), { x: MX + lw + 12, y: PAGE[1] - 32, size: 7.5, font: f.reg, color: hex(C.grey) });

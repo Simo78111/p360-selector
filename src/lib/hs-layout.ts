@@ -28,6 +28,8 @@ export type Layout = {
   footer: string;              // left of "Page x of y"
   draft: boolean;              // not approved yet: a red DRAFT line in the header
   blocks: Block[];
+  /** a different header logo (base64 PNG); default the Project 360 + Master Plumbers one */
+  logo?: { png: string; w: number; h: number };
 };
 
 // ── House colours (from the example documents) ──────────────────────────────────────────────────
@@ -375,3 +377,6 @@ export function jsaLayout(x: HsPrint): Layout {
     draft: !["approved", "sent"].includes(d.status), blocks: B,
   };
 }
+
+/** The building blocks, for other documents in the same house style (the staff compliance schedule). */
+export const LX = { r, p, cell, label, head, table };

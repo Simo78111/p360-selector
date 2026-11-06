@@ -44,6 +44,12 @@ export default async function StaffPage({ searchParams }: Props) {
           plumber app with the same login.
         </p>
       </div>
+      <p>
+        <a href="/dashboard/office/staff/compliance" className="inline-flex rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white" data-testid="compliance-link">
+          Export a compliance schedule
+        </a>
+        <span className="ml-3 text-sm text-slate">Licences, tickets and expiry dates for the people you choose, as one PDF for a customer.</span>
+      </p>
       <Flash ok={ok} err={err} />
       {!owner && <p className="text-sm text-slate">An owner/admin adds and changes staff, roles and rates; you can keep licences and tickets up to date.</p>}
 

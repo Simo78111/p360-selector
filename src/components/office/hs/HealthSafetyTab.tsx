@@ -164,7 +164,9 @@ export function HealthSafetyTab({ hs: initial }: { hs: HsJob }) {
       )}
 
       {d?.content && ["to_approve", "approved", "sent"].includes(d.status) && <SignOn hs={hs} />}
-      {d?.content && hs.tickets && ["to_approve", "approved", "sent"].includes(d.status) && <Tickets t={hs.tickets} />}
+      {d?.content && hs.tickets && ["to_approve", "approved", "sent"].includes(d.status) && (
+        <Tickets t={hs.tickets} exportHref={complianceHref(hs)} />
+      )}
 
       {d && hs.can_edit && ["to_approve", "approved", "failed", "tasks_to_confirm"].includes(d.status) && (
         <Redraft busy={busy} onRedraft={(note) => act(() => hsRedraftAction(d.id, note), "Redraft started")} />
@@ -626,7 +628,18 @@ const STATE_STYLE = { ok: "bg-emerald-50 text-emerald-900", expiring: "bg-amber-
 const dateNZ = (d: string) => new Date(d).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
 
 /** The booked crew's licences and tickets against what the tasks need. Warnings only (Simon, 6 Nov). */
-function Tickets({ t }: { t: HsTickets }) {
+/** Settings → Staff → Compliance schedule, with this job's crew and principal contractor filled in. */
+function complianceHref(hs: HsJob) {
+  const q = new URLSearchParams();
+  const ids = (hs.tickets?.crew ?? []).map((c) => c.staff_id);
+  if (ids.length) q.set("staff", ids.join(","));
+  const pc = typeof hs.site.principal_contractor === "string" && hs.site.principal_contractor.trim()
+    ? hs.site.principal_contractor.trim() : hs.site_defaults.principal_contractor;
+  if (pc) q.set("for", pc.slice(0, 160));
+  return `/dashboard/office/staff/compliance?${q}`;
+}
+
+function Tickets({ t, exportHref }: { t: HsTickets; exportHref: string }) {
   if (t.needed.length === 0) return null;
   return (
     <div className={`rounded-2xl p-4 ${t.warnings ? "border-2 border-amber-300 bg-white" : "bg-white"}`} data-testid="hs-tickets">
@@ -637,7 +650,10 @@ function Tickets({ t }: { t: HsTickets }) {
       </h3>
       <p className="text-sm text-slate">
         What the tasks need: {t.needed.map((n) => `${n.label}${n.scope === "each" ? " (everyone)" : ""}`).join(", ")}. A warning
-        doesn&apos;t stop anyone being booked or starting. Tickets are on Settings → Staff.
+        doesn&apos;t stop anyone being booked or starting. Tickets are on Settings → Staff.{" "}
+        <a href={exportHref} className="font-semibold text-aqua-deep underline" data-testid="hs-compliance">
+          Compliance schedule for this crew
+        </a>
       </p>
       {t.crew.length === 0 ? <p className="mt-2 text-sm text-slate">Nobody is booked yet.</p> : (
         <>

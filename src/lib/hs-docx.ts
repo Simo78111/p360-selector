@@ -90,7 +90,8 @@ export async function layoutDocx(l: Layout): Promise<Uint8Array> {
     } else if (b.kind === "gap") children.push(spacer(b.pt));
     else if (b.kind === "break") children.push(new Paragraph({ children: [new PageBreak()] }));
   }
-  const lh = 34, lw = Math.round((HS_LOGO_SIZE.w / HS_LOGO_SIZE.h) * lh);
+  const lg = l.logo ?? { png: HS_LOGO_PNG, ...HS_LOGO_SIZE };
+  const lh = 34, lw = Math.round((lg.w / lg.h) * lh);
   const doc = new Document({
     title: l.title, creator: "Project Three Sixty job management",
     styles: { default: { document: { run: { font: "Arial", size: 17 } } } },
@@ -103,7 +104,7 @@ export async function layoutDocx(l: Layout): Promise<Uint8Array> {
         tabStops: [{ type: TabStopType.RIGHT, position: CONTENT }],
         border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "BFC5CC", space: 2 } },
         children: [
-          new ImageRun({ type: "png", data: Buffer.from(HS_LOGO_PNG, "base64"), transformation: { width: lw, height: lh } }),
+          new ImageRun({ type: "png", data: Buffer.from(lg.png, "base64"), transformation: { width: lw, height: lh } }),
           new TextRun({ text: `    ${l.header}`, size: half(7.5), color: C.grey, font: "Arial" }),
           ...(l.draft ? [new TextRun({ text: "\tDRAFT – NOT APPROVED – NOT FOR ISSUE", bold: true, size: half(9), color: C.red, font: "Arial" })] : []),
         ],
