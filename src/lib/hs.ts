@@ -5,7 +5,8 @@ import "server-only";
 import { engine } from "./engine";
 import type { OfficeSession } from "./auth";
 export * from "./hs-shared";
-import type { HsJob, HsSettings, HsRegisterRow, HsContent, HsTask, SiteDetails } from "./hs-shared";
+import type { HsJob, HsSettings, HsRegisterRow, HsContent, HsTask, HsToday, SiteDetails } from "./hs-shared";
+import type { HsPrint } from "./hs-layout";
 
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const db = engine();
@@ -35,3 +36,14 @@ export const loadHsSettings = (s: OfficeSession) => rpc<HsSettings>("office_hs_s
 export const saveHsSettings = (s: OfficeSession, instructions: string | null, reference: Record<string, unknown> | null, note: string | null) =>
   rpc<HsSettings>("office_hs_settings_save", { p_staff_id: who(s), p_instructions: instructions, p_reference: reference, p_note: note });
 export const loadHsRegister = (s: OfficeSession) => rpc<HsRegisterRow[]>("office_hs_register", { p_staff_id: who(s) });
+
+// ── Phase 5b ──
+/** Everything a SWMS / JSA document is drawn from (any version of a pack, as long as it has a finished draft). */
+export type HsPrintRaw = Omit<HsPrint, "job" | "company"> & {
+  job: HsPrint["job"] & { id: string }; company: HsPrint["company"] & { code: string };
+  files: NonNullable<HsJob["document"]>["files"];
+};
+export const loadHsPrint = (s: OfficeSession, docId: string) => rpc<HsPrintRaw>("office_hs_print", { p_staff_id: who(s), p_document_id: docId });
+export const saveHsFiles = (s: OfficeSession, docId: string, files: { file_id: string; kind: string; format: string; name: string }[]) =>
+  rpc<HsJob>("office_hs_files_saved", { p_staff_id: who(s), p_document_id: docId, p_files: files });
+export const loadHsToday = (s: OfficeSession) => rpc<HsToday>("office_hs_today", { p_staff_id: who(s) });

@@ -1,0 +1,62 @@
+{
+  "job": { "ref": "PTSL-3027", "title": "HS test – The Local", "site": "The Local, Auckland Airport International Terminal, 5 Cyril Kay Road, Māngere", "customer": "FSL Construction" },
+  "company": { "name": "Project Three Sixty Limited (Plumbing 360)", "legal_name": "Project Three Sixty Ltd", "address": "390B Rosebank Road, Avondale, Auckland 1026", "phone": "0800 776 360" },
+  "site": { "principal_contractor": "FSL – full legal name TBC", "assembly_point": "TBC – confirm at AIAL/FSL induction", "hospital": "Middlemore Hospital ED, 100 Hospital Road, Ōtāhuhu (24/7)" },
+  "crew": [ { "staff_id": "s1", "name": "James Hall", "trade": "certifying_plumber" }, { "staff_id": "s2", "name": "Daniel Oak", "trade": "plumber" }, { "staff_id": "s3", "name": "Alex Burnett", "apprentice": true } ],
+  "signoffs": [ { "staff_id": "s1", "name": "James Hall", "signed_at": "2026-11-07T19:05:00Z", "signature_svg": "M10 70 C 30 20, 50 20, 60 60 S 90 90, 110 40 L 140 70 L 170 30 Q 200 80 240 50 L 280 60" } ],
+  "approved_role": "Director",
+  "printed_at": "2026-11-07T20:00:00Z",
+  "document": {
+    "id": "b899a6b8-641b-4dd1-bfeb-4a5abe7cf929", "version_no": 1, "stage": "full", "status": "approved", "trigger": "quote_accepted",
+    "quote_version_id": null, "quote_number": "PTSL-3027 v1", "tasks": null, "simple": false, "simple_reason": null, "missing": null,
+    "open_hold_points": 0, "word_count": 3351, "draft_count": 2, "redraft_note": null, "error": null, "scope_changed_at": null,
+    "edited_at": null, "edited_by": null, "approved_at": "2026-11-06T04:10:00Z", "approved_by": "Olivia Owner (TEST)",
+    "sent_at": null, "sent_by": null, "sent_note": null, "created_at": "2026-11-06T02:00:00Z", "created_by": "Simon Paterson",
+    "finished_at": "2026-11-06T02:05:00Z", "model": "claude-opus-5-5",
+    "changes": [ { "version_no": 1, "summary": "Hold point HP2: soffit 3.6 m – scissor lift ≤4 m, no harness needed", "by": "Olivia Owner (TEST)", "at": "2026-11-06T04:00:00Z" } ],
+    "hold_points": [
+      { "id": "HP1", "text": "Asbestos register/clearance sighted for tenancy, ceiling space and breezeway soffit. Until then suspect material = stop, keep clear, call FSL.", "who": "FSL Site Manager / AIAL", "why": "Register answered 'unknown'; drilling and ceiling work could disturb ACM.", "tasks": [2, 3, 4], "status": "confirm_on_site", "answer": null, "answered_by": "Olivia Owner (TEST)", "answered_at": "2026-11-06T03:25:56Z" },
+      { "id": "HP2", "text": "Soffit height and access method confirmed (EWP/scissor lift); notifiable work if fall risk over 5 m.", "who": "PTSL Site Lead", "why": "Quote says 'access to heights' with no height given.", "tasks": [4], "status": "answered", "answer": "Soffit 3.6 m – scissor lift ≤4 m, no harness needed", "answered_by": "Olivia Owner (TEST)", "answered_at": "2026-11-06T04:00:00Z" },
+      { "id": "HP3", "text": "Core positions approved by the engineer; slab scanned; post-tensioned slab ruled in or out.", "who": "FSL / structural engineer", "why": "Cutting a PT tendon can be catastrophic.", "tasks": [3], "status": "confirm_on_site", "answer": null }
+    ],
+    "content": {
+      "document": { "title": "The Local AIAL – Hydraulic Services Fit-Out (after-hours underslung waste, core drilling, soffit access)", "scope_plain": "Supply, install, test and commission sanitary drainage and hot/cold water services for the SSP \"The Local\" fit-out in the live terminal. Includes scanning and core drilling of the slab, HDPE waste fixed to the breezeway soffit after hours (access to height), an electrofusion tie-in to the existing DN 110 HDPE drain, and copper water from the existing ceiling-space supply. Electrical, passive fire and traffic management are by others. No excavation or confined space entry.", "site_type": "Live international terminal fit-out (occupied); underslung waste in the breezeway, after hours", "drawings_basis": "Endeavour Consulting H-000 to H-720 Rev 2 (design intent only)", "planned_dates": "TBC – after-hours shift windows to be agreed", "principal_contractor": "FSL – full legal name TBC", "pc_contacts": "FSL Site Manager: TBC", "prepared_by": "Draft for James Hall (Certifying Plumber / Supervisor)", "occupancy_note": "Terminal stays live. Tenancy work inside FSL hoarding; breezeway soffit work and the tie-in are after hours only, inside FSL's traffic management set-up, with a barricaded exclusion zone under every overhead point." },
+      "hold_points": [],
+      "hazard_summary": [
+        { "category": "Manual handling", "status": "applicable", "where": "Tasks 4, 5 – overhead pipe, cylinders" },
+        { "category": "Working at height", "status": "hold", "where": "Task 4 – breezeway soffit (HP2)" },
+        { "category": "Excavation / underground services", "status": "na", "reason": "N/A – not applicable to this scope: no digging." },
+        { "category": "Confined space", "status": "na", "reason": "No confined space entry in scope." },
+        { "category": "Electrical proximity", "status": "by_others", "where": "Electrician energises cylinders after filling" }
+      ],
+      "legislation": [ "Health and Safety at Work Act 2015 (HSWA)", "Health and Safety at Work (General Risk and Workplace Management) Regulations 2016", "Health and Safety at Work (Asbestos) Regulations 2016", "Plumbers, Gasfitters, and Drainlayers Act 2006", "AS/NZS 3500 – Plumbing and drainage" ],
+      "roles": [ { "role": "PTSL Site Supervisor / Certifying Plumber", "name": "James Hall", "responsibilities": "Owns SWMS and toolbox talk; closes hold points; signs off isolations, tie-in, testing; stops work." }, { "role": "Principal contractor", "name": "FSL", "responsibilities": "Site induction, TMP, permits, hoarding." } ],
+      "plant": [ { "item": "GPR/CAT scanner", "use": "Task 3", "checks": "Competent operator" }, { "item": "Core drill rig (wet)", "use": "Task 3", "checks": "RCD tested; water feed and vac ready" }, { "item": "Scissor lift ≤4 m", "use": "Task 4", "checks": "Pre-start check; operator ticket" } ],
+      "tasks": [
+        { "n": 1, "title": "Mobilise, induction and set up after hours", "quote_wording": "P&G", "hazards": [
+          { "hazard": "Uncleared entry to airside areas; airside vehicles", "harm": "Vehicle strike; removal from site", "severity": 4, "likelihood": 2, "initial": "M", "controls": [ { "type": "A", "text": "Clearances/escort confirmed; ID worn; agreed parking and routes" }, { "type": "PPE", "text": "Hi-vis" } ], "res_severity": 4, "res_likelihood": 1, "residual": "M", "responsible": "PTSL Site Lead", "hold_point": "HP6" } ] },
+        { "n": 2, "title": "Strip out under-bench and ceiling access", "quote_wording": "Strip out existing", "hazards": [
+          { "hazard": "Disturbing asbestos-containing material", "harm": "Long-term lung disease", "severity": 5, "likelihood": 2, "initial": "H", "controls": [ { "type": "E", "text": "Register sighted before any cutting (HP1)" }, { "type": "A", "text": "Suspect material: stop, keep clear, call FSL" } ], "res_severity": 5, "res_likelihood": 1, "residual": "H", "responsible": "Site Lead", "hold_point": "HP1" } ] },
+        { "n": 3, "title": "Scan and core drill slab", "quote_wording": "Scanning; core holes ×6", "hazards": [
+          { "hazard": "Striking PT tendon or live services", "harm": "Structural failure; electrocution", "severity": 5, "likelihood": 3, "initial": "H", "controls": [ { "type": "I", "text": "GPR scan, mark out, engineer approval of positions (HP3)" }, { "type": "EC", "text": "Wet coring with slurry vac" }, { "type": "PPE", "text": "Eye, hearing, gloves" } ], "res_severity": 5, "res_likelihood": 1, "residual": "H", "responsible": "Site Lead" },
+          { "hazard": "Silica dust", "harm": "Silicosis", "severity": 4, "likelihood": 3, "initial": "H", "controls": [ { "type": "EC", "text": "Wet method only" }, { "type": "PPE", "text": "P2 mask" } ], "res_severity": 3, "res_likelihood": 1, "residual": "L", "responsible": "All crew" } ] },
+        { "n": 4, "title": "Install underslung HDPE waste to breezeway soffit", "quote_wording": "HDPE waste – after hours, access to heights", "hazards": [
+          { "hazard": "Fall from scissor lift", "harm": "Fractures", "severity": 4, "likelihood": 3, "initial": "H", "controls": [ { "type": "EC", "text": "Scissor lift with guardrails; gate closed" }, { "type": "A", "text": "Ticketed operator; spotter; exclusion zone" } ], "res_severity": 4, "res_likelihood": 1, "residual": "M", "responsible": "Operator" } ] },
+        { "n": 5, "title": "Tie in, test and commission", "quote_wording": "Connect to existing DN110", "hazards": [
+          { "hazard": "Sewage release when cutting live DN110", "harm": "Infection; flooding", "severity": 3, "likelihood": 3, "initial": "M", "controls": [ { "type": "A", "text": "No-use window agreed before cutting" }, { "type": "PPE", "text": "Nitrile gloves, eye protection" } ], "res_severity": 2, "res_likelihood": 2, "residual": "L", "responsible": "Site Lead" } ] }
+      ],
+      "ppe": [ { "item": "Hi-vis", "when": "Always airside / breezeway" }, { "item": "Safety glasses", "when": "Drilling, cutting" }, { "item": "P2 mask", "when": "Core drilling" } ],
+      "emergency": { "emergency_number": "111", "hospital": "Middlemore Hospital ED (24/7)", "office": "PTSL 0800 776 360 · WorkSafe 0800 030 040", "first_aider": "TBC – current holder each shift", "assembly_point": "TBC", "site_contact": "FSL Site Manager: TBC", "procedures": [ "Follow AIAL evacuation procedure; notify FSL/AIAL after-hours contact, 111 as needed.", "Suspect asbestos: stop, keep clear, notify FSL." ] },
+      "training": [ { "requirement": "Licensed plumber on site (PGDB)", "who": "Site Lead", "note": "Current licence card" }, { "requirement": "Scissor lift ticket", "who": "Operator", "note": "Card" } ],
+      "permits": [ { "permit": "Hot works permit (copper brazing)", "tasks": [5], "issued_by": "FSL" } ],
+      "legal_flags": [ { "kind": "notifiable_work", "reason": "Height under 5 m confirmed – not notifiable.", "confirm_with": "Site Lead" } ],
+      "jsa": { "rows": [
+        { "task": 1, "step": "Mobilise, induction, barricades", "hazards": "Uncleared airside entry; public", "controls": "HP6/HP9; ID worn; work inside hoarding", "risk": "M" },
+        { "task": 3, "step": "Scan and mark out", "hazards": "PT tendon; live services", "controls": "HP3 closed; GPR scan; engineer approval", "risk": "H" },
+        { "task": 3, "step": "Core drill", "hazards": "Silica dust; slurry", "controls": "Wet coring; P2 mask; slurry vac", "risk": "M" },
+        { "task": 4, "step": "Work from scissor lift", "hazards": "Falls; dropped objects", "controls": "Guardrails; exclusion zone; spotter", "risk": "M" },
+        { "task": 5, "step": "Cut in to DN110", "hazards": "Sewage release", "controls": "No-use window; gloves; spill kit", "risk": "L" }
+      ], "pre_start": [ "Every crew member signed this JSA", "Two-person crew; after-hours contact tested", "Barricades/exclusion zone up before overhead work" ] }
+    }
+  }
+}

@@ -62,6 +62,7 @@ export type HsDocument = {
   content?: HsContent | null;
   changes?: { version_no: number; summary: string; by: string; at: string }[];
   signoffs?: { staff_id: string; name: string; signed_at: string }[];
+  files?: { file_id: string; kind: "swms" | "jsa"; format: "pdf" | "docx"; name: string; at: string }[];
 };
 
 export type SiteDetails = Partial<Record<SiteField, string | unknown>>;
@@ -70,7 +71,11 @@ export type HsJob = {
   site: SiteDetails; site_defaults: { principal_contractor?: string; site_address?: string;
     crew?: { staff_id: string; name: string; trade: string | null; apprentice: boolean }[] };
   document: HsDocument | null;
-  older: { id: string; version_no: number; approved_at: string | null; sent_at: string | null }[];
+  /** Phase 5b: everyone booked on the job and when they signed this version (null = not yet) */
+  booked?: { staff_id: string; name: string; next_start: string | null; signed_at: string | null }[];
+  older: { id: string; version_no: number; approved_at: string | null; sent_at: string | null; has_content?: boolean }[];
+  /** set by the approve action when the documents couldn't be filed on the job (approval still stands) */
+  filing_error?: string;
 };
 
 export type HsSettings = {
@@ -79,7 +84,16 @@ export type HsSettings = {
   history: { version: number; note: string | null; by: string; at: string }[];
   library: unknown[];
 };
-export type HsRegisterRow = { job_id: string; job_ref: string; title: string | null; customer: string; document: HsDocument; signed: number };
+export type HsRegisterRow = {
+  job_id: string; job_ref: string; title: string | null; company: string; customer: string; document: HsDocument;
+  signed: number; booked: number; unsigned: string[]; next_start: string | null;
+};
+/** Today's H&S cards (Phase 5b, office_hs_today). */
+export type HsToday = {
+  to_approve: number; to_check: number; can_approve: boolean;
+  start_soon: { job_ref: string; starts: string }[];
+  to_sign: { job_ref: string; name: string; starts: string }[];
+};
 
 /** The site details form: label, help, and whether the full draft needs it (hs_site_required in the database). */
 export const SITE_FIELDS = [

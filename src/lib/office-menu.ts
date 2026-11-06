@@ -46,6 +46,15 @@ export const SETTINGS: SettingsGroup[] = [
     ],
   },
   {
+    title: "Health & safety",
+    items: [
+      { href: "/dashboard/office/health-safety", label: "H&S register", area: "jobs",
+        note: "Every SWMS and JSA: status, who has signed, next booking." },
+      { href: "/dashboard/office/health-safety/settings", label: "SWMS drafting settings", area: "jobs",
+        note: "The AI's instructions, reference and example documents, with versions." },
+    ],
+  },
+  {
     title: "Team",
     items: [
       { href: "/dashboard/office/staff", label: "Staff", area: "staff", note: "People, roles, permissions, pay and rates." },

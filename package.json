@@ -17,12 +17,14 @@
     "test:fergus-import": "tsx scripts/test-fergus-import.ts",
     "test:supplier-csv": "tsx scripts/test-supplier-csv.ts",
     "test:invoice-pdf": "tsx --conditions=react-server scripts/test-invoice-pdf.ts",
-    "test:takeoff": "tsx scripts/test-takeoff.ts"
+    "test:takeoff": "tsx scripts/test-takeoff.ts",
+    "test:hs-docs": "tsx scripts/test-hs-docs.ts"
   },
   "dependencies": {
     "@fontsource/archivo": "^5.2.8",
     "@fontsource/poppins": "^5.2.7",
     "@supabase/supabase-js": "^2.117.2",
+    "docx": "^9.15.2",
     "lucide-react": "^1.49.0",
     "next": "15.5.28",
     "pdf-lib": "^1.17.1",

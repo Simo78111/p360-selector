@@ -4,6 +4,7 @@ import { EngineError, Flash, hours, JobLink, JobStatusBadge, NotConnected, short
 import { aucklandToday, loadDay, loadJobs, officeEnabled, shiftDate, validDate, type OfficeDay, type PlumberDay } from "@/lib/office";
 import { can, requireOffice } from "@/lib/auth";
 import { loadTodayActions, type TodayActions } from "@/lib/reports";
+import { loadHsToday, type HsToday } from "@/lib/hs";
 
 export const metadata = { title: "Today" };
 
@@ -20,6 +21,8 @@ export default async function TodayPage({ searchParams }: Props) {
   } catch (e) {
     actionsError = e instanceof Error ? e.message : String(e);
   }
+  // Phase 5b: health and safety cards (left out quietly if they can't be read)
+  const hsToday: HsToday | null = can(session, "jobs") ? await loadHsToday(session).catch(() => null) : null;
 
   // Project 360-only office managers: the to-do cards (the booking engine's day board is Plumbing 360's).
   if (!can(session, "bookings")) {
@@ -30,7 +33,7 @@ export default async function TodayPage({ searchParams }: Props) {
           <h1 className="text-2xl font-bold">What&apos;s waiting</h1>
         </div>
         <Flash ok={ok} err={err} />
-        <ActionCards actions={actions} error={actionsError} />
+        <ActionCards actions={actions} error={actionsError} hs={hsToday} />
       </div>
     );
   }
@@ -82,7 +85,7 @@ export default async function TodayPage({ searchParams }: Props) {
 
       <Flash ok={ok} err={err} />
 
-      {date === today && <ActionCards actions={actions} error={actionsError} />}
+      {date === today && <ActionCards actions={actions} error={actionsError} hs={hsToday} />}
 
       {overdue > 0 && (
         <Link
@@ -214,7 +217,7 @@ export default async function TodayPage({ searchParams }: Props) {
 // ── What's waiting for the office (Phase 3e) ────────────────────────────────
 type Card = { key: string; count: number; title: string; detail?: string; href: string; tone?: "red" | "amber" };
 
-function ActionCards({ actions: a, error }: { actions: TodayActions | null; error: string | null }) {
+function ActionCards({ actions: a, error, hs }: { actions: TodayActions | null; error: string | null; hs: HsToday | null }) {
   if (!a) {
     return error ? <p className="rounded-2xl bg-white p-4 text-sm text-slate">The to-do list didn&apos;t load: {error}</p> : null;
   }
@@ -240,6 +243,7 @@ function ActionCards({ actions: a, error }: { actions: TodayActions | null; erro
     ] : []),
     { key: "schedule", count: a.to_schedule, title: plural(a.to_schedule, "phase to schedule", "phases to schedule"),
       href: "/dashboard/office/diary" },
+    ...(hs ? hsCards(hs, plural) : []),
   ];
   const xero = a.invoices_xero_failed + a.supplier_xero_failed;
   const waiting = cards.filter((c) => c.count > 0);
@@ -260,7 +264,7 @@ function ActionCards({ actions: a, error }: { actions: TodayActions | null; erro
           {waiting.map((c) => (
             <li key={c.key}>
               <Link href={c.href} data-testid={`todo-${c.key}`}
-                className={`flex h-full items-center justify-between gap-4 rounded-2xl border-2 bg-white p-4 hover:border-ink ${c.tone === "amber" ? "border-amber-300" : "border-transparent"}`}>
+                className={`flex h-full items-center justify-between gap-4 rounded-2xl border-2 bg-white p-4 hover:border-ink ${c.tone === "red" ? "border-red-300 bg-red-50" : c.tone === "amber" ? "border-amber-300" : "border-transparent"}`}>
                 <span className="min-w-0">
                   <span className="block font-semibold">{c.title}</span>
                   {c.detail && <span className="block truncate text-sm text-slate">{c.detail}</span>}
@@ -281,6 +285,23 @@ function ActionCards({ actions: a, error }: { actions: TodayActions | null; erro
       )}
     </section>
   );
+}
+
+// Phase 5b: SWMS to approve, jobs starting within 3 days with no approved SWMS (red), workers still to sign.
+function hsCards(hs: HsToday, plural: (n: number, one: string, many: string) => string): Card[] {
+  const REG = "/dashboard/office/health-safety?show=action";
+  const when = (iso: string) => new Date(iso).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", timeZone: "Pacific/Auckland" });
+  const approve = hs.can_approve ? hs.to_approve : hs.to_check;
+  return [
+    { key: "hs_start", count: hs.start_soon.length, tone: "red",
+      title: `${plural(hs.start_soon.length, "job starts", "jobs start")} within 3 days with no approved SWMS`,
+      detail: hs.start_soon.map((x) => `${x.job_ref} ${when(x.starts)}`).join(" · "), href: REG },
+    { key: "hs_approve", count: approve, title: plural(approve, hs.can_approve ? "SWMS to approve" : "SWMS to check", hs.can_approve ? "SWMSs to approve" : "SWMSs to check"),
+      href: REG },
+    { key: "hs_sign", count: hs.to_sign.length, tone: "amber",
+      title: `${plural(hs.to_sign.length, "worker", "workers")} still to sign the SWMS`,
+      detail: hs.to_sign.map((x) => `${x.name.split(" ")[0]} (${x.job_ref}, ${when(x.starts)})`).join(" · "), href: REG },
+  ];
 }
 
 function DayLink({ date, label }: { date: string; label: string }) {

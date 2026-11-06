@@ -4,6 +4,7 @@
 // returns a result rather than throwing, so the Health & Safety tab can show the message and carry on.
 import { revalidatePath } from "next/cache";
 import { assertOffice } from "@/lib/auth";
+import { fileHsDocs } from "@/lib/hs-files";
 import {
   answerHoldPoint,
   approveHs,
@@ -98,10 +99,25 @@ export async function hsHoldPointAction(docId: string, id: string, status: "open
   });
 }
 
-export async function hsApproveAction(docId: string): Promise<Result<HsJob>> {
+export async function hsApproveAction(docId: string): Promise<Result<HsJob & { filing_error?: string }>> {
   return run(async () => {
     need(docId);
-    return done(await approveHs(await assertOffice("jobs"), docId));
+    const s = await assertOffice("jobs");
+    const r = await approveHs(s, docId);
+    // file the approved SWMS and JSA (PDF + Word) on the job; approval stands even if filing fails
+    try {
+      return done(await fileHsDocs(s, docId));
+    } catch (e) {
+      return done({ ...r, filing_error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+}
+
+/** File the documents on the job again (e.g. after everyone has signed on). */
+export async function hsFileAction(docId: string): Promise<Result<HsJob>> {
+  return run(async () => {
+    need(docId);
+    return done(await fileHsDocs(await assertOffice("jobs"), docId));
   });
 }
 
@@ -115,7 +131,7 @@ export async function hsMarkSentAction(docId: string, note: string | null): Prom
 export async function hsSettingsSaveAction(instructions: string | null, reference: Record<string, unknown> | null, note: string | null): Promise<Result<HsSettings>> {
   return run(async () => {
     const r = await saveHsSettings(await assertOffice("jobs"), instructions, reference, note);
-    revalidatePath("/dashboard/settings/health-safety");
+    revalidatePath("/dashboard/office/health-safety/settings");
     return r;
   });
 }
