@@ -10,8 +10,11 @@ export type NavItem = NavLinkItem & { children?: NavLinkItem[]; badge?: number; 
 const isActive = (pathname: string, item: NavLinkItem) =>
   item.exact ? pathname === item.href : [item.href, ...(item.also ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
+// The top bar is navy (Simon, 8 Nov): white for the page you're on, with a sky underline; soft grey for the rest.
 const pill = (active: boolean) =>
-  `rounded-full px-3 py-1.5 text-sm font-medium ${active ? "bg-aqua-pale text-aqua-deep" : "text-slate hover:text-ink"}`;
+  `rounded-lg px-3 py-2 text-sm ${active
+    ? "bg-white/10 font-semibold text-white shadow-[inset_0_-3px_0_#38BDF8]"
+    : "font-medium text-slate-300 hover:bg-white/5 hover:text-white"}`;
 
 /** The office console's top bar: the layout passes only the items this person's role can open. */
 export function DashboardNav({ items }: { items: NavItem[] }) {

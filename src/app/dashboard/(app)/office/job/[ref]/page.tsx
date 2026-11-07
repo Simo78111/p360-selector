@@ -111,26 +111,79 @@ export default async function JobPageView({ params, searchParams }: Props) {
 
   return (
     <div className="space-y-6" data-testid="job-page">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div>
-        <Link href="/dashboard/office/all-jobs" className="text-sm text-slate hover:underline">← All jobs</Link>
-        {job.parent && (
-          <span className="text-sm text-slate">
-            {" · "}Variation of{" "}
-            <Link href={`/dashboard/office/job/${encodeURIComponent(job.parent.job_ref)}`} className="font-semibold underline">
-              {job.parent.job_ref}
-            </Link>
-          </span>
-        )}
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <CompanyBadge code={job.company.code} />
-          <h1 className="text-2xl font-bold" data-testid="job-ref">{managed ? job.job_ref : `#${job.job_ref}`}</h1>
-          <span className="text-xl">{job.title}</span>
-          <StateBadge state={job.state} />
-          {job.restricted && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-900">Office only</span>}
+      {/* ── Header: one navy band with who, where and the money (Simon, 8 Nov) ─────────────────────────────── */}
+      <section className="overflow-hidden rounded-2xl bg-[#0F172A] text-white shadow-[0_8px_24px_rgba(15,23,42,.12)]" data-testid="job-header">
+        <div className="space-y-3 px-5 pt-4 pb-5 sm:px-7">
+          <p className="text-sm">
+            <Link href="/dashboard/office/all-jobs" className="text-sky-300 hover:underline">← All jobs</Link>
+            {job.parent && (
+              <span className="text-slate-300">
+                {" · "}Variation of{" "}
+                <Link href={`/dashboard/office/job/${encodeURIComponent(job.parent.job_ref)}`} className="font-semibold text-white underline">
+                  {job.parent.job_ref}
+                </Link>
+              </span>
+            )}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <CompanyBadge code={job.company.code} />
+            <h1 className="text-2xl font-bold sm:text-3xl" data-testid="job-ref">{managed ? job.job_ref : `#${job.job_ref}`}</h1>
+            <span className="text-lg text-slate-200 sm:text-xl">{job.title}</span>
+            <StateBadge state={job.state} />
+            {job.restricted && <span className="rounded-full bg-violet-300 px-2 py-0.5 text-xs font-semibold text-violet-950">Office only</span>}
+          </div>
+          {job.state === "on_hold" && job.hold_reason && <p className="text-sm text-amber-300">On hold: {job.hold_reason}</p>}
         </div>
-        {job.state === "on_hold" && job.hold_reason && <p className="mt-1 text-sm text-amber-900">On hold: {job.hold_reason}</p>}
-      </div>
+        <div className="grid gap-x-8 gap-y-4 border-t border-slate-700 px-5 py-4 sm:grid-cols-2 sm:px-7 lg:grid-cols-[1.2fr_1.4fr_1fr_1.2fr_auto]">
+          <div>
+            <h2 className={hLabel}>Customer</h2>
+            <p className="mt-0.5 font-semibold">
+              <Link href={`/dashboard/office/customers/${job.customer.id}`} className="hover:underline">{job.customer.name}</Link>
+            </p>
+            {job.customer.business_name && <p className="text-sm text-slate-200">{job.customer.full_name}</p>}
+            <p className="text-sm text-slate-300">{[job.customer.phone, job.customer.email].filter(Boolean).join(" · ")}</p>
+          </div>
+          <div>
+            <h2 className={hLabel}>Site</h2>
+            <p className="mt-0.5 font-semibold">{job.site.text}</p>
+            {job.site.access_notes && <p className="text-sm text-slate-300">Access: {job.site.access_notes}</p>}
+            {job.site.notes && <p className="text-sm text-slate-300">{job.site.notes}</p>}
+          </div>
+          <div>
+            <h2 className={hLabel}>Site contact</h2>
+            {job.site_contact ? (
+              <>
+                <p className="mt-0.5 font-semibold">{job.site_contact.name}</p>
+                <p className="text-sm text-slate-300">
+                  {[job.site_contact.position, job.site_contact.mobile ?? job.site_contact.phone, job.site_contact.email].filter(Boolean).join(" · ")}
+                </p>
+              </>
+            ) : (
+              <p className="mt-0.5 text-sm text-slate-300">None set</p>
+            )}
+          </div>
+          <div>
+            <h2 className={hLabel}>Job</h2>
+            <dl className="mt-0.5 space-y-0.5 text-sm">
+              {managed && <Row k="Type" v={job.job_type === "charge_up" ? "Charge-up" : "Quoted"} dark />}
+              <Row k="Order no." v={job.order_number ?? "—"} dark />
+              <Row k="Pricing" v={`${job.pricing_tier.name} (${Number(job.pricing_tier.markup_pct)}%${job.pricing_tier.source === "job" ? ", this job" : job.pricing_tier.source === "customer" ? ", customer's" : ""})`} dark />
+              {managed && <Row k="Manager" v={job.manager?.name ?? "—"} dark />}
+              <Row k="Created" v={`${nzDateTime(job.created_at)}${job.created_by ? ` by ${job.created_by}` : ""}`} dark />
+            </dl>
+          </div>
+          {managed && jobMoney && (
+            <div className="flex gap-6 lg:justify-end" data-testid="header-money">
+              <HeaderFigure k="Quoted" v={jobMoney.job.quoted_ex_gst === null ? "—" : money(jobMoney.job.quoted_ex_gst)} />
+              <HeaderFigure k="Invoiced" v={money(jobMoney.job.invoiced_ex_gst)} />
+              {jobMoney.can_costs && jobMoney.job.costs.total !== undefined && (
+                <HeaderFigure k="Cost to date" v={money(jobMoney.job.costs.total)} accent />
+              )}
+            </div>
+          )}
+        </div>
+        {job.description && <p className="border-t border-slate-700 px-5 py-3 text-sm whitespace-pre-line text-slate-200 sm:px-7">{job.description}</p>}
+      </section>
       <Flash ok={ok} err={err} />
 
       {job.booking && (
@@ -149,47 +202,6 @@ export default async function JobPageView({ params, searchParams }: Props) {
           {job.booking.office_notes && <p className="mt-1">Office notes: {job.booking.office_notes}</p>}
         </section>
       )}
-
-      <section className="grid gap-4 rounded-2xl bg-white p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6" data-testid="job-header">
-        <div>
-          <h2 className={label}>Customer</h2>
-          <p className="mt-1 font-semibold">
-            <Link href={`/dashboard/office/customers/${job.customer.id}`} className="hover:underline">{job.customer.name}</Link>
-          </p>
-          {job.customer.business_name && <p className="text-sm">{job.customer.full_name}</p>}
-          <p className="text-sm text-slate">{[job.customer.phone, job.customer.email].filter(Boolean).join(" · ")}</p>
-        </div>
-        <div>
-          <h2 className={label}>Site</h2>
-          <p className="mt-1 font-semibold">{job.site.text}</p>
-          {job.site.access_notes && <p className="text-sm text-slate">Access: {job.site.access_notes}</p>}
-          {job.site.notes && <p className="text-sm text-slate">{job.site.notes}</p>}
-        </div>
-        <div>
-          <h2 className={label}>Site contact</h2>
-          {job.site_contact ? (
-            <>
-              <p className="mt-1 font-semibold">{job.site_contact.name}</p>
-              <p className="text-sm text-slate">
-                {[job.site_contact.position, job.site_contact.mobile ?? job.site_contact.phone, job.site_contact.email].filter(Boolean).join(" · ")}
-              </p>
-            </>
-          ) : (
-            <p className="mt-1 text-sm text-slate">None set</p>
-          )}
-        </div>
-        <div>
-          <h2 className={label}>Job</h2>
-          <dl className="mt-1 space-y-0.5 text-sm">
-            {managed && <Row k="Type" v={job.job_type === "charge_up" ? "Charge-up" : "Quoted"} />}
-            <Row k="Order no." v={job.order_number ?? "—"} />
-            <Row k="Pricing" v={`${job.pricing_tier.name} (${Number(job.pricing_tier.markup_pct)}%${job.pricing_tier.source === "job" ? ", this job" : job.pricing_tier.source === "customer" ? ", customer's" : ""})`} />
-            {managed && <Row k="Manager" v={job.manager?.name ?? "—"} />}
-            <Row k="Created" v={`${nzDateTime(job.created_at)}${job.created_by ? ` by ${job.created_by}` : ""}`} />
-          </dl>
-        </div>
-        {job.description && <p className="whitespace-pre-line text-sm sm:col-span-2 lg:col-span-4">{job.description}</p>}
-      </section>
 
       <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
         <JobMenu job={job} base={base} tab={tab} money={jobMoney} canEdit={canEdit} />
@@ -509,10 +521,21 @@ export default async function JobPageView({ params, searchParams }: Props) {
 }
 
 // ── Pieces ─────────────────────────────────────────────────────────────────
-function Row({ k, v }: { k: string; v: string }) {
+const hLabel = "text-[11px] font-semibold tracking-wider text-slate-400 uppercase";
+
+function HeaderFigure({ k, v, accent = false }: { k: string; v: string; accent?: boolean }) {
+  return (
+    <div className="whitespace-nowrap">
+      <p className={hLabel}>{k}</p>
+      <p className={`mt-0.5 text-xl font-bold tabular-nums ${accent ? "text-sky-300" : ""}`}>{v}</p>
+    </div>
+  );
+}
+
+function Row({ k, v, dark = false }: { k: string; v: string; dark?: boolean }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-20 shrink-0 text-slate">{k}</dt>
+      <dt className={`w-20 shrink-0 ${dark ? "text-slate-400" : "text-slate"}`}>{k}</dt>
       <dd>{v}</dd>
     </div>
   );
@@ -542,7 +565,7 @@ function PhaseSelect({ id, phases, value }: { id: string; phases: (Phase & { id:
 function StateForm({ job, path, action, text, reason, danger = false }: {
   job: JobPage; path: string; action: string; text: string; reason?: string; danger?: boolean;
 }) {
-  const btn = danger ? "rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-800" : "rounded-full bg-white px-4 py-2 text-sm font-semibold";
+  const btn = danger ? "rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50" : "rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:border-slate-500";
   if (!reason) {
     return (
       <form action={jobStateAction}>
@@ -554,7 +577,7 @@ function StateForm({ job, path, action, text, reason, danger = false }: {
     );
   }
   return (
-    <details className="rounded-full">
+    <details>
       <summary className={`cursor-pointer list-none ${btn}`}>{text}</summary>
       <form action={jobStateAction} className="mt-2 flex flex-wrap gap-2 rounded-2xl bg-white p-3">
         <input type="hidden" name="jobId" value={job.job_id} />
@@ -766,7 +789,7 @@ function MoneyLine({ money: m, base }: { money: JobMoney | null; base: string })
   if (!m) return null;
   const t = m.project;
   return (
-    <p className="mt-4 flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-mist/60 px-3 py-2 text-sm" data-testid="money-line">
+    <p className="mt-4 flex flex-wrap gap-x-6 gap-y-1 rounded-xl bg-slate-50 px-3 py-2 text-sm" data-testid="money-line">
       <span>Quoted <strong className="tabular-nums">{t.quoted_ex_gst === null ? "—" : money(t.quoted_ex_gst)}</strong> + GST</span>
       <span>Invoiced <strong className="tabular-nums">{money(t.invoiced_ex_gst)}</strong></span>
       <span>Quotes open {t.quotes_open}</span>
@@ -786,13 +809,13 @@ function JobMenu({ job, base, tab, money: m, canEdit }: { job: JobPage; base: st
   };
   return (
     <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start" data-testid="job-menu">
-      <nav className="rounded-2xl bg-white p-2" aria-label="Job">
-        <p className="px-3 pt-1 pb-2 text-xs font-bold tracking-wide text-slate">JOB OVERVIEW</p>
+      <nav className="rounded-2xl bg-white p-2 shadow-sm" aria-label="Job">
+        <p className="px-3 pt-1 pb-2 text-[11px] font-semibold tracking-wider text-slate-600">JOB OVERVIEW</p>
         <ul className="space-y-0.5 text-sm">
           {TABS.filter(([k]) => (managed || (k !== "quotes" && k !== "invoices" && k !== "takeoff" && k !== "hs")) && (k !== "invoices" || canEdit)).map(([k, v]) => (
             <li key={k}>
               <Link href={`${base}?tab=${k}`} aria-current={tab === k ? "page" : undefined}
-                className={`flex items-center justify-between rounded-xl px-3 py-2 ${tab === k ? "bg-ink font-semibold text-white" : "hover:bg-mist"}`}>
+                className={`flex items-center justify-between rounded-xl px-3 py-2 ${tab === k ? "bg-[#0F172A] font-semibold text-white" : "text-slate-700 hover:bg-slate-100"}`}>
                 <span>{v}</span>
                 {counts[k] ? <span className={`text-xs ${tab === k ? "text-white/80" : "text-slate"}`}>{counts[k]}</span> : null}
               </Link>
@@ -801,10 +824,10 @@ function JobMenu({ job, base, tab, money: m, canEdit }: { job: JobPage; base: st
         </ul>
       </nav>
       {managed && (
-        <section className="rounded-2xl bg-white p-2" aria-label="Job phases">
-          <p className="px-3 pt-1 pb-2 text-xs font-bold tracking-wide text-slate">JOB PHASES ({job.phases.length})</p>
+        <section className="rounded-2xl bg-white p-2 shadow-sm" aria-label="Job phases">
+          <p className="px-3 pt-1 pb-2 text-[11px] font-semibold tracking-wider text-slate-600">JOB PHASES ({job.phases.length})</p>
           {canEdit && job.state !== "closed" && job.state !== "cancelled" && (
-            <Link href={`${base}?tab=summary#add-phase`} className="mb-1 block rounded-xl bg-aqua-pale/60 px-3 py-2 text-center text-sm font-semibold text-aqua-deep">
+            <Link href={`${base}?tab=summary#add-phase`} className="mb-1 block rounded-xl border border-dashed border-sky-300 bg-sky-50 px-3 py-2 text-center text-sm font-semibold text-sky-800">
               + Add job phase
             </Link>
           )}
@@ -814,7 +837,7 @@ function JobMenu({ job, base, tab, money: m, canEdit }: { job: JobPage; base: st
               const q = p.id ? m?.phases[p.id]?.quoted : null;
               return (
                 <li key={p.ref}>
-                  <Link href={`${base}?tab=summary#phase-${letter}`} className={`block rounded-xl px-3 py-2 hover:bg-mist ${p.id && p.id === job.focus_phase_id ? "ring-2 ring-aqua-deep" : ""}`}>
+                  <Link href={`${base}?tab=summary#phase-${letter}`} className={`block rounded-xl px-3 py-2 hover:bg-slate-100 ${p.id && p.id === job.focus_phase_id ? "ring-2 ring-sky-400" : ""}`}>
                     <span className="font-bold uppercase">{letter}</span> <span className="text-slate">|</span> {p.name}
                     <span className="mt-0.5 flex items-center justify-between gap-2 text-xs">
                       <StageChip stage={p.stage} />

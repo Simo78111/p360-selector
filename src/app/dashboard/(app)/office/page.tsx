@@ -57,7 +57,7 @@ export default async function TodayPage({ searchParams }: Props) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-slate">{date === today ? "Today" : date < today ? "Past day" : "Coming up"}</p>
-          <h1 className="text-2xl font-bold">{day.date_local}</h1>
+          <h1 className="text-3xl font-bold">{day.date_local}</h1>
           <p className="mt-1 text-sm text-slate">
             {jobCount} job{jobCount === 1 ? "" : "s"} booked across {day.plumbers.length} plumber
             {day.plumbers.length === 1 ? "" : "s"}
@@ -74,9 +74,9 @@ export default async function TodayPage({ searchParams }: Props) {
               type="date"
               name="date"
               defaultValue={date}
-              className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-sm"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm"
             />
-            <button type="submit" className="ml-1 rounded-full bg-ink px-3 py-1.5 text-sm font-medium text-white">
+            <button type="submit" className="ml-1 rounded-xl bg-[#0F172A] px-3 py-1.5 text-sm font-semibold text-white">
               Go
             </button>
           </form>
@@ -87,32 +87,30 @@ export default async function TodayPage({ searchParams }: Props) {
 
       {date === today && <ActionCards actions={actions} error={actionsError} hs={hsToday} />}
 
-      {overdue > 0 && (
-        <Link
-          href="/dashboard/office/jobs?f=overdue"
-          className="flex items-center justify-between gap-4 rounded-2xl border-2 border-red-200 bg-red-50 p-4 hover:bg-red-100"
-        >
-          <span>
-            <strong>
-              {overdue} job{overdue === 1 ? " was" : "s were"} booked for an earlier day and {overdue === 1 ? "isn't" : "aren't"} done.
-            </strong>{" "}
-            <span className="text-sm text-red-900">Move them in one go from the Jobs list.</span>
-          </span>
-          <span className="text-sm font-semibold whitespace-nowrap">Review →</span>
-        </Link>
-      )}
-
-      {day.attention > 0 && (
-        <Link
-          href="/dashboard/office/attention"
-          className="flex items-center justify-between gap-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 hover:bg-amber-100"
-        >
-          <span>
-            <strong>{day.attention} thing{day.attention === 1 ? "" : "s"} need{day.attention === 1 ? "s" : ""} you.</strong>{" "}
-            <span className="text-sm text-amber-900">Everything else is running itself.</span>
-          </span>
-          <span className="text-sm font-semibold">Open →</span>
-        </Link>
+      {(overdue > 0 || day.attention > 0) && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {overdue > 0 && (
+            <Link href="/dashboard/office/jobs?f=overdue"
+              className="flex items-center gap-4 rounded-2xl border border-red-300 bg-red-50 px-5 py-4 hover:bg-red-100">
+              <span className="text-3xl font-bold text-red-700 tabular-nums">{overdue}</span>
+              <span className="min-w-0 flex-1 text-sm text-red-950">
+                <strong>job{overdue === 1 ? " was" : "s were"} booked for an earlier day and {overdue === 1 ? "isn't" : "aren't"} done.</strong>{" "}
+                Move them in one go from the Jobs list.
+              </span>
+              <span className="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold whitespace-nowrap text-white">Review</span>
+            </Link>
+          )}
+          {day.attention > 0 && (
+            <Link href="/dashboard/office/attention"
+              className="flex items-center gap-4 rounded-2xl bg-[#0F172A] px-5 py-4 text-white hover:bg-slate-800">
+              <span className="text-3xl font-bold text-sky-400 tabular-nums">{day.attention}</span>
+              <span className="min-w-0 flex-1 text-sm text-slate-200">
+                <strong className="text-white">thing{day.attention === 1 ? "" : "s"} need{day.attention === 1 ? "s" : ""} you.</strong> Everything else is running itself.
+              </span>
+              <span className="rounded-xl bg-sky-400 px-4 py-2 text-sm font-semibold whitespace-nowrap text-sky-950">Open</span>
+            </Link>
+          )}
+        </div>
       )}
 
       {date >= today && jobCount > 0 && (
@@ -131,7 +129,7 @@ export default async function TodayPage({ searchParams }: Props) {
             <form action={planRouteAction}>
               <input type="hidden" name="date" value={date} />
               <input type="hidden" name="back" value={here} />
-              <button type="submit" className="rounded-full bg-ink px-4 py-2 text-sm font-semibold whitespace-nowrap text-white">
+              <button type="submit" className="rounded-xl bg-[#0F172A] px-4 py-2 text-sm font-semibold whitespace-nowrap text-white">
                 Work out best route now
               </button>
               <span className="mt-1 block text-center text-xs text-slate">No texts are sent</span>
@@ -143,11 +141,16 @@ export default async function TodayPage({ searchParams }: Props) {
       {day.plumbers.length === 0 ? (
         <p className="rounded-2xl bg-white p-6 text-sm text-slate">No active plumbers. Add one in the engine first.</p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {day.plumbers.map((p) => (
-            <PlumberColumn key={p.id} plumber={p} planned={day.planned} />
-          ))}
-        </div>
+        <>
+          {day.plumbers.some((p) => p.jobs.length > 0) && (
+            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+              {day.plumbers.filter((p) => p.jobs.length > 0).map((p) => (
+                <PlumberColumn key={p.id} plumber={p} planned={day.planned} />
+              ))}
+            </div>
+          )}
+          {day.plumbers.some((p) => p.jobs.length === 0) && <FreePlumbers plumbers={day.plumbers.filter((p) => p.jobs.length === 0)} />}
+        </>
       )}
 
       <section className="rounded-2xl bg-white p-5 sm:p-6">
@@ -181,7 +184,7 @@ export default async function TodayPage({ searchParams }: Props) {
                     <button
                       type="submit"
                       disabled={j.status === "offered"}
-                      className="rounded-full bg-aqua px-4 py-1.5 text-sm font-semibold hover:bg-[#35b9df] disabled:opacity-40"
+                      className="rounded-xl bg-sky-400 px-4 py-1.5 text-sm font-semibold text-sky-950 hover:bg-sky-300 disabled:opacity-40"
                     >
                       Book first free slot
                     </button>
@@ -192,14 +195,14 @@ export default async function TodayPage({ searchParams }: Props) {
                       <input type="hidden" name="back" value={here} />
                       <input type="hidden" name="date" value={date} />
                       <label className="sr-only" htmlFor={`pl-${j.job_id}`}>Plumber</label>
-                      <select id={`pl-${j.job_id}`} name="plumberId" className="rounded-full border border-black/10 px-2 py-1.5 text-sm">
+                      <select id={`pl-${j.job_id}`} name="plumberId" className="rounded-xl border border-slate-300 px-2 py-1.5 text-sm">
                         {day.plumbers.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
                           </option>
                         ))}
                       </select>
-                      <button type="submit" className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:border-ink">
+                      <button type="submit" className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:border-slate-500">
                         Add to {shortDate(date)}
                       </button>
                     </form>
@@ -215,6 +218,11 @@ export default async function TodayPage({ searchParams }: Props) {
 }
 
 // ── What's waiting for the office (Phase 3e) ────────────────────────────────
+const TILE = {
+  red: { border: "border-red-600", text: "text-red-700" },
+  amber: { border: "border-amber-500", text: "text-amber-700" },
+  blue: { border: "border-sky-500", text: "text-[#0F172A]" },
+} as const;
 type Card = { key: string; count: number; title: string; detail?: string; href: string; tone?: "red" | "amber" };
 
 function ActionCards({ actions: a, error, hs }: { actions: TodayActions | null; error: string | null; hs: HsToday | null }) {
@@ -260,16 +268,15 @@ function ActionCards({ actions: a, error, hs }: { actions: TodayActions | null; 
         </Link>
       )}
       {waiting.length > 0 ? (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
           {waiting.map((c) => (
             <li key={c.key}>
-              <Link href={c.href} data-testid={`todo-${c.key}`}
-                className={`flex h-full items-center justify-between gap-4 rounded-2xl border-2 bg-white p-4 hover:border-ink ${c.tone === "red" ? "border-red-300 bg-red-50" : c.tone === "amber" ? "border-amber-300" : "border-transparent"}`}>
-                <span className="min-w-0">
-                  <span className="block font-semibold">{c.title}</span>
-                  {c.detail && <span className="block truncate text-sm text-slate">{c.detail}</span>}
-                </span>
-                <span aria-hidden="true" className="text-lg">→</span>
+              {/* Big-number tiles (Simon, 8 Nov): red needs someone now, amber keep an eye on, blue routine work */}
+              <Link href={c.href} data-testid={`todo-${c.key}`} title={c.detail ? `${c.title} — ${c.detail}` : c.title}
+                className={`flex h-full flex-col gap-1 rounded-2xl border-t-[5px] bg-white p-4 shadow-sm hover:shadow-md ${TILE[c.tone ?? "blue"].border}`}>
+                <span className={`text-4xl leading-none font-bold tabular-nums ${TILE[c.tone ?? "blue"].text}`}>{c.count}</span>
+                <span className="mt-1 text-sm leading-snug font-semibold">{c.title.replace(/^\d+ /, "")}</span>
+                {c.detail && <span className="line-clamp-2 text-xs text-slate-500">{c.detail}</span>}
               </Link>
             </li>
           ))}
@@ -319,9 +326,43 @@ function hsCards(hs: HsToday, plural: (n: number, one: string, many: string) => 
 
 function DayLink({ date, label }: { date: string; label: string }) {
   return (
-    <Link href={`/dashboard/office?date=${date}`} className="rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap text-slate hover:bg-white hover:text-ink">
+    <Link href={`/dashboard/office?date=${date}`} className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium whitespace-nowrap text-slate-800 hover:border-slate-500">
       {label}
     </Link>
+  );
+}
+
+/** Plumbers with nothing booked: one line each instead of a card each (Simon, 8 Nov). */
+function FreePlumbers({ plumbers }: { plumbers: PlumberDay[] }) {
+  return (
+    <section className="overflow-hidden rounded-2xl bg-white" data-testid="free-plumbers">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-200 px-5 py-3">
+        <h2 className="text-base font-bold">Nothing booked</h2>
+        <span className="text-xs text-slate-600">The standby pool will offer this time to Flexi customers.</span>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-left text-[11px] font-semibold tracking-wider text-slate-600 uppercase">
+          <tr><th className="px-5 py-2">Plumber</th><th className="px-3 py-2">Hours</th><th className="px-3 py-2">Status</th><th className="px-5 py-2 text-right">Last seen</th></tr>
+        </thead>
+        <tbody>
+          {plumbers.map((p) => (
+            <tr key={p.id} className="border-t border-slate-100">
+              <td className="px-5 py-2.5">
+                <span className="flex items-center gap-3">
+                  <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0F172A] text-xs font-semibold text-white">
+                    {p.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                  </span>
+                  <span className="font-medium">{p.name}</span>
+                </span>
+              </td>
+              <td className="px-3 py-2.5 text-slate-600">{p.shift}</td>
+              <td className="px-3 py-2.5"><span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900">Free</span></td>
+              <td className="px-5 py-2.5 text-right text-slate-600">{p.last_seen?.today ? p.last_seen.at : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 

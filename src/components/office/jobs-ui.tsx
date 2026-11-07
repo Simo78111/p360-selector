@@ -2,13 +2,14 @@ import { STAGES, STATE_LABEL, stageLabel, type JobState, type Stage } from "@/li
 
 // Colours along the pipeline: grey (not started) → blue (working) → amber (money to chase) → green (invoiced).
 export const STAGE_TONE: Record<Stage, string> = {
-  to_schedule: "bg-slate-100 text-slate-800",
-  to_start: "bg-sky-100 text-sky-900",
-  in_progress: "bg-blue-100 text-blue-900",
-  labour_complete: "bg-indigo-100 text-indigo-900",
-  to_invoice: "bg-amber-100 text-amber-900",
-  to_be_approved: "bg-orange-100 text-orange-900",
-  invoiced: "bg-emerald-100 text-emerald-900",
+  // Solid colours (Simon, 8 Nov) so a stage reads at a glance on white.
+  to_schedule: "bg-slate-300 text-slate-900",
+  to_start: "bg-sky-600 text-white",
+  in_progress: "bg-blue-600 text-white",
+  labour_complete: "bg-indigo-600 text-white",
+  to_invoice: "bg-amber-500 text-amber-950",
+  to_be_approved: "bg-orange-600 text-white",
+  invoiced: "bg-emerald-600 text-white",
 };
 
 export function StageChip({ stage, prefix }: { stage: Stage | null; prefix?: string }) {

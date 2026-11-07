@@ -29,18 +29,18 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
       : session.name;
 
   return (
-    <div className="flex min-h-screen flex-col bg-mist">
-      <header className="border-b border-black/5 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+    <div className="flex min-h-screen flex-col bg-[#EEF1F5]">
+      <header className="bg-[#0F172A] text-white">
+        <div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6 lg:px-10">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <Logo className="h-9" />
+            <Logo inverted className="h-9" />
             <DashboardNav items={items} />
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             {canCreateJob && (
               <Link
                 href="/dashboard/office/all-jobs/new"
-                className="inline-flex items-center gap-1 rounded-full bg-aqua px-4 py-1.5 text-sm font-semibold text-ink hover:bg-[#35b9df]"
+                className="inline-flex items-center gap-1 rounded-xl bg-sky-400 px-4 py-2 text-sm font-semibold text-sky-950 hover:bg-sky-300"
                 data-testid="new-job-button"
               >
                 <span aria-hidden="true" className="text-base leading-none">+</span> Create new job
@@ -53,13 +53,13 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
                 id="global-search"
                 name="q"
                 placeholder="Find a job…"
-                className="w-36 rounded-full border border-black/10 bg-mist px-3 py-1.5 text-sm focus:w-52 focus:bg-white"
+                className="w-40 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:w-56 focus:border-sky-400 focus:outline-none"
               />
             </form>
             <SettingsLink paths={SETTINGS_PATHS} />
             {session.kind !== "dev" && (
               <form action={logout}>
-                <button type="submit" className="font-medium text-slate hover:text-ink" title={`Signed in as ${who}`}>
+                <button type="submit" className="font-medium text-slate-300 hover:text-white" title={`Signed in as ${who}`}>
                   Log out
                 </button>
               </form>
@@ -71,7 +71,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
 
       {(usingSampleData() || devBypass()) && (
         <div className="border-b border-amber-200 bg-amber-50">
-          <div className="mx-auto max-w-7xl space-y-1 px-4 py-3 text-sm text-amber-900 sm:px-6">
+          <div className="mx-auto max-w-[1680px] space-y-1 px-4 py-3 text-sm text-amber-900 sm:px-6 lg:px-10">
             {usingSampleData() && (
               <p>
                 <strong>Sample data.</strong> Connect Supabase (see the README) to see your real visitors and bookings.
@@ -87,7 +87,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
         </div>
       )}
 
-      <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+      <main id="main" className="mx-auto w-full max-w-[1680px] flex-1 px-4 py-7 sm:px-6 lg:px-10">
         {children}
       </main>
     </div>

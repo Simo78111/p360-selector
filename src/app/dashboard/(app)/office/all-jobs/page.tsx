@@ -69,7 +69,7 @@ export default async function AllJobsPage({ searchParams }: Props) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">All jobs</h1>
+          <h1 className="text-3xl font-bold">All jobs</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate">
             Project 360 jobs (one count per phase) and Plumbing 360 bookings together, for the companies your role covers.
             Click a stage or a colour on the board to see what&apos;s there, worst first.
@@ -90,8 +90,8 @@ export default async function AllJobsPage({ searchParams }: Props) {
               key={c.code ?? "all"}
               href={link(view, c.code)}
               aria-current={(company?.code ?? null) === c.code ? "page" : undefined}
-              className={`rounded-full px-4 py-1.5 text-sm font-semibold ${
-                (company?.code ?? null) === c.code ? "bg-ink text-white" : "bg-white text-slate hover:text-ink"
+              className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${
+                (company?.code ?? null) === c.code ? "bg-[#0F172A] text-white" : "bg-white text-slate-700 ring-1 ring-slate-300 hover:text-ink"
               }`}
             >
               {c.name}
@@ -108,7 +108,7 @@ export default async function AllJobsPage({ searchParams }: Props) {
 
       <nav className="flex flex-wrap items-center gap-1" aria-label="Job lists" data-testid="pipeline-tabs">
         {stageView && (
-          <span className="mr-2 rounded-full bg-ink px-3 py-1.5 text-sm font-semibold text-white">
+          <span className="mr-2 rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-semibold text-white">
             {stageLabel(selStage)}{selHealth ? ` · ${selHealth}` : ""}
           </span>
         )}
@@ -125,13 +125,13 @@ export default async function AllJobsPage({ searchParams }: Props) {
           defaultValue={q}
           placeholder="Job or phase number, customer, site, order number, phone…"
           aria-label="Search jobs"
-          className={`${input} max-w-xl flex-1`}
+          className={`${input} max-w-2xl flex-1`}
         />
         <button className={primaryBtn}>Search</button>
         {q && <Link href={link(view).replace(/&q=[^&]*/, "")} className="self-center text-sm text-slate underline">Clear</Link>}
       </form>
 
-      <section className="overflow-x-auto rounded-2xl bg-white">
+      <section className="overflow-x-auto rounded-2xl bg-white shadow-sm">
         {stageView ? <PhaseTable rows={rows as PhaseRow[]} /> : <JobTable rows={rows as JobRow[]} />}
         {rows.length === 0 && <p className="p-6 text-sm text-slate">Nothing here{q ? ` matching “${q}”` : ""}.</p>}
         {rows.length >= 300 && <p className="p-4 text-xs text-slate">Showing the first 300. Search to narrow it down.</p>}
@@ -145,10 +145,10 @@ function Tab({ href, on, label, count }: { href: string; on: boolean; label: str
     <Link
       href={href}
       aria-current={on ? "page" : undefined}
-      className={`rounded-full px-3 py-1.5 text-sm font-medium ${on ? "bg-aqua-pale text-aqua-deep" : "bg-white text-slate hover:text-ink"}`}
+      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${on ? "bg-[#0F172A] font-semibold text-white" : "bg-white text-slate-700 ring-1 ring-slate-300 hover:text-ink"}`}
     >
       {label}
-      {count !== undefined && count > 0 && <span className="ml-1 rounded-full bg-ink/10 px-1.5 text-xs font-bold">{count}</span>}
+      {count !== undefined && count > 0 && <span className="ml-1 rounded-full bg-amber-400 px-1.5 text-xs font-bold text-amber-950">{count}</span>}
     </Link>
   );
 }
@@ -159,18 +159,18 @@ function JobTable({ rows }: { rows: JobRow[] }) {
   if (rows.length === 0) return null;
   return (
     <table className="w-full min-w-[760px] text-left text-sm" data-testid="jobs-table">
-      <thead className="border-b border-black/5 text-xs text-slate">
+      <thead className="bg-[#0F172A] text-[11px] font-semibold tracking-wider text-slate-300 uppercase">
         <tr>
-          <th className="px-4 py-2">Job</th>
-          <th className="px-4 py-2">Customer and site</th>
-          <th className="px-4 py-2">Stage</th>
-          <th className="px-4 py-2">Manager</th>
-          <th className="px-4 py-2 text-right">Updated</th>
+          <th className="px-4 py-3">Job</th>
+          <th className="px-4 py-3">Customer and site</th>
+          <th className="px-4 py-3">Stage</th>
+          <th className="px-4 py-3">Manager</th>
+          <th className="px-4 py-3 text-right">Updated</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-black/5">
         {rows.map((r) => (
-          <ClickableRow key={r.job_id} href={jobHref(r.job_ref)} className="align-top hover:bg-mist/60">
+          <ClickableRow key={r.job_id} href={jobHref(r.job_ref)} className="align-top odd:bg-white even:bg-slate-50/70 hover:bg-sky-50">
             <td className="px-4 py-3">
               <div className="flex items-center gap-2">
                 <CompanyBadge code={r.company} />
@@ -211,19 +211,19 @@ function PhaseTable({ rows }: { rows: PhaseRow[] }) {
   if (rows.length === 0) return null;
   return (
     <table className="w-full min-w-[760px] text-left text-sm" data-testid="phases-table">
-      <thead className="border-b border-black/5 text-xs text-slate">
+      <thead className="bg-[#0F172A] text-[11px] font-semibold tracking-wider text-slate-300 uppercase">
         <tr>
-          <th className="px-4 py-2">Phase</th>
-          <th className="px-4 py-2">Customer and site</th>
-          <th className="px-4 py-2">Stage</th>
-          <th className="px-4 py-2">Manager</th>
-          <th className="px-4 py-2 text-right">Value</th>
-          <th className="px-4 py-2 text-right">Waiting</th>
+          <th className="px-4 py-3">Phase</th>
+          <th className="px-4 py-3">Customer and site</th>
+          <th className="px-4 py-3">Stage</th>
+          <th className="px-4 py-3">Manager</th>
+          <th className="px-4 py-3 text-right">Value</th>
+          <th className="px-4 py-3 text-right">Waiting</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-black/5">
         {rows.map((r) => (
-          <ClickableRow key={`${r.job_id}-${r.ref}`} href={jobHref(r.ref)} className="align-top hover:bg-mist/60">
+          <ClickableRow key={`${r.job_id}-${r.ref}`} href={jobHref(r.ref)} className="align-top odd:bg-white even:bg-slate-50/70 hover:bg-sky-50">
             <td className="px-4 py-3">
               <div className="flex items-center gap-2">
                 <CompanyBadge code={r.company} />
