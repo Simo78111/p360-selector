@@ -5,7 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export function SchedulePopup({ phaseRef, booked }: { phaseRef: string; booked: string | null }) {
+export function SchedulePopup({ phaseRef, booked, buttonClass }: { phaseRef: string; booked: string | null; buttonClass?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -28,7 +28,7 @@ export function SchedulePopup({ phaseRef, booked }: { phaseRef: string; booked: 
   return (
     <>
       <span className="inline-flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setOpen(true)} className="rounded-full bg-[#1d3fce] px-5 py-2 text-sm font-semibold text-white" data-testid="schedule-open">
+        <button type="button" onClick={() => setOpen(true)} className={buttonClass ?? "rounded-full bg-[#1d3fce] px-5 py-2 text-sm font-semibold text-white"} data-testid="schedule-open">
           Schedule
         </button>
         {booked && <span className="text-xs text-slate">{booked}</span>}

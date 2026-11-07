@@ -1,6 +1,6 @@
 "use client";
-// The cost boxes on each phase (job page → Job Summary): Labour, Supplier documents, Stock on hand / other. Each shows
-// its cost and sell; click one to see them underneath — labour per person, supplier invoices per document, stock per
+// The cost boxes on each phase (job page → Job Summary): Labour, Supplier invoices, Stock on hand / other, then a Phase
+// total. Each shows its cost (big) and sell (smaller); click one to see them underneath — labour per person, supplier invoices per document, stock per
 // line item. Stock on hand (untracked materials from the van or yard) is entered here. Cost columns only for people
 // with "Can see costs and margins".
 import Link from "next/link";
@@ -18,6 +18,24 @@ const nzDay = (d: string) =>
   new Date(`${d}T12:00:00Z`).toLocaleDateString("en-NZ", { day: "numeric", month: "short", timeZone: "UTC" });
 const hrs = (n: number) => `${Number(n.toFixed(2))} h`;
 const sum = (ls: CostLine[], f: "cost" | "sell") => Math.round(ls.reduce((a, l) => a + Number(l[f] ?? 0), 0) * 100) / 100;
+
+const TOP: Record<Box["id"], string> = { labour: "border-indigo-500", supplier: "border-amber-500", stock: "border-emerald-500" };
+
+/** Cost as the big figure, sell smaller underneath. With no cost permission the sell takes the big spot. */
+function Figures({ cost, sell, dark = false }: { cost: number | null; sell: number; dark?: boolean }) {
+  const big = "text-[26px] leading-tight font-bold tabular-nums";
+  const tag = `text-xs font-semibold ${dark ? "text-slate-300" : "text-slate-600"}`;
+  if (cost === null) return <span className="flex items-baseline gap-1.5"><span className={big}>{money(sell)}</span><span className={tag}>sell</span></span>;
+  return (
+    <>
+      <span className="flex items-baseline gap-1.5"><span className={big}>{money(cost)}</span><span className={tag}>cost</span></span>
+      <span className="flex items-baseline gap-1.5">
+        <span className={`text-[15px] font-semibold tabular-nums ${dark ? "text-slate-200" : "text-slate-700"}`}>{money(sell)}</span>
+        <span className={`text-xs ${dark ? "text-slate-300" : "text-slate-500"}`}>sell</span>
+      </span>
+    </>
+  );
+}
 
 function buildBoxes(lines: CostLine[]): Box[] {
   // Labour: one row per person (days worked, hours, cost, charge)
@@ -58,7 +76,7 @@ function buildBoxes(lines: CostLine[]): Box[] {
 
   return [
     { id: "labour", title: "Labour", empty: "No hours on this phase yet.", head: ["Person", "Days", "Hours"], rows: labour },
-    { id: "supplier", title: "Supplier documents", empty: "No supplier invoices on this phase yet.", head: ["Invoice", "Date", "Bought by", "Lines"], rows: supplier },
+    { id: "supplier", title: "Supplier invoices", empty: "No supplier invoices on this phase yet.", head: ["Invoice", "Date", "Bought by", "Lines"], rows: supplier },
     { id: "stock", title: "Stock on hand / other", empty: "Nothing yet.", head: ["Item", "Date", "Qty", "Added by"], rows: stock },
   ];
 }
@@ -71,38 +89,50 @@ export function PhaseCostBoxes({ costs, costsHref, phaseId, back, canAddStock }:
   const canCosts = !!costs?.can_costs;
   const opens = (b: Box) => b.rows.length > 0 || (b.id === "stock" && canAddStock);
   const shown = boxes.find((b) => b.id === open && opens(b)) ?? null;
+  const totalCost = boxes.reduce((a, b) => a + b.rows.reduce((x, r) => x + (r.cost ?? 0), 0), 0);
+  const totalSell = boxes.reduce((a, b) => a + b.rows.reduce((x, r) => x + r.sell, 0), 0);
+  const margin = totalSell > 0 ? `${Math.round(((totalSell - totalCost) / totalSell) * 1000) / 10}%` : "—";
+  const labourHours = (costs?.lines ?? []).filter((l) => l.kind === "labour").reduce((a, l) => a + Number(l.qty), 0);
 
   return (
-    <div className="mt-4" data-testid="cost-buckets">
-      <div className="grid gap-2 sm:grid-cols-3">
+    <div data-testid="cost-buckets">
+      {/* Style B (Simon, 8 Nov): cost is the big number, sell the smaller one underneath; a dark Phase total tile last.
+          Without "Can see costs and margins" the tiles show sell only. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {boxes.map((b) => {
           const cost = b.rows.reduce((a, r) => a + (r.cost ?? 0), 0);
           const sell = b.rows.reduce((a, r) => a + r.sell, 0);
           const has = opens(b);
           const on = shown?.id === b.id;
           const sub = b.id === "labour"
-            ? `${b.rows.length} ${b.rows.length === 1 ? "person" : "people"}`
+            ? `${hrs(labourHours)} · ${b.rows.length} ${b.rows.length === 1 ? "person" : "people"}`
             : b.id === "supplier" ? `${b.rows.length} invoice${b.rows.length === 1 ? "" : "s"}` : `${b.rows.length} item${b.rows.length === 1 ? "" : "s"}`;
           return (
             <button key={b.id} type="button" disabled={!has} aria-expanded={has ? on : undefined}
               onClick={() => setOpen(on ? null : b.id)} data-testid={`cost-box-${b.id}`}
-              className={`rounded-xl border p-3 text-left text-sm ${has ? "border-black/10 hover:border-ink" : "border-dashed border-black/10"} ${on ? "border-ink bg-aqua-pale/60" : ""}`}>
-              <span className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{b.title}</span>
-                {has && <span aria-hidden className="text-xs text-slate">{on ? "▲" : "▼"}</span>}
+              className={`flex flex-col gap-1.5 rounded-xl border-t-4 bg-slate-50 p-4 text-left ${TOP[b.id]} ${has ? "hover:bg-slate-100" : ""} ${on ? "bg-sky-50 ring-2 ring-sky-400" : ""}`}>
+              <span className="flex items-center justify-between gap-2 text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                {b.title}
+                {has && <span aria-hidden className="text-slate-500">{on ? "▲" : "▼"}</span>}
               </span>
-              <span className="block text-xs text-slate">{b.rows.length ? sub : b.id === "stock" && canAddStock ? "Nothing yet · click to add" : b.empty}</span>
-              <span className="mt-1 flex justify-between text-xs tabular-nums">
-                {canCosts ? <span>Cost {money(cost)}</span> : <span />}
-                <span>Sell {money(sell)}</span>
+              <Figures cost={canCosts ? cost : null} sell={sell} />
+              <span className="mt-0.5 border-t border-slate-200 pt-2 text-xs text-slate-500">
+                {b.rows.length ? sub : b.id === "stock" && canAddStock ? <>Nothing yet · <span className="font-semibold text-sky-700">add</span></> : b.empty}
               </span>
             </button>
           );
         })}
+        <div className="flex flex-col gap-1.5 rounded-xl bg-[#0F172A] p-4 text-white" data-testid="cost-box-total">
+          <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">Phase total</span>
+          <Figures cost={canCosts ? totalCost : null} sell={totalSell} dark />
+          <span className="mt-0.5 border-t border-slate-700 pt-2 text-xs text-slate-300">
+            {canCosts ? <>Margin {margin}</> : "Sell, all costs on this phase"}
+          </span>
+        </div>
       </div>
 
       {shown && (
-        <div className="mt-2 overflow-x-auto rounded-xl bg-mist/60 p-3" data-testid={`cost-detail-${shown.id}`}>
+        <div className="mt-3 overflow-x-auto rounded-xl bg-slate-50 p-3" data-testid={`cost-detail-${shown.id}`}>
           {shown.rows.length > 0 && <table className="w-full min-w-[30rem] text-sm">
             <thead className="text-left text-xs text-slate">
               <tr>

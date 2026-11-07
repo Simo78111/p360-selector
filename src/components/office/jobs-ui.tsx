@@ -61,3 +61,34 @@ export function PipelineBar({ stage, compact = false }: { stage: Stage; compact?
     </ol>
   );
 }
+
+/** The phase card's stepper on its dark header (Simon picked style B, 8 Nov): green ticks done, a glowing ring on the
+ *  current stage, grey rings still to come, joined by a line. */
+export function PhaseStepper({ stage }: { stage: Stage }) {
+  const at = STAGES.findIndex((s) => s.id === stage);
+  const line = (done: boolean) => `h-[3px] flex-1 ${done ? "bg-green-500" : "bg-slate-600"}`;
+  return (
+    <div className="-mx-1 overflow-x-auto px-1">
+      <ol className="grid min-w-[36rem] grid-cols-7" aria-label={`Pipeline: ${stageLabel(stage)}`}>
+        {STAGES.map((s, i) => (
+          <li key={s.id} aria-current={i === at ? "step" : undefined} className="flex flex-col items-center gap-2">
+            <span className="flex w-full items-center">
+              <span className={i === 0 ? "flex-1" : line(i <= at)} />
+              {i < at ? (
+                <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-green-500 text-sm font-bold text-green-950" aria-hidden>✓</span>
+              ) : i === at ? (
+                <span className="h-[26px] w-[26px] rounded-full border-[6px] border-sky-400 bg-white shadow-[0_0_0_5px_rgba(56,189,248,.25)]" aria-hidden />
+              ) : (
+                <span className="h-[26px] w-[26px] rounded-full border-2 border-slate-500" aria-hidden />
+              )}
+              <span className={i === STAGES.length - 1 ? "flex-1" : line(i < at)} />
+            </span>
+            <span className={`text-center text-xs ${i === at ? "font-bold text-white" : "text-slate-300"}`}>
+              {s.label}{i < at && <span className="sr-only"> (done)</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}

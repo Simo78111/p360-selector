@@ -15,7 +15,8 @@ import {
 } from "@/app/dashboard/job-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { JobFileUpload } from "@/components/office/JobFileUpload";
-import { CompanyBadge, PipelineBar, StageChip, StateBadge } from "@/components/office/jobs-ui";
+import { CompanyBadge, PhaseStepper, StageChip, StateBadge } from "@/components/office/jobs-ui";
+import { PhaseJump } from "@/components/office/PhaseJump";
 import { area, input, label, money, nzDate, primaryBtn, quietBtn } from "@/components/office/jm";
 import { requireOffice } from "@/lib/auth";
 import { TakeoffTab } from "@/components/office/takeoff/TakeoffTab";
@@ -940,12 +941,12 @@ function Box({ title, rows, note }: { title: string; rows: [string, string][]; n
   );
 }
 
-/** "Booked: Tama Mon 9 Nov · …" beside the Schedule button. */
+/** "Tama · Mon 9 Nov" for the phase card's header (up to three bookings, then "+N more"). */
 function bookedLine(s: JobSchedule, phaseId: string) {
   const up = s.upcoming.filter((b) => b.phase_id === phaseId);
   if (!up.length) return null;
   const d = (iso: string) => new Date(iso).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short", timeZone: "Pacific/Auckland" });
-  return `Booked: ${up.slice(0, 3).map((b) => `${b.name.split(" ")[0]} ${d(b.starts_at)}`).join(" · ")}${up.length > 3 ? ` +${up.length - 3} more` : ""}`;
+  return `${up.slice(0, 3).map((b) => `${b.name.split(" ")[0]} · ${d(b.starts_at)}`).join(", ")}${up.length > 3 ? ` +${up.length - 3} more` : ""}`;
 }
 
 /** This phase's costs from the job's Cost Report (a one-phase job also gets the costs with no phase). */
@@ -956,95 +957,100 @@ function phaseCosts(c: JobCosts, ref: string, onlyPhase: boolean): JobCosts {
 function PhaseCard({ job, phase, path, focus, canMove, costs, schedule }: {
   job: JobPage; phase: Phase; path: string; focus: boolean; canMove: boolean; costs: JobCosts | null; schedule?: JobSchedule | null;
 }) {
+  // Style B (Simon, 8 Nov): a dark header band with the stepper, one bright "Move to" action, cost tiles underneath.
   const i = STAGES.findIndex((s) => s.id === phase.stage);
   const next = STAGES[i + 1];
   const prev = STAGES[i - 1];
   const notes = job.notes.filter((n) => phase.id && n.phase_id === phase.id);
   const managed = job.kind === "managed";
   const letter = phase.letter ? phase.ref.slice(job.job_ref.length) : null;
+  const booked = schedule && phase.id ? bookedLine(schedule, phase.id) : null;
+  const canSchedule = managed && !!schedule?.can_book && !!phase.id && ["to_schedule", "to_start", "in_progress"].includes(phase.stage);
+  const showMoves = canMove && !!phase.id;
   return (
-    <article id={letter ? `phase-${letter}` : "phase"} className={`rounded-2xl bg-white p-5 sm:p-6 ${focus ? "ring-2 ring-aqua-deep" : ""}`} data-testid="phase">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-lg font-bold">{managed ? phase.ref : `#${phase.ref}`}</h3>
-        <span className="font-semibold">{phase.name}</span>
-        <StageChip stage={phase.stage} />
-        <span className="text-xs text-slate">since {nzDateTime(phase.since)}</span>
+    <article id={letter ? `phase-${letter}` : "phase"}
+      className={`overflow-hidden rounded-2xl bg-white shadow-[0_8px_24px_rgba(15,23,42,.08)] ${focus ? "ring-2 ring-sky-400" : ""}`} data-testid="phase">
+      <div className="space-y-5 bg-[#0F172A] px-5 pt-5 pb-6 text-white sm:px-7">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h3 className="text-sm font-semibold tracking-wide text-sky-200">{managed ? phase.ref : `#${phase.ref}`}</h3>
+          <span className="text-xl font-semibold sm:text-2xl">{phase.name}</span>
+          <span className="rounded-full bg-sky-300 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-sky-950 uppercase">{STAGES[i]?.label ?? "—"}</span>
+          <span className="text-xs text-slate-300">since {nzDateTime(phase.since)}</span>
+          {booked && (
+            <span className="ml-auto flex flex-col text-right" data-testid="phase-booked">
+              <span className="text-[11px] tracking-wider text-slate-300">BOOKED</span>
+              <span className="text-sm font-semibold">{booked}</span>
+            </span>
+          )}
+        </div>
+        <PhaseStepper stage={phase.stage} />
       </div>
-      <div className="mt-3"><PipelineBar stage={phase.stage} /></div>
 
-      {canMove && phase.id && (
-        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="move-phase">
-          {next && <MoveButton phaseId={phase.id} path={path} stage={next.id} text={`Move to ${next.label} →`} primary />}
-          {prev && <MoveButton phaseId={phase.id} path={path} stage={prev.id} text={`← Back to ${prev.label}`} />}
-          <form action={movePhaseAction} className="flex items-center gap-1">
-            <input type="hidden" name="phaseId" value={phase.id} />
-            <input type="hidden" name="back" value={path} />
-            <label className="sr-only" htmlFor={`jump-${phase.id}`}>Jump to stage</label>
-            <select id={`jump-${phase.id}`} name="stage" defaultValue="" className="rounded-full border border-black/10 bg-white px-2 py-1 text-xs">
-              <option value="" disabled>Jump ahead to…</option>
-              {STAGES.slice(i + 2).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-            <button className={quietBtn}>Go</button>
-          </form>
+      {(showMoves || canSchedule) && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-5 py-4 sm:px-7" data-testid="move-phase">
+          {showMoves && next && <MoveButton phaseId={phase.id!} path={path} stage={next.id} text={`Move to ${next.label} →`} primary />}
+          {canSchedule && <span data-testid="schedule-phase"><SchedulePopup phaseRef={phase.ref} booked={null}
+            buttonClass="rounded-xl border-[1.5px] border-[#0F172A] bg-white px-4 py-2.5 text-sm font-semibold text-[#0F172A]" /></span>}
+          {showMoves && prev && <MoveButton phaseId={phase.id!} path={path} stage={prev.id} text={`← Back to ${prev.label}`} />}
+          {showMoves && <span className="ml-auto"><PhaseJump phaseId={phase.id!} back={path} stages={STAGES.slice(i + 2).map((s) => ({ id: s.id, label: s.label }))} /></span>}
         </div>
       )}
-      {managed && schedule?.can_book && phase.id && ["to_schedule", "to_start", "in_progress"].includes(phase.stage) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="schedule-phase">
-          <SchedulePopup phaseRef={phase.ref} booked={bookedLine(schedule, phase.id)} />
-        </div>
-      )}
-      {managed && !canMove && job.state !== "active" && <p className="mt-2 text-xs text-slate">The pipeline is paused while the job is {job.state.replace("_", " ")}.</p>}
-      {!managed && <p className="mt-2 text-xs text-slate">Moves on its own as the booking goes along.</p>}
 
-      {phase.description && <p className="mt-3 whitespace-pre-line text-sm">{phase.description}</p>}
-      {managed && job.can.edit && phase.id && (
-        <details className="mt-2 text-sm">
-          <summary className="cursor-pointer text-aqua-deep">Edit phase name and description</summary>
-          <form action={savePhaseAction} className="mt-2 grid gap-2 sm:grid-cols-3">
-            <input type="hidden" name="phaseId" value={phase.id} />
-            <input type="hidden" name="back" value={path} />
-            <div>
-              <label className={label} htmlFor={`pn-${phase.id}`}>Name</label>
-              <input id={`pn-${phase.id}`} name="name" defaultValue={phase.name} required className={input} />
-            </div>
-            <div className="sm:col-span-2">
-              <label className={label} htmlFor={`pd-${phase.id}`}>Description</label>
-              <textarea id={`pd-${phase.id}`} name="description" rows={2} defaultValue={phase.description ?? ""} className={area} />
-            </div>
-            <div><button className={primaryBtn}>Save phase</button></div>
-          </form>
-        </details>
-      )}
+      <div className="space-y-4 px-5 py-5 sm:px-7">
+        {managed && !canMove && job.state !== "active" && <p className="text-xs text-slate">The pipeline is paused while the job is {job.state.replace("_", " ")}.</p>}
+        {!managed && <p className="text-xs text-slate">Moves on its own as the booking goes along.</p>}
 
-      {managed && <PhaseCostBoxes costs={costs} costsHref={`${path.split("?")[0]}?tab=costs&scope=job`}
-        phaseId={phase.id} back={path} canAddStock={!!phase.id && job.can.work && job.state !== "cancelled"} />}
+        {phase.description && <p className="whitespace-pre-line text-sm">{phase.description}</p>}
 
-      {notes.length > 0 && (
-        <div className="mt-4">
-          <h4 className="text-sm font-bold">Notes on this phase</h4>
-          <ul className="mt-1 space-y-1 text-sm">
-            {notes.map((n) => (
-              <li key={n.id} className="rounded-xl bg-amber-50/70 px-3 py-2">
-                <span className="whitespace-pre-line">{n.body}</span>
-                <span className="text-xs text-slate"> · {n.by}, {nzDateTime(n.at)}{n.internal ? "" : " · in the app"}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {job.can.work && phase.id && (
-        <form action={addNoteAction} className="mt-3 flex flex-wrap items-end gap-2">
-          <input type="hidden" name="jobId" value={job.job_id} />
-          <input type="hidden" name="phaseId" value={phase.id} />
-          <input type="hidden" name="back" value={path} />
-          <div className="min-w-64 flex-1">
-            <label className={label} htmlFor={`pnote-${phase.id}`}>Note on {phase.ref}</label>
-            <input id={`pnote-${phase.id}`} name="body" required maxLength={5000} className={input} />
+        {managed && <PhaseCostBoxes costs={costs} costsHref={`${path.split("?")[0]}?tab=costs&scope=job`}
+          phaseId={phase.id} back={path} canAddStock={!!phase.id && job.can.work && job.state !== "cancelled"} />}
+
+        {managed && job.can.edit && phase.id && (
+          <details className="text-sm">
+            <summary className="cursor-pointer text-slate-600">Edit phase name and description</summary>
+            <form action={savePhaseAction} className="mt-2 grid gap-2 sm:grid-cols-3">
+              <input type="hidden" name="phaseId" value={phase.id} />
+              <input type="hidden" name="back" value={path} />
+              <div>
+                <label className={label} htmlFor={`pn-${phase.id}`}>Name</label>
+                <input id={`pn-${phase.id}`} name="name" defaultValue={phase.name} required className={input} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={label} htmlFor={`pd-${phase.id}`}>Description</label>
+                <textarea id={`pd-${phase.id}`} name="description" rows={2} defaultValue={phase.description ?? ""} className={area} />
+              </div>
+              <div><button className={primaryBtn}>Save phase</button></div>
+            </form>
+          </details>
+        )}
+
+        {notes.length > 0 && (
+          <div>
+            <h4 className="text-sm font-bold">Notes on this phase</h4>
+            <ul className="mt-1 space-y-1 text-sm">
+              {notes.map((n) => (
+                <li key={n.id} className="rounded-xl bg-amber-50/70 px-3 py-2">
+                  <span className="whitespace-pre-line">{n.body}</span>
+                  <span className="text-xs text-slate"> · {n.by}, {nzDateTime(n.at)}{n.internal ? "" : " · in the app"}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="for_app" /> Show in the plumber app</label>
-          <button className={quietBtn}>Add note</button>
-        </form>
-      )}
+        )}
+        {job.can.work && phase.id && (
+          <form action={addNoteAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="jobId" value={job.job_id} />
+            <input type="hidden" name="phaseId" value={phase.id} />
+            <input type="hidden" name="back" value={path} />
+            <div className="min-w-64 flex-1">
+              <label className={label} htmlFor={`pnote-${phase.id}`}>Note on {phase.ref}</label>
+              <input id={`pnote-${phase.id}`} name="body" required maxLength={5000} placeholder="Add a note…" className={input} />
+            </div>
+            <label className="flex items-center gap-2 pb-2.5 text-sm text-slate-700"><input type="checkbox" name="for_app" /> Show in plumber app</label>
+            <button className="rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white">Add note</button>
+          </form>
+        )}
+      </div>
     </article>
   );
 }
@@ -1055,7 +1061,9 @@ function MoveButton({ phaseId, path, stage, text, primary = false }: { phaseId: 
       <input type="hidden" name="phaseId" value={phaseId} />
       <input type="hidden" name="back" value={path} />
       <input type="hidden" name="stage" value={stage} />
-      <button className={primary ? primaryBtn : quietBtn}>{text}</button>
+      <button className={primary
+        ? "rounded-xl bg-sky-400 px-5 py-2.5 text-[15px] font-semibold text-sky-950 hover:bg-sky-300"
+        : "rounded-xl px-2 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900"}>{text}</button>
     </form>
   );
 }
