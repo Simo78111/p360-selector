@@ -268,7 +268,7 @@ function ActionCards({ actions: a, error, hs }: { actions: TodayActions | null; 
         </Link>
       )}
       {waiting.length > 0 ? (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
+        <ul className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
           {waiting.map((c) => (
             <li key={c.key}>
               {/* Big-number tiles (Simon, 8 Nov): red needs someone now, amber keep an eye on, blue routine work */}
