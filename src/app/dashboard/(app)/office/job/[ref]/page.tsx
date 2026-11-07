@@ -34,6 +34,7 @@ import { loadJobSchedule, type JobSchedule } from "@/lib/diary";
 import { loadJobMoney, loadJobQuotes, STATUS_LABEL, type JobMoney, type JobQuotes, type Money as MoneyT } from "@/lib/quotes";
 import { loadJobInvoices, type JobInvoices } from "@/lib/invoices";
 import { InvoicesTab } from "@/components/office/invoices-ui";
+import { loadJobTools, type JobTool } from "@/lib/assets";
 
 export const metadata = { title: "Job" };
 
@@ -94,6 +95,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
   } catch (e) {
     return <EngineError message={e instanceof Error ? e.message : String(e)} />;
   }
+  // Tool register: tools on this job now and before (left out quietly if they can't be read)
+  const jobTools: JobTool[] = tab === "summary" && job.kind === "managed" ? await loadJobTools(session, job.job_id).catch(() => []) : [];
   // A phase number (PTSL-3000b) opens its job.
   if (job.job_ref.toLowerCase() !== ref.toLowerCase()) {
     redirect(`/dashboard/office/job/${encodeURIComponent(job.job_ref)}?tab=${tab}${ok ? `&ok=${encodeURIComponent(ok)}` : err ? `&err=${encodeURIComponent(err)}` : ""}`);
@@ -342,6 +345,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
                     costs={costs ? phaseCosts(costs, p.ref, job.phases.length === 1) : null} schedule={schedule} />
                 ))}
               </section>
+
+              {managed && jobTools.length > 0 && <JobTools tools={jobTools} />}
 
               {/* ── Checklists and forms (placeholder) ───────────────────────────── */}
               <section className="rounded-2xl border-2 border-dashed border-black/10 p-5 text-sm text-slate" data-testid="forms-placeholder">
@@ -709,7 +714,7 @@ function CostReport({ job, costs, money: m, scope, base, dates }: {
   const t = costs.totals;
   const dq = `${dates?.from ? `&cf=${dates.from}` : ""}${dates?.to ? `&ct=${dates.to}` : ""}`;
   const csv = `/api/office/job-costs?job=${job.job_id}&scope=${scope}&ref=${encodeURIComponent(job.job_ref)}${dates?.from ? `&from=${dates.from}` : ""}${dates?.to ? `&to=${dates.to}` : ""}`;
-  const kinds = ["labour", "materials", "hire", "freight", "stock"] as const;
+  const kinds = ["labour", "materials", "hire", "freight", "stock", "tool_hire"] as const;
   const sum = (k: string, f: "cost" | "sell") => costs.lines.filter((l) => l.kind === k).reduce((a, l) => a + Number(l[f] ?? 0), 0);
   return (
     <section className="rounded-2xl bg-white p-5 sm:p-6" data-testid="cost-report">
@@ -1075,6 +1080,30 @@ function PhaseCard({ job, phase, path, focus, canMove, costs, schedule }: {
         )}
       </div>
     </article>
+  );
+}
+
+/** Tools on this job (tool register): who has them now, and what's been and gone, with any hire. */
+function JobTools({ tools }: { tools: JobTool[] }) {
+  const when = (iso: string) => new Date(iso).toLocaleDateString("en-NZ", { day: "numeric", month: "short", timeZone: "Pacific/Auckland" });
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6" data-testid="job-tools">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-bold">Tools on this job</h2>
+        <Link href="/dashboard/office/tools" className="text-sm font-semibold text-sky-800 hover:underline">Tool register →</Link>
+      </div>
+      <ul className="mt-3 divide-y divide-slate-100 text-sm">
+        {tools.map((t, i) => (
+          <li key={`${t.asset_id}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+            <Link href={`/dashboard/office/tools/${t.asset_id}`} className="font-semibold hover:underline">{t.asset_no} {t.name}</Link>
+            <span className="text-slate-600">{t.holder}{t.phase_ref ? ` · ${t.phase_ref}` : ""} · {when(t.taken_at)}{t.ended_at ? ` – ${when(t.ended_at)}` : ""}</span>
+            {!t.ended_at && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">On site now</span>}
+            {t.condition === "needs_repair" && <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">Came back needing repair</span>}
+            {t.hire ? <span className="ml-auto tabular-nums text-slate-700">{t.hire_days} day{t.hire_days === 1 ? "" : "s"} hire · {money(t.hire)}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

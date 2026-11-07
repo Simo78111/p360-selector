@@ -5,6 +5,7 @@ import { aucklandToday, loadDay, loadJobs, officeEnabled, shiftDate, validDate, 
 import { can, requireOffice } from "@/lib/auth";
 import { loadTodayActions, type TodayActions } from "@/lib/reports";
 import { loadHsToday, type HsToday } from "@/lib/hs";
+import { loadAssetAlerts, type AssetAlerts } from "@/lib/assets";
 
 export const metadata = { title: "Today" };
 
@@ -23,6 +24,8 @@ export default async function TodayPage({ searchParams }: Props) {
   }
   // Phase 5b: health and safety cards (left out quietly if they can't be read)
   const hsToday: HsToday | null = can(session, "jobs") ? await loadHsToday(session).catch(() => null) : null;
+  // Tool register: out of service, test & tag / service due, tools handed to me
+  const tools: AssetAlerts | null = await loadAssetAlerts(session).catch(() => null);
 
   // Project 360-only office managers: the to-do cards (the booking engine's day board is Plumbing 360's).
   if (!can(session, "bookings")) {
@@ -33,7 +36,7 @@ export default async function TodayPage({ searchParams }: Props) {
           <h1 className="text-2xl font-bold">What&apos;s waiting</h1>
         </div>
         <Flash ok={ok} err={err} />
-        <ActionCards actions={actions} error={actionsError} hs={hsToday} />
+        <ActionCards actions={actions} error={actionsError} hs={hsToday} tools={tools} />
       </div>
     );
   }
@@ -85,7 +88,7 @@ export default async function TodayPage({ searchParams }: Props) {
 
       <Flash ok={ok} err={err} />
 
-      {date === today && <ActionCards actions={actions} error={actionsError} hs={hsToday} />}
+      {date === today && <ActionCards actions={actions} error={actionsError} hs={hsToday} tools={tools} />}
 
       {(overdue > 0 || day.attention > 0) && (
         <div className="grid gap-3 md:grid-cols-2">
@@ -225,7 +228,7 @@ const TILE = {
 } as const;
 type Card = { key: string; count: number; title: string; detail?: string; href: string; tone?: "red" | "amber" };
 
-function ActionCards({ actions: a, error, hs }: { actions: TodayActions | null; error: string | null; hs: HsToday | null }) {
+function ActionCards({ actions: a, error, hs, tools }: { actions: TodayActions | null; error: string | null; hs: HsToday | null; tools: AssetAlerts | null }) {
   if (!a) {
     return error ? <p className="rounded-2xl bg-white p-4 text-sm text-slate">The to-do list didn&apos;t load: {error}</p> : null;
   }
@@ -252,6 +255,7 @@ function ActionCards({ actions: a, error, hs }: { actions: TodayActions | null; 
     { key: "schedule", count: a.to_schedule, title: plural(a.to_schedule, "phase to schedule", "phases to schedule"),
       href: "/dashboard/office/diary" },
     ...(hs ? hsCards(hs, plural) : []),
+    ...(tools ? toolCards(tools, plural) : []),
   ];
   const xero = a.invoices_xero_failed + a.supplier_xero_failed;
   const waiting = cards.filter((c) => c.count > 0);
@@ -321,6 +325,19 @@ function hsCards(hs: HsToday, plural: (n: number, one: string, many: string) => 
       title: `${plural(hs.tickets_expiring?.length ?? 0, "licence or ticket", "licences and tickets")} expired or expiring in 30 days`,
       detail: (hs.tickets_expiring ?? []).map((x) => `${x.name.split(" ")[0]}: ${x.label} ${x.expired ? "expired" : "expires"} ${new Date(x.expires_on).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}`).join(" · "),
       href: "/dashboard/office/staff" },
+  ];
+}
+
+function toolCards(t: AssetAlerts, plural: (n: number, one: string, many: string) => string): Card[] {
+  return [
+    { key: "tools_repair", count: t.needs_repair, tone: "red", title: plural(t.needs_repair, "tool needs repair", "tools need repair"),
+      detail: t.repair_names.join(" · "), href: "/dashboard/office/tools?f=needs_repair" },
+    { key: "tools_due", count: t.due, tone: t.overdue ? "red" : "amber",
+      title: plural(t.due, "tool due for test & tag or service", "tools due for test & tag or service"),
+      detail: t.overdue ? `${t.overdue} overdue` : "In the next 30 days", href: "/dashboard/office/tools?f=due" },
+    { key: "tools_mine", count: t.with_me.length, title: plural(t.with_me.length, "tool with you", "tools with you"),
+      detail: t.with_me.map((x) => `${x.name}${x.given_by ? ` (from ${x.given_by.split(" ")[0]})` : ""}`).join(" · "),
+      href: t.with_me.length === 1 ? `/dashboard/office/tools/${t.with_me[0].id}` : "/dashboard/office/tools?f=out" },
   ];
 }
 

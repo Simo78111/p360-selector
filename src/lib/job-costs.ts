@@ -3,11 +3,11 @@ import { engine } from "./engine";
 import type { OfficeSession } from "./auth";
 
 // Phase 3c: the job's Cost Report (labour from timesheets, supplier invoice lines).
-export type CostKind = "labour" | "materials" | "hire" | "freight" | "stock";
+export type CostKind = "labour" | "materials" | "hire" | "freight" | "stock" | "tool_hire";
 export type CostLine = {
   id: string; date: string; kind: CostKind; job_ref: string; phase_ref: string | null; phase_name: string | null;
   description: string; who: string | null; qty: number; unit: string | null;
-  cost?: number; sell: number; status: "approved" | "confirmed" | "draft" | "to_approve"; ref: string; no_rate?: boolean;
+  cost?: number; sell: number; status: "approved" | "confirmed" | "draft" | "to_approve" | "still_out"; ref: string; no_rate?: boolean;
 };
 export type CostTotals = {
   labour?: number; labour_hours: number; labour_charge: number; supplier_documents?: number; stock_other?: number; materials_sell: number;
@@ -63,10 +63,11 @@ export function filterCosts(c: JobCosts, range: { from: string | null; to: strin
 }
 
 export const KIND_LABEL: Record<CostKind, string> = {
-  labour: "Labour", materials: "Materials", hire: "Hire", freight: "Freight", stock: "Stock on hand",
+  labour: "Labour", materials: "Materials", hire: "Hire", freight: "Freight", stock: "Stock on hand", tool_hire: "Tool hire",
 };
 export const STATUS_LABEL: Record<CostLine["status"], string> = {
   approved: "Approved", confirmed: "Confirmed by plumber", draft: "Draft timesheet", to_approve: "Invoice to approve",
+  still_out: "Tool still out",
 };
 
 const csvCell = (v: unknown) => {
