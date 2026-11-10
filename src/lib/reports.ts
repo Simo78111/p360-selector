@@ -144,6 +144,27 @@ function presetRange(range?: string): { key: RangeKey; from: string; to: string 
 export const companyFromCode = (companies: ReportCompany[], code?: string) =>
   companies.find((c) => c.code === code)?.id ?? null;
 
+// ── Customer profitability (11 Nov) ─────────────────────────────────────────
+// Period basis: invoiced in the dates picked against the cost of work done in those dates (labour on its work date,
+// supplier lines on their invoice date, stock, tool hire from the day out). Work done but not invoiced yet is shown
+// at sell so a timing gap doesn't read as a loss.
+export type CustomerProfitJob = {
+  job_id: string; job_ref: string; title: string | null; type: ProfitRow["type"];
+  invoiced: number; cost: number; labour: number; materials: number; hours: number; pending: number; not_invoiced: number;
+  profit: number; margin: number | null;
+};
+export type CustomerProfitRow = {
+  customer_id: string; customer: string; company: string | null; kind: string | null; jobs: number; invoices: number;
+  invoiced: number; cost: number; labour: number; materials: number; hours: number; pending: number; not_invoiced: number;
+  no_rate: number; profit: number; margin: number | null; job_rows: CustomerProfitJob[];
+};
+export type CustomerProfitReport = {
+  from: string; to: string; companies: ReportCompany[]; rows: CustomerProfitRow[];
+  totals: { customers: number; invoiced: number; cost: number; profit: number; hours: number; not_invoiced: number; losses: number };
+};
+export const loadCustomerProfit = (s: OfficeSession, from: string, to: string, companyId: string | null) =>
+  rpc<CustomerProfitReport>("office_report_customer_profit", { p_staff_id: who(s), p_from: from, p_to: to, p_company_id: companyId });
+
 // ── CSV ──────────────────────────────────────────────────────────────────────
 const cell = (v: unknown) => {
   const s = v === null || v === undefined ? "" : String(v);
@@ -163,6 +184,16 @@ export const profitCsv = (r: ProfitReport) =>
        ...r.rows.map((x) => [x.job_ref, x.title ?? "", x.company, x.customer, TYPE_NAME[x.type], x.jobs, x.budget ?? "",
                               x.invoiced_period, x.invoiced, x.hours, x.labour, x.materials, x.cost, x.pending, x.profit,
                               x.margin ?? "", x.finished ? "Yes" : "No"])]);
+
+export const customerProfitCsv = (r: CustomerProfitReport) =>
+  csv([["Customer", "Company", "Job", "Job name", "Invoiced in period", "Labour hours", "Labour cost", "Materials & other cost",
+        "Total cost", "Cost not approved yet", "Gross profit", "Margin %", "Work not invoiced yet (sell)"],
+       ...r.rows.flatMap((c) => [
+         [c.customer, c.company ?? "", "All jobs", `${c.jobs} job${c.jobs === 1 ? "" : "s"}`, c.invoiced, c.hours, c.labour,
+          c.materials, c.cost, c.pending, c.profit, c.margin ?? "", c.not_invoiced],
+         ...c.job_rows.map((j) => [c.customer, c.company ?? "", j.job_ref, j.title ?? "", j.invoiced, j.hours, j.labour,
+                                   j.materials, j.cost, j.pending, j.profit, j.margin ?? "", j.not_invoiced]),
+       ])]);
 
 export const workCsv = (r: WorkReport) =>
   csv([["Job", "Job name", "Company", "Customer", "Type", "Status", "Stage", "Budget (accepted quotes)", "Invoiced",

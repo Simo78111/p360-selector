@@ -21,6 +21,8 @@ export const REPORTS: MenuLink[] = [
     note: "Accepted quotes and charge-up work not invoiced yet." },
   { href: "/dashboard/office/reports/profit", label: "Job profitability", area: "staff",
     note: "Budget, invoiced, cost and gross profit per job. Needs \"Can see costs and margins\"." },
+  { href: "/dashboard/office/reports/customers", label: "Customer profitability", area: "staff",
+    note: "Invoiced, cost and gross profit per customer for the dates you pick. Needs \"Can see costs and margins\"." },
   { href: "/dashboard/office/reports/unbilled", label: "Unbilled work", area: "staff",
     note: "Phases waiting to be invoiced, and costs not on an invoice yet." },
 ];

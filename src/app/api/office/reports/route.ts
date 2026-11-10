@@ -1,9 +1,9 @@
-// Phase 3e: a report as a CSV. /api/office/reports?r=sales|profit|work-on-hand|unbilled&from=&to=&co=&days=
+// Phase 3e: a report as a CSV. /api/office/reports?r=sales|profit|customers|work-on-hand|unbilled&from=&to=&co=&days=
 // Same checks as the report pages (the database decides what this person can see).
 import { NextResponse, type NextRequest } from "next/server";
 import { can, getOfficeSession } from "@/lib/auth";
 import {
-  loadJobProfit, loadSales, loadUnbilled, loadWorkOnHand, profitCsv, resolveRange, salesCsv, unbilledCsv, workCsv,
+  customerProfitCsv, loadCustomerProfit, loadJobProfit, loadSales, loadUnbilled, loadWorkOnHand, profitCsv, resolveRange, salesCsv, unbilledCsv, workCsv,
   type ReportCompany,
 } from "@/lib/reports";
 
@@ -32,6 +32,12 @@ export async function GET(req: NextRequest) {
         let rep = await loadJobProfit(session, r.from, r.to, null);
         if (pick(rep.companies)) rep = await loadJobProfit(session, r.from, r.to, pick(rep.companies));
         body = profitCsv(rep); name = `job-profitability${tag}-${r.from}-to-${r.to}`;
+        break;
+      }
+      case "customers": {
+        let rep = await loadCustomerProfit(session, r.from, r.to, null);
+        if (pick(rep.companies)) rep = await loadCustomerProfit(session, r.from, r.to, pick(rep.companies));
+        body = customerProfitCsv(rep); name = `customer-profitability${tag}-${r.from}-to-${r.to}`;
         break;
       }
       case "work-on-hand": {

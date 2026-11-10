@@ -76,13 +76,14 @@ function NavMenu({ item, pathname }: { item: NavItem; pathname: string }) {
         </svg>
       </button>
       {open && (
-        <ul className="absolute left-0 z-30 mt-2 w-60 rounded-2xl border border-black/5 bg-white p-1.5 shadow-lg" data-testid={`menu-${item.label.toLowerCase()}`}>
+        // its own text colour: the navy header around it sets white text (the empty-looking Reports menu, 11 Nov)
+        <ul className="absolute left-0 z-30 mt-2 w-72 rounded-2xl border border-black/5 bg-white p-1.5 text-slate-900 shadow-lg" data-testid={`menu-${item.label.toLowerCase()}`}>
           {item.children!.map((c) => (
             <li key={c.href}>
               <Link
                 href={c.href}
                 aria-current={isActive(pathname, c) ? "page" : undefined}
-                className={`block rounded-xl px-3 py-2 text-sm ${isActive(pathname, c) ? "bg-aqua-pale font-semibold text-aqua-deep" : "hover:bg-mist"}`}
+                className={`block rounded-xl px-3 py-2 text-sm ${isActive(pathname, c) ? "bg-[#0F172A] font-semibold text-white" : "text-slate-800 hover:bg-slate-100"}`}
               >
                 {c.label}
               </Link>

@@ -14,7 +14,7 @@ export function ReportShell({ path, title, intro, csvHref, children }: {
       <nav className="flex flex-wrap gap-1" aria-label="Reports">
         {REPORTS.map((r) => (
           <Link key={r.href} href={r.href} aria-current={r.href === path ? "page" : undefined}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${r.href === path ? "bg-ink text-white" : "bg-white text-slate hover:text-ink"}`}>
+            className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${r.href === path ? "bg-[#0F172A] text-white" : "bg-white text-slate-700 ring-1 ring-slate-300 hover:text-ink"}`}>
             {r.label}
           </Link>
         ))}
