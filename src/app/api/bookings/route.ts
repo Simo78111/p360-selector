@@ -4,10 +4,17 @@ import { createBooking, type Photo } from "@/lib/bookings-store";
 import { attachBookingPhotos, sendToEngine, type EngineResult } from "@/lib/engine";
 import { resolve } from "@/lib/finder";
 import { tierInfo, tierPrices, tiersFor } from "@/lib/tiers";
-import { pricing } from "@/lib/site";
+import { pricing, site } from "@/lib/site";
+import { publicBookingsOpen } from "@/lib/bookings-open";
 import { getStripe, paymentMode } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
+  if (!publicBookingsOpen()) {
+    return NextResponse.json(
+      { error: `Online booking isn't open yet. Please call us on ${site.phone} to book.` },
+      { status: 503 },
+    );
+  }
   let form: FormData;
   try {
     form = await req.formData();

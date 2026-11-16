@@ -5,6 +5,8 @@ import { resolve } from "@/lib/finder";
 import { tierPrices, tiersFor } from "@/lib/tiers";
 import { paymentMode } from "@/lib/stripe";
 import { currentCustomer, signInAvailable } from "@/lib/customer";
+import { publicBookingsOpen } from "@/lib/bookings-open";
+import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Book a job",
@@ -14,6 +16,29 @@ export const metadata: Metadata = {
 export default async function BookPage({ searchParams }: { searchParams: Promise<{ a?: string; cancelled?: string }> }) {
   const { a = "", cancelled } = await searchParams;
   const { steps, outcome, urgency } = resolve(a.split(".").filter(Boolean));
+
+  if (!publicBookingsOpen()) {
+    return (
+      <section className="bg-aqua-pale">
+        <Container className="max-w-2xl py-20 text-center">
+          <h1 className="text-3xl font-bold">Online booking is opening soon</h1>
+          <p className="mt-3 text-slate">
+            We&apos;re not taking bookings online just yet. To book a plumber now, give us a call and we&apos;ll
+            sort out a time with you.
+          </p>
+          {outcome && (
+            <p className="mt-3 text-slate">
+              Your job: <strong>{outcome.title}</strong>
+            </p>
+          )}
+          <ButtonLink href={site.phoneHref} className="mt-8">
+            Call {site.phone}
+          </ButtonLink>
+          <p className="mt-4 text-sm text-slate">{site.hours}</p>
+        </Container>
+      </section>
+    );
+  }
 
   if (!outcome || !urgency) {
     return (
