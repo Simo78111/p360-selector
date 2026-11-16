@@ -12,6 +12,7 @@ export const TOP_MENU: MenuLink[] = [
   // the layout adds a red count of invoices waiting to be reconciled
   { href: "/dashboard/office/supplier-invoices", label: "Supplier invoices", area: "staff" },
   { href: "/dashboard/office/tools", label: "Tools", area: "jobs" },
+  { href: "/dashboard/office/vans", label: "Vans", area: "jobs" },
 ];
 
 export const REPORTS: MenuLink[] = [
