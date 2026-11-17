@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { assertOffice, canEditCompany } from "@/lib/auth";
 import { fileUploadUrl } from "@/lib/jobs";
+import { siteChanges } from "@/lib/site-fields";
 import {
   fergusImport,
   findItemByCode,
@@ -220,14 +221,13 @@ export async function saveSiteAction(form: FormData) {
   const customerId = text(form, "customerId", 40);
   await run(`/dashboard/office/customers/${customerId}`, async () => {
     const siteId = text(form, "siteId", 40) || null;
+    // Only "Mark not in use / in use": leave the address alone.
+    if (siteId && form.has("active") && !form.has("address_line")) {
+      await saveSite(siteId, customerId, { active: form.get("active") === "true" });
+      return form.get("active") === "true" ? "Site back in use." : "Site marked not in use.";
+    }
     await saveSite(siteId, customerId, {
-      site_name: text(form, "site_name", 120),
-      address_line: text(form, "address_line"),
-      suburb: text(form, "suburb", 80),
-      city: text(form, "city", 80),
-      postcode: text(form, "postcode", 10),
-      access_notes: text(form, "access_notes", 1000),
-      notes: text(form, "notes", 1000),
+      ...(await siteChanges(form, "", { withNotes: true })),
       ...(form.has("active") ? { active: form.get("active") === "true" } : {}),
     });
     return siteId ? "Site saved." : "Site added.";

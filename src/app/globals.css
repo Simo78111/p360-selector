@@ -52,3 +52,13 @@ h3 {
   outline: 3px solid var(--color-aqua-deep);
   outline-offset: 2px;
 }
+
+/* Formatted quote wording (17 Nov 2026): the quote builder's editor and the customer's quote page. */
+.rich-text ul { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
+.rich-text ol { list-style: decimal; padding-left: 1.4rem; margin: 0.25rem 0; }
+.rich-text h2 { font-size: 1.125rem; font-weight: 700; margin: 0.6rem 0 0.2rem; }
+.rich-text h3 { font-weight: 700; margin: 0.5rem 0 0.15rem; }
+.rich-text p { margin: 0.2rem 0; }
+.rich-text > :first-child { margin-top: 0; }
+.rich-text[data-placeholder]:empty::before,
+.rich-text[data-placeholder]:has(> p:only-child > br:only-child)::before { content: attr(data-placeholder); color: #94a3b8; position: absolute; pointer-events: none; }

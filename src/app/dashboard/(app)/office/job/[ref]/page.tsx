@@ -9,16 +9,17 @@ import {
   movePhaseAction,
   removeFileAction,
   removeNoteAction,
-  saveJobAction,
-  savePhaseAction,
   taskAction,
 } from "@/app/dashboard/job-actions";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
+import { AutoSaveForm } from "@/components/office/AutoSaveForm";
+import { JobNewSite, SiteContactEditor } from "@/components/office/JobSiteContact";
+import { autoSaveJobAction, autoSavePhaseAction } from "@/app/dashboard/autosave-actions";
 import { JobFileUpload } from "@/components/office/JobFileUpload";
 import { CompanyBadge, PhaseStepper, StageChip, StateBadge } from "@/components/office/jobs-ui";
 import { PhaseJump } from "@/components/office/PhaseJump";
 import { area, input, label, money, nzDate, primaryBtn, quietBtn } from "@/components/office/jm";
-import { requireOffice } from "@/lib/auth";
+import { canEditCompany, requireOffice } from "@/lib/auth";
 import { TakeoffTab } from "@/components/office/takeoff/TakeoffTab";
 import { loadTakeoff, type Takeoff } from "@/lib/takeoff";
 import { HealthSafetyTab } from "@/components/office/hs/HealthSafetyTab";
@@ -109,6 +110,7 @@ export default async function JobPageView({ params, searchParams }: Props) {
   const active = job.state === "active";
   const canEdit = job.can.edit;
   const canWork = job.can.work;
+  const canEditCustomer = canEdit && canEditCompany(session, job.company.id);
   const realPhases = job.phases.filter((p): p is Phase & { id: string } => p.id !== null);
   const Back = () => <input type="hidden" name="back" value={path} />;
 
@@ -153,7 +155,13 @@ export default async function JobPageView({ params, searchParams }: Props) {
             {job.site.notes && <p className="text-sm text-slate-300">{job.site.notes}</p>}
           </div>
           <div>
-            <h2 className={hLabel}>Site contact</h2>
+            <div className="flex items-center gap-2">
+              <h2 className={hLabel}>Site contact</h2>
+              {managed && canEditCustomer && (
+                <SiteContactEditor jobId={job.job_id} customerId={job.customer.id} siteId={job.site.id}
+                  current={job.site_contact} contacts={job.options.contacts} />
+              )}
+            </div>
             {job.site_contact ? (
               <>
                 <p className="mt-0.5 font-semibold">{job.site_contact.name}</p>
@@ -215,10 +223,9 @@ export default async function JobPageView({ params, searchParams }: Props) {
               {managed && canEdit && (
                 <section className="flex flex-wrap gap-2" data-testid="job-actions">
                   <details className="w-full rounded-2xl bg-white p-4 open:pb-5">
-                    <summary className="cursor-pointer font-semibold">Job settings</summary>
-                    <form action={saveJobAction} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <summary className="cursor-pointer font-semibold">Job settings <span className="text-xs font-normal text-slate">(changes save automatically)</span></summary>
+                    <AutoSaveForm action={autoSaveJobAction} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" testId="job-settings-form">
                       <input type="hidden" name="jobId" value={job.job_id} />
-                      <Back />
                       <Field id="s-title" name="title" text="Job name" v={job.title} />
                       <div>
                         <label className={label} htmlFor="s-type">Type</label>
@@ -263,8 +270,8 @@ export default async function JobPageView({ params, searchParams }: Props) {
                         <label className={label} htmlFor="s-desc">Job description</label>
                         <textarea id="s-desc" name="description" rows={3} defaultValue={job.description ?? ""} className={area} />
                       </div>
-                      <div><button className={primaryBtn}>Save settings</button></div>
-                    </form>
+                    </AutoSaveForm>
+                    {canEditCustomer && <JobNewSite jobId={job.job_id} customerId={job.customer.id} />}
                   </details>
 
                   {job.state === "active" && (
@@ -1036,9 +1043,8 @@ function PhaseCard({ job, phase, path, focus, canMove, costs, schedule }: {
         {managed && job.can.edit && phase.id && (
           <details className="text-sm">
             <summary className="cursor-pointer text-slate-600">Edit phase name and description</summary>
-            <form action={savePhaseAction} className="mt-2 grid gap-2 sm:grid-cols-3">
+            <AutoSaveForm action={autoSavePhaseAction} className="mt-2 grid gap-2 sm:grid-cols-3" statusClassName="text-xs sm:col-span-3">
               <input type="hidden" name="phaseId" value={phase.id} />
-              <input type="hidden" name="back" value={path} />
               <div>
                 <label className={label} htmlFor={`pn-${phase.id}`}>Name</label>
                 <input id={`pn-${phase.id}`} name="name" defaultValue={phase.name} required className={input} />
@@ -1047,8 +1053,7 @@ function PhaseCard({ job, phase, path, focus, canMove, costs, schedule }: {
                 <label className={label} htmlFor={`pd-${phase.id}`}>Description</label>
                 <textarea id={`pd-${phase.id}`} name="description" rows={2} defaultValue={phase.description ?? ""} className={area} />
               </div>
-              <div><button className={primaryBtn}>Save phase</button></div>
-            </form>
+            </AutoSaveForm>
           </details>
         )}
 

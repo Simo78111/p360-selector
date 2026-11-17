@@ -7,7 +7,8 @@ import "server-only";
 // Never shows costs: it's built from the customer's copy of the quote (no cost fields).
 import { PDFDocument, PDFFont, PDFName, PDFPage, PDFString, rgb, StandardFonts } from "pdf-lib";
 import { PLUMBING360_LOGO_PNG, PROJECT360_LOGO_PNG } from "./quote-logos";
-import { lines as splitLines, textBlocks, type QuoteDoc } from "./quotes";
+import type { QuoteDoc } from "./quotes";
+import { richBlocks, type RichBlock, type Run } from "./rich-text";
 
 export const A4: [number, number] = [595.28, 841.89];
 export const M = 40;                       // margin
@@ -46,7 +47,7 @@ export function clean(font: PDFFont, s: string) {
   return out;
 }
 
-export type Fonts = { reg: PDFFont; bold: PDFFont; ital: PDFFont };
+export type Fonts = { reg: PDFFont; bold: PDFFont; ital: PDFFont; boldItal?: PDFFont };
 
 export class Writer {
   doc: PDFDocument;
@@ -125,6 +126,94 @@ export class Writer {
     });
     this.y -= 1;
   }
+  fontFor(r: { b?: boolean; i?: boolean }, base?: PDFFont) {
+    if (r.b && r.i) return this.f.boldItal ?? this.f.bold;
+    if (r.b) return this.f.bold;
+    if (r.i) return this.f.ital;
+    return base ?? this.f.reg;
+  }
+  /** Formatted text (bold / underline / italic runs), wrapped; an optional bullet or number hangs to the left. */
+  rich(runs: Run[], opts: { size?: number; x?: number; width?: number; gap?: number; color?: ReturnType<typeof rgb>; marker?: string; indent?: number; bold?: boolean } = {}) {
+    const size = opts.size ?? 9;
+    const x0 = (opts.x ?? M) + (opts.indent ?? 0);
+    const width = (opts.width ?? W - ((opts.x ?? M) - M)) - (opts.indent ?? 0);
+    const color = opts.color ?? INK;
+    type Tok = { t: string; r: Run; f: PDFFont; w: number; space: boolean };
+    const toks: Tok[] = [];
+    for (const r0 of runs) {
+      const r = opts.bold ? { ...r0, b: true } : r0;
+      const f = this.fontFor(r);
+      for (const part of clean(f, r.text).split(/(\s+)/)) {
+        if (!part) continue;
+        const space = /^\s+$/.test(part);
+        const t = space ? " " : part;
+        toks.push({ t, r, f, w: f.widthOfTextAtSize(t, size), space });
+      }
+    }
+    // lines of tokens
+    const lines: Tok[][] = [];
+    let line: Tok[] = [];
+    let lw = 0;
+    for (const tok of toks) {
+      if (tok.space && line.length === 0) continue;
+      if (!tok.space && lw + tok.w > width && line.length) {
+        while (line.length && line[line.length - 1].space) lw -= line.pop()!.w;
+        lines.push(line);
+        line = [];
+        lw = 0;
+      }
+      if (!tok.space && tok.w > width) {
+        // one very long word: break it across lines
+        let part = "";
+        for (const ch of tok.t) {
+          if (tok.f.widthOfTextAtSize(part + ch, size) > width && part) {
+            lines.push([{ ...tok, t: part, w: tok.f.widthOfTextAtSize(part, size) }]);
+            part = ch;
+          } else part += ch;
+        }
+        line = [{ ...tok, t: part, w: tok.f.widthOfTextAtSize(part, size) }];
+        lw = line[0].w;
+        continue;
+      }
+      line.push(tok);
+      lw += tok.w;
+    }
+    while (line.length && line[line.length - 1].space) line.pop();
+    if (line.length) lines.push(line);
+    lines.forEach((l, i) => {
+      this.need(size + 3);
+      this.y -= size + 3;
+      if (i === 0 && opts.marker) this.text(opts.marker, x0 - (opts.marker.length > 1 ? 14 : 12), this.y, size, this.f.reg, color);
+      let x = x0;
+      l.forEach((tok, j) => {
+        if (!tok.space) this.page.drawText(tok.t, { x, y: this.y, size, font: tok.f, color });
+        const nextU = l[j + 1]?.r.u;
+        if (tok.r.u && (!tok.space || nextU)) {
+          this.page.drawLine({ start: { x, y: this.y - 1.4 }, end: { x: x + tok.w, y: this.y - 1.4 }, thickness: Math.max(0.5, size / 18), color });
+        }
+        x += tok.w;
+      });
+    });
+    this.y -= opts.gap ?? 3;
+  }
+  /** A block of formatted wording: headings, paragraphs, bullets and numbered lists (lib/rich-text.ts). */
+  richBlocks(blocks: RichBlock[], opts: { x?: number; color?: ReturnType<typeof rgb>; size?: number } = {}) {
+    const x = opts.x ?? M;
+    const size = opts.size ?? 9;
+    blocks.forEach((b, i) => {
+      if (b.kind === "h1") {
+        this.y -= i === 0 ? 2 : 6;
+        this.need(30);
+        this.rich(b.runs, { x, size: size + 3, bold: true, gap: 3, color: opts.color });
+      } else if (b.kind === "h2") {
+        this.y -= i === 0 ? 0 : 4;
+        this.need(24);
+        this.rich(b.runs, { x, size: size + 0.5, bold: true, gap: 2, color: opts.color });
+      } else if (b.kind === "bullet") this.rich(b.runs, { x, size, indent: 16, marker: "•", gap: 1, color: opts.color });
+      else if (b.kind === "number") this.rich(b.runs, { x, size, indent: 16, marker: `${b.n ?? 1}.`, gap: 1, color: opts.color });
+      else this.rich(b.runs, { x, size, gap: 4, color: opts.color });
+    });
+  }
   rule(gapAbove = 6, gapBelow = 10) {
     this.need(gapAbove + gapBelow);
     this.y -= gapAbove;
@@ -154,6 +243,7 @@ export async function quotePdf(q: QuoteDoc, opts: { acceptUrl?: string | null; d
     reg: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
     ital: await doc.embedFont(StandardFonts.HelveticaOblique),
+    boldItal: await doc.embedFont(StandardFonts.HelveticaBoldOblique),
   };
   const w = new Writer(doc, f);
 
@@ -229,26 +319,20 @@ export async function quotePdf(q: QuoteDoc, opts: { acceptUrl?: string | null; d
   w.y -= 14;
   w.text(`Quote | ${q.heading}`, M, w.y, 13, f.bold);
   w.y -= 8;
-  const blocks = textBlocks(q.description);
+  const blocks = richBlocks(q.description);
   if (blocks.length) {
     w.para("Description of Works", { font: f.bold, size: 9.5, gap: 6 });
-    for (const b of blocks) {
-      if (b.kind === "heading") {
-        w.y -= 4;
-        w.para(b.text, { font: f.bold, size: 9.5, gap: 2 });
-      } else if (b.kind === "bullet") w.bullet(b.text);
-      else w.para(b.text, { gap: 4 });
-    }
+    w.richBlocks(blocks);
   }
-  const excl = splitLines(q.exclusions);
+  const excl = richBlocks(q.exclusions, "bullet");
   if (excl.length) {
     w.y -= 4;
     w.para("No Allowance Has been made for", { font: f.bold, size: 9.5, gap: 2 });
-    for (const e of excl) w.bullet(e, M + 16);
+    w.richBlocks(excl, { x: M + 12 });
   }
   if (q.note) {
     w.y -= 4;
-    w.para(q.note, { gap: 4 });
+    w.richBlocks(richBlocks(q.note));
   }
 
   // ── Sections ─────────────────────────────────────────────────────────────
@@ -269,7 +353,7 @@ export async function quotePdf(q: QuoteDoc, opts: { acceptUrl?: string | null; d
     w.y -= 18;
     w.text(s.name, M, w.y, 11, f.bold);
     w.y -= 4;
-    if (s.description) w.para(s.description, { color: GREY, gap: 2 });
+    if (s.description) w.richBlocks(richBlocks(s.description), { color: GREY });
     if (s.appears_as !== "fixed") {
       s.lines.forEach((l, li) => {
         const name = l.description + (l.unit && s.appears_as === "lines" ? ` (${l.unit})` : "");

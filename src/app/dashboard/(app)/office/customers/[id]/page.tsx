@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { saveContactAction, saveCustomerAction, saveSiteAction } from "@/app/dashboard/jm-actions";
+import { saveContactAction, saveSiteAction } from "@/app/dashboard/jm-actions";
+import { autoSaveContactAction, autoSaveCustomerAction, autoSaveSiteAction } from "@/app/dashboard/autosave-actions";
+import { AutoSaveForm } from "@/components/office/AutoSaveForm";
+import { SiteFields } from "@/components/office/AddressSearch";
 import { EngineError, Flash, NotConnected } from "@/components/office/bits";
 import { area, input, label, primaryBtn, quietBtn } from "@/components/office/jm";
 import { CUSTOMER_KINDS, loadCustomer, type Contact, type Customer, type Site } from "@/lib/jm";
@@ -53,7 +56,7 @@ export default async function CustomerPage({ params, searchParams }: Props) {
 
       <section className="rounded-2xl bg-white p-5 sm:p-6">
         <h2 className="text-lg font-bold">Details</h2>
-        <form action={saveCustomerAction} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <AutoSaveForm action={autoSaveCustomerAction} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" testId="customer-details-form">
           <input type="hidden" name="customerId" value={c.id} />
           <F id="business_name" text="Business name" v={c.business_name} />
           <F id="full_name" text="Person's name" v={c.full_name} />
@@ -79,8 +82,7 @@ export default async function CustomerPage({ params, searchParams }: Props) {
             <label className={label} htmlFor="notes">Notes</label>
             <textarea id="notes" name="notes" rows={2} defaultValue={c.notes ?? ""} className={area} />
           </div>
-          <div className="sm:col-span-2 lg:col-span-3"><button className={primaryBtn}>Save details</button></div>
-        </form>
+        </AutoSaveForm>
       </section>
 
       <section className="rounded-2xl bg-white p-5 sm:p-6">
@@ -146,24 +148,30 @@ function F({ id, text, v, prefix = "" }: { id: string; text: string; v: string |
 
 function SiteForm({ customerId, site }: { customerId: string; site?: Site }) {
   const p = `site-${site?.id ?? "new"}-`;
-  return (
-    <form action={saveSiteAction} className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <input type="hidden" name="customerId" value={customerId} />
-      {site && <input type="hidden" name="siteId" value={site.id} />}
-      <F prefix={p} id="site_name" text="Site name (optional)" v={site?.site_name} />
-      <F prefix={p} id="address_line" text="Street address" v={site?.address_line} />
-      <F prefix={p} id="suburb" text="Suburb" v={site?.suburb} />
-      <F prefix={p} id="city" text="City" v={site?.city ?? "Auckland"} />
-      <F prefix={p} id="postcode" text="Postcode" v={site?.postcode} />
-      <F prefix={p} id="access_notes" text="Access notes" v={site?.access_notes} />
-      <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3">
-        <button className={primaryBtn}>{site ? "Save site" : "Add site"}</button>
-        {site && (
+  if (site) {
+    // An existing site saves as you go; "Mark not in use" is its own button.
+    return (
+      <div className="mt-2 space-y-2">
+        <AutoSaveForm action={autoSaveSiteAction} className="space-y-2" testId="site-form">
+          <input type="hidden" name="customerId" value={customerId} />
+          <input type="hidden" name="siteId" value={site.id} />
+          <SiteFields idPrefix={p} site={site} required />
+        </AutoSaveForm>
+        <form action={saveSiteAction}>
+          <input type="hidden" name="customerId" value={customerId} />
+          <input type="hidden" name="siteId" value={site.id} />
           <button name="active" value={site.active ? "false" : "true"} className={quietBtn}>
             {site.active ? "Mark not in use" : "Mark in use"}
           </button>
-        )}
+        </form>
       </div>
+    );
+  }
+  return (
+    <form action={saveSiteAction} className="mt-2 space-y-3" data-testid="add-site-form">
+      <input type="hidden" name="customerId" value={customerId} />
+      <SiteFields idPrefix={p} required />
+      <button className={primaryBtn}>Add site</button>
     </form>
   );
 }
@@ -173,7 +181,7 @@ function ContactForm({ customerId, sites, contact }: { customerId: string; sites
   const p = `contact-${k?.id ?? "new"}-`;
   return (
     <div className="mt-2 space-y-2">
-      <form action={saveContactAction} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <ContactShell editing={!!k} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <input type="hidden" name="customerId" value={customerId} />
         {k && <input type="hidden" name="contactId" value={k.id} />}
         <F prefix={p} id="full_name" text="Name" v={k?.full_name} />
@@ -193,8 +201,8 @@ function ContactForm({ customerId, sites, contact }: { customerId: string; sites
           <label className="flex items-center gap-2"><input type="checkbox" name="gets_quotes" defaultChecked={k?.gets_quotes} /> Gets quotes</label>
           <label className="flex items-center gap-2"><input type="checkbox" name="gets_invoices" defaultChecked={k?.gets_invoices} /> Gets invoices</label>
         </div>
-        <div className="sm:col-span-2 lg:col-span-3"><button className={primaryBtn}>{k ? "Save contact" : "Add contact"}</button></div>
-      </form>
+        {!k && <div className="sm:col-span-2 lg:col-span-3"><button className={primaryBtn}>Add contact</button></div>}
+      </ContactShell>
       {k && (
         <form action={saveContactAction}>
           <input type="hidden" name="customerId" value={customerId} />
@@ -205,4 +213,11 @@ function ContactForm({ customerId, sites, contact }: { customerId: string; sites
       )}
     </div>
   );
+}
+
+/** An existing contact saves as you go; a new one has an Add button. */
+function ContactShell({ editing, className, children }: { editing: boolean; className: string; children: React.ReactNode }) {
+  return editing
+    ? <AutoSaveForm action={autoSaveContactAction} className={className} testId="contact-form">{children}</AutoSaveForm>
+    : <form action={saveContactAction} className={className}>{children}</form>;
 }

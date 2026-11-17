@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { builderAction, favouriteLibraryAction, type BuilderOp } from "@/app/dashboard/quote-actions";
 import { ItemSearch } from "@/components/office/ItemSearch";
+import { RichTextEditor } from "@/components/office/RichTextEditor";
 import { APPEARS_AS, PRICE_SOURCE, STATUS_LABEL, type AppearsAs, type LabourRate } from "@/lib/quote-shared";
 import type { FavouriteLibrary, OfficeQuote, QuoteLine, QuoteSection } from "@/lib/quotes";
 
@@ -196,19 +197,19 @@ export function QuoteBuilder({ initial, jobPath, labour = [] }: { initial: Offic
                   onBlur={(e) => saveField("option_name", e.target.value, q.option_name)} className={field} />
               </Labelled>
             </div>
-            <Labelled text="Description of Works (start a line with ## for a heading, - for a bullet)">
-              <textarea key={`d-${q.description}`} disabled={!edit} defaultValue={q.description ?? ""} rows={8} aria-label="Description of Works"
-                onBlur={(e) => saveField("description", e.target.value, q.description)} className={`${field} font-mono text-xs`} />
+            <Labelled text="Description of Works">
+              <RichTextEditor value={q.description} disabled={!edit} label="Description of Works" minHeight={160} className="text-sm"
+                onSave={(v) => saveField("description", v, q.description)} testId="rt-description" />
             </Labelled>
             <div className="grid gap-3 md:grid-cols-2">
-              <Labelled text="No allowance has been made for (one per line)">
-                <textarea key={`x-${q.exclusions}`} disabled={!edit} defaultValue={q.exclusions ?? ""} rows={8} aria-label="Exclusions"
-                  onBlur={(e) => saveField("exclusions", e.target.value, q.exclusions)} className={`${field} text-xs`} />
+              <Labelled text="No allowance has been made for">
+                <RichTextEditor value={q.exclusions} disabled={!edit} label="Exclusions" defaultKind="bullet" minHeight={160} className="text-xs"
+                  onSave={(v) => saveField("exclusions", v, q.exclusions)} testId="rt-exclusions" />
               </Labelled>
               <div className="space-y-3">
                 <Labelled text="Note (e.g. NOTE - as discussed with…)">
-                  <textarea key={`n-${q.note}`} disabled={!edit} defaultValue={q.note ?? ""} rows={2} aria-label="Note"
-                    onBlur={(e) => saveField("note", e.target.value, q.note)} className={`${field} text-xs`} />
+                  <RichTextEditor value={q.note} disabled={!edit} label="Note" minHeight={48} compact className="text-xs"
+                    onSave={(v) => saveField("note", v, q.note)} testId="rt-note" />
                 </Labelled>
                 <Labelled text="Terms">
                   <textarea key={`t-${q.terms}`} disabled={!edit} defaultValue={q.terms ?? ""} rows={5} aria-label="Terms"
@@ -303,9 +304,8 @@ function Section({ q, s, first, last, run, labour }: {
           <input key={`sn-${s.name}`} disabled={!edit} defaultValue={s.name} aria-label="Section name"
             onBlur={(e) => e.target.value !== s.name && save({ name: e.target.value })}
             className={`${field} text-base font-bold`} />
-          <textarea key={`sd-${s.description}`} disabled={!edit} defaultValue={s.description ?? ""} rows={1} placeholder={edit ? "Section description (optional)" : ""} aria-label="Section description"
-            onBlur={(e) => e.target.value !== (s.description ?? "") && save({ description: e.target.value })}
-            className={`${field} mt-1 text-xs text-slate`} />
+          <RichTextEditor value={s.description} disabled={!edit} label="Section description" compact minHeight={28} placeholder="Section description (optional)"
+            className="relative mt-1 text-xs text-slate" onSave={(v) => v !== (s.description ?? "") && save({ description: v })} />
         </div>
         <label className="flex items-center gap-1 text-xs text-slate">
           Appears as

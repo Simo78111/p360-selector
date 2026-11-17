@@ -3,7 +3,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { publicAcceptAction } from "@/app/q/actions";
-import { lines as splitLines, publicQuote, textBlocks, type PublicQuote } from "@/lib/quotes";
+import { publicQuote, type PublicQuote } from "@/lib/quotes";
+import { richBlocks } from "@/lib/rich-text";
+import { RichText } from "@/components/RichText";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
@@ -89,26 +91,26 @@ export default async function CustomerQuote({ params, searchParams }: Props) {
 
         <section>
           <h1 className="text-xl font-bold">Quote | {q.heading}</h1>
-          {textBlocks(q.description).length > 0 && (
+          {richBlocks(q.description).length > 0 && (
             <div className="mt-3 space-y-1 text-sm">
               <h2 className="font-bold">Description of Works</h2>
-              <Blocks text={q.description} />
+              <RichText text={q.description} />
             </div>
           )}
-          {splitLines(q.exclusions).length > 0 && (
+          {richBlocks(q.exclusions, "bullet").length > 0 && (
             <div className="mt-3 text-sm">
               <h2 className="font-bold">No Allowance Has been made for</h2>
-              <ul className="ml-5 list-disc">{splitLines(q.exclusions).map((x) => <li key={x}>{x}</li>)}</ul>
+              <RichText text={q.exclusions} defaultKind="bullet" />
             </div>
           )}
-          {q.note && <p className="mt-3 text-sm">{q.note}</p>}
+          {q.note && <RichText text={q.note} className="mt-3 text-sm" />}
         </section>
 
         <section className="space-y-5">
           {q.sections.map((s) => (
             <div key={s.id}>
               <h3 className="text-base font-bold">{s.name}</h3>
-              {s.description && <p className="text-sm text-slate">{s.description}</p>}
+              {s.description && <RichText text={s.description} className="text-sm text-slate" />}
               {s.appears_as !== "fixed" && s.lines.length > 0 && (
                 <table className="mt-1 w-full text-sm">
                   <thead className="sr-only">
@@ -182,22 +184,4 @@ function Row({ k, v, bold = false }: { k: string; v: string; bold?: boolean }) {
       <dd className="tabular-nums">{v}</dd>
     </div>
   );
-}
-
-function Blocks({ text }: { text: string | null }) {
-  const out: React.ReactNode[] = [];
-  let bullets: string[] = [];
-  const flush = (k: number) => {
-    if (bullets.length) out.push(<ul key={`u${k}`} className="ml-5 list-disc">{bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>);
-    bullets = [];
-  };
-  textBlocks(text).forEach((b, i) => {
-    if (b.kind === "bullet") bullets.push(b.text);
-    else {
-      flush(i);
-      out.push(b.kind === "heading" ? <h3 key={i} className="pt-2 font-bold">{b.text}</h3> : <p key={i}>{b.text}</p>);
-    }
-  });
-  flush(9999);
-  return <>{out}</>;
 }

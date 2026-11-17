@@ -14,7 +14,7 @@ export function CompanyTabs({ companies, current, path }: { companies: Company[]
       {companies.map((c) => (
         <Link
           key={c.id}
-          href={`${path}?co=${c.code}`}
+          href={`${path}${path.includes("?") ? "&" : "?"}co=${c.code}`}
           aria-current={c.code === current ? "page" : undefined}
           className={`rounded-lg px-4 py-1.5 text-sm font-semibold ${c.code === current ? "bg-[#0F172A] text-white" : "bg-white text-slate-700 ring-1 ring-slate-300 hover:text-ink"}`}
         >

@@ -5,7 +5,9 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { assertOffice, type OfficeSession } from "@/lib/auth";
+import { assertOffice, canEditCompany, type OfficeSession } from "@/lib/auth";
+import { loadCustomer, saveContact, saveCustomer, saveSite } from "@/lib/jm";
+import { siteChanges } from "@/lib/site-fields";
 import {
   addFile,
   addNote,
@@ -54,26 +56,94 @@ async function run(path: string, work: (s: OfficeSession) => Promise<string | { 
 }
 
 // ── New jobs and variations ────────────────────────────────────────────────
+/**
+ * Create a job in one go (17 Nov 2026): an existing customer or a new one, an existing site or a new one
+ * found with Google address search, an existing site contact or a new one. What's new is added to the
+ * customer first; if the job itself then fails, the page comes back with that customer picked so nothing
+ * is added twice.
+ */
 export async function createJobAction(form: FormData) {
-  const customerId = id(form, "customerId");
-  await run(`/dashboard/office/all-jobs/new?customer=${customerId ?? ""}`, async (s) => {
-    const siteId = id(form, "siteId");
-    if (!customerId) throw new Error("Pick a customer.");
+  let customerId = id(form, "customerId");
+  let target: string;
+  try {
+    const s = await assertOffice("jobs");
+    const isNewCustomer = !customerId && form.get("new_customer") === "1";
+    const editable = async (companyId: string) => {
+      const o = await assertOffice("customers");
+      if (!canEditCompany(o, companyId)) throw new Error("Your role can't add to this company's customers.");
+    };
+    if (!text(form, "title")) throw new Error("Give the job a name.");
+    const siteChoice = text(form, "siteId", 40);
+    const contactChoice = text(form, "site_contact_id", 40);
+    if (isNewCustomer || siteChoice === "new") {
+      if (!text(form, "site_address_line")) throw new Error("Add the site's street address (or pick it from the Google search).");
+    }
+    if (contactChoice === "new" && !text(form, "contact_full_name", 120)) throw new Error("Add the new site contact's name.");
+
+    let cust = customerId ? await loadCustomer(customerId) : null;
+    if (isNewCustomer) {
+      const companyId = id(form, "companyId");
+      if (!companyId) throw new Error("Pick the company.");
+      await editable(companyId);
+      if (!text(form, "full_name", 120) && !text(form, "business_name")) throw new Error("Add the customer's name.");
+      cust = await saveCustomer(null, companyId, {
+        business_name: text(form, "business_name"),
+        full_name: text(form, "full_name", 120) || text(form, "business_name"),
+        kind: text(form, "kind", 30),
+        phone: text(form, "phone", 30),
+        email: text(form, "email"),
+        pricing_tier_id: text(form, "pricing_tier_id", 40),
+      });
+      customerId = cust.id;
+    }
+    if (!cust || !customerId) throw new Error("Pick a customer.");
+
+    let siteId: string | null = id(form, "siteId");
+    if (isNewCustomer || siteChoice === "new") {
+      await editable(cust.company_id);
+      const before = new Set(cust.sites.map((x) => x.id));
+      cust = await saveSite(null, customerId, await siteChanges(form, "site_"));
+      siteId = cust.sites.find((x) => !before.has(x.id))?.id ?? null;
+    }
     if (!siteId) throw new Error("Pick the site.");
+
+    let contactId: string | null = id(form, "site_contact_id");
+    if (contactChoice === "new" || contactChoice === "customer") {
+      await editable(cust.company_id);
+      const before = new Set(cust.contacts.map((k) => k.id));
+      const details = contactChoice === "customer"
+        ? { full_name: cust.full_name, mobile: cust.phone ?? "", email: cust.email ?? "", is_primary: true, gets_quotes: true, gets_invoices: true }
+        : {
+          full_name: text(form, "contact_full_name", 120),
+          position: text(form, "contact_position", 80),
+          mobile: text(form, "contact_mobile", 30),
+          email: text(form, "contact_email"),
+          property_id: siteId,
+        };
+      cust = await saveContact(null, customerId, details);
+      contactId = cust.contacts.find((k) => !before.has(k.id))?.id ?? null;
+    }
+
     const r = await createJob(s, customerId, siteId, {
       title: text(form, "title"),
       description: text(form, "description", 5000),
       job_type: text(form, "job_type", 20) || "quoted",
       order_number: text(form, "order_number", 60),
-      site_contact_id: id(form, "site_contact_id"),
+      site_contact_id: contactId,
       manager_staff_id: id(form, "manager_staff_id"),
       job_pricing_tier_id: id(form, "job_pricing_tier_id"),
       restricted: form.get("restricted") === "on",
       phase_name: text(form, "phase_name"),
       phase_description: text(form, "phase_description", 5000),
     });
-    return { go: jobPage(r.job_ref), message: `Job ${r.job_ref} created with phase ${r.phase_ref}.` };
-  });
+    target = back(jobPage(r.job_ref), "ok", `Job ${r.job_ref} created with phase ${r.phase_ref}.`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const co = text(form, "co", 8);
+    target = back(customerId ? `/dashboard/office/all-jobs/new?customer=${customerId}` : `/dashboard/office/all-jobs/new?new=1${co ? `&co=${co}` : ""}`, "err", msg);
+  }
+  revalidatePath("/dashboard/office", "layout");
+  redirect(target);
 }
 
 export async function addVariationAction(form: FormData) {

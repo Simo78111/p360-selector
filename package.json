@@ -19,7 +19,8 @@
     "test:invoice-pdf": "tsx --conditions=react-server scripts/test-invoice-pdf.ts",
     "test:takeoff": "tsx scripts/test-takeoff.ts",
     "test:hs-docs": "tsx scripts/test-hs-docs.ts",
-    "test:vans": "tsx --conditions=react-server scripts/test-vans.ts"
+    "test:vans": "tsx --conditions=react-server scripts/test-vans.ts",
+    "test:rich-text": "tsx --conditions=react-server scripts/test-rich-text.ts"
   },
   "dependencies": {
     "@fontsource/archivo": "^5.2.8",
